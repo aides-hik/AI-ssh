@@ -1,12 +1,212 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { readFile, mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
+import fs from 'node:fs/promises'
+import path from 'node:path'
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const sshHandlersPath = join(currentDir, 'ssh-handlers.ts')
 const sshTreeServicePath = join(currentDir, '../services/ssh-tree.service.ts')
+
+async function loadAuthentication(home: string, environment: Record<string, string> = {}, platform = 'win32') {
+  const source = await readFile(sshHandlersPath, 'utf8')
+  const parsed = ts.createSourceFile('ssh-handlers.ts', source, ts.ScriptTarget.Latest, true)
+  const declarations = parsed.statements.filter(statement => ts.isFunctionDeclaration(statement) &&
+    ['normalizeCredential', 'createSSHConnectConfig'].includes(statement.name?.text || ''))
+  assert.equal(declarations.length, 2)
+  const javascript = ts.transpileModule(declarations.map(item => item.getText(parsed)).join('\n'), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
+  }).outputText
+  return new Function('fs', 'path', 'homedir', 'process', javascript + '\nreturn createSSHConnectConfig')(
+    fs, path, () => home, { env: environment, platform }
+  )
+}
+
+test('SSH key authentication reads Chinese file paths and expands the current user home', async t => {
+  const home = await mkdtemp(join(tmpdir(), 'ai-ssh-auth-'))
+  t.after(() => rm(home, { recursive: true, force: true }))
+  await mkdir(join(home, '.ssh'))
+  const key = Buffer.from('PRIVATE KEY FIXTURE CONTENT\n')
+  await writeFile(join(home, '.ssh', '中文 key.pem'), key)
+  const configure = await loadAuthentication(home)
+  for (const filename of [join(home, '.ssh', '中文 key.pem'), '~/.ssh/中文 key.pem']) {
+    const result = await configure({ authType: 'PRIVATE_KEY', privateKey: filename, passphrase: 'protected', password: 'stale-password' })
+    assert.deepEqual(result.privateKey, key)
+    assert.equal(result.passphrase, 'protected')
+    assert.equal(result.password, undefined, 'Selecting a key must not silently authenticate using a saved password')
+  }
+  await assert.rejects(configure({ authType: 'privateKey', privateKey: join(home, 'missing-key') }), /ENOENT/)
+})
+
+test('SSH authentication preserves pasted key contents and obeys the selected method', async () => {
+  const configure = await loadAuthentication(tmpdir())
+  const key = '-----BEGIN OPENSSH PRIVATE KEY-----\nfixture\n-----END OPENSSH PRIVATE KEY-----'
+  assert.equal((await configure({ privateKey: key })).privateKey, key)
+  const result = await configure({ authType: 'PASSWORD', password: 12345, privateKey: 'stale-missing-file' })
+  assert.equal(result.password, '12345')
+  assert.equal(result.privateKey, undefined)
+})
+
+test('SSH Agent uses an explicit socket or the Windows OpenSSH named pipe without a password fallback', async () => {
+  const socket = '\\\\.\\pipe\\disposable-ai-ssh-agent'
+  const configure = await loadAuthentication(tmpdir(), { SSH_AUTH_SOCK: socket })
+  const result = await configure({ authType: 'SSH_AGENT', password: 'stale', privateKey: 'missing-file' })
+  assert.equal(result.agent, socket)
+  assert.equal(result.password, undefined)
+  assert.equal(result.privateKey, undefined)
+  const windows = await loadAuthentication(tmpdir())
+  assert.equal((await windows({ authType: 'agent' })).agent, '\\\\.\\pipe\\openssh-ssh-agent')
+  const unix = await loadAuthentication(tmpdir(), {}, 'linux')
+  await assert.rejects(unix({ authType: 'agent' }), /SSH_AUTH_SOCK/)
+})
+
+async function loadTransfers() {
+  const source = await readFile(sshHandlersPath, 'utf8')
+  const parsed = ts.createSourceFile('ssh-handlers.ts', source, ts.ScriptTarget.Latest, true)
+  const declaration = parsed.statements.find(statement => ts.isClassDeclaration(statement) && statement.name?.text === 'SSHManager')
+  assert(declaration && ts.isClassDeclaration(declaration))
+  const names = new Set(['transferFile', 'uploadFile', 'downloadFile', 'cancelTransfer', 'cancelConnectionTransfers'])
+  const methods = declaration.members.filter(member => ts.isMethodDeclaration(member) && member.name && names.has(member.name.getText(parsed)))
+  assert.equal(methods.length, names.size)
+  const javascript = ts.transpileModule(`class Transfers { connections = new Map(); pendingTransfers = new Map(); ${methods.map(item => item.getText(parsed)).join('\n')} }`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
+  }).outputText
+  return new Function('fs', 'path', 'windowEvents', 'randomUUID', javascript + '\nreturn new Transfers()')(
+    fs, path, { sendToRenderer() {} }, () => 'generated-transfer-id'
+  )
+}
+
+test('transfer cancellation before SFTP readiness rejects and closes the eventual dedicated channel', async () => {
+  const manager = await loadTransfers()
+  let ready: any
+  let closed = 0
+  manager.connections.set('connection', { isConnected: true, client: { sftp(callback: any) { ready = callback } } })
+  const pending = manager.uploadFile('connection', 'local', 'remote', 'early-cancel')
+  const rejected = assert.rejects(pending, { name: 'AbortError' })
+  assert.equal(manager.cancelTransfer('early-cancel'), true)
+  await rejected
+  ready(null, { end() { closed++ }, fastPut() { assert.fail('A cancelled transfer must not start') } })
+  assert.equal(closed, 1)
+  assert.equal(manager.pendingTransfers.size, 0)
+  assert.equal(manager.cancelTransfer('early-cancel'), false)
+})
+
+test('cancelling one active upload preserves another transfer and disconnect clears remaining work', async () => {
+  const manager = await loadTransfers()
+  const channels: any[] = []
+  manager.connections.set('connection', { isConnected: true, client: { sftp(callback: any) {
+    const channel = { closed: false, end() { this.closed = true }, on() {}, once() {}, fastPut() {} }
+    channels.push(channel)
+    callback(null, channel)
+  } } })
+  const first = manager.uploadFile('connection', 'local-a', 'remote-a', 'first')
+  const second = manager.uploadFile('connection', 'local-b', 'remote-b', 'second')
+  const rejections = [assert.rejects(first, { name: 'AbortError' }), assert.rejects(second, { name: 'AbortError' })]
+  assert.equal(manager.cancelTransfer('first'), true)
+  assert.equal(channels[0].closed, true)
+  assert.equal(channels[1].closed, false)
+  assert.equal(manager.pendingTransfers.size, 1)
+  manager.cancelConnectionTransfers('connection')
+  await Promise.all(rejections)
+  assert.equal(channels[1].closed, true)
+  assert.equal(manager.pendingTransfers.size, 0)
+})
+
+async function loadStructuredListing() {
+  const source = await readFile(sshHandlersPath, 'utf8')
+  const parsed = ts.createSourceFile('ssh-handlers.ts', source, ts.ScriptTarget.Latest, true)
+  const declaration = parsed.statements.find(statement =>
+    ts.isClassDeclaration(statement) && statement.name?.text === 'SSHManager'
+  )
+  assert(declaration && ts.isClassDeclaration(declaration))
+  const names = new Set([
+    'escapeShellSingleQuotes', 'sortListedFiles', 'parseStructuredListOutput',
+    'displayNameFromIdentity', 'buildStructuredListCommand'
+  ])
+  const methods = declaration.members.filter(member =>
+    ts.isMethodDeclaration(member) && member.name && names.has(member.name.getText(parsed))
+  )
+  assert.equal(methods.length, names.size, 'Execute the actual product command builder and parser')
+  const javascript = ts.transpileModule(
+    `class Listing { ${methods.map(member => member.getText(parsed)).join('\n')} }`,
+    { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }
+  ).outputText
+  return new Function('Buffer', javascript + '\nreturn new Listing()')(Buffer)
+}
+
+function findGnuShell() {
+  let shell = 'sh'
+  const env = { ...process.env }
+  if (process.platform === 'win32') {
+    const git = spawnSync('where.exe', ['git'], { encoding: 'utf8', windowsHide: true })
+      .stdout?.trim().split(/\r?\n/)[0]
+    if (!git) return null
+    const bin = resolve(dirname(git), '..', 'usr', 'bin')
+    shell = join(bin, 'sh.exe')
+    if (!existsSync(shell)) return null
+    env.PATH = `${bin};${env.PATH || ''}`
+  }
+  const tools = spawnSync(shell, ['-c', 'stat --version && find --version'], {
+    env, encoding: 'utf8', windowsHide: true
+  })
+  if (tools.status !== 0 || !tools.stdout.includes('GNU coreutils') || !tools.stdout.includes('GNU findutils')) {
+    return null
+  }
+  return { shell, env }
+}
+
+test('structured listing executes GNU tools and parses names, type, size and raw identities', async t => {
+  const tools = findGnuShell()
+  if (!tools) return t.skip('GNU sh/find/stat are unavailable on this host')
+  const workspace = await mkdtemp(join(tmpdir(), 'ai-ssh-listing-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  const remotePath = "./带空格和'单引号的目录"
+  const directory = join(workspace, remotePath)
+  const payload = '真实 GNU stat 分隔符\n'
+  await mkdir(join(directory, '子目录'), { recursive: true })
+  await writeFile(join(directory, "空 格'中文.txt"), payload)
+  await writeFile(join(directory, '-leading-dash.txt'), '')
+  const listing = await loadStructuredListing()
+  const result = spawnSync(tools.shell, ['-c', listing.buildStructuredListCommand(remotePath)], {
+    cwd: workspace, env: tools.env, encoding: 'utf8', windowsHide: true
+  })
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.stdout.trim().split('\n').length, 3)
+  for (const row of result.stdout.trim().split('\n')) assert.equal(row.split('\t').length, 5)
+  const files = listing.parseStructuredListOutput(result.stdout)
+  assert.equal(files[0].name, '子目录')
+  assert.equal(files[0].type, 'directory')
+  const file = files.find((entry: any) => entry.name === "空 格'中文.txt")
+  assert(file)
+  assert.equal(file.type, 'file')
+  assert.equal(file.size, Buffer.byteLength(payload))
+  assert.equal(Buffer.from(file.identity, 'base64').toString(), `${remotePath}/空 格'中文.txt`)
+  assert(Number.isFinite(Date.parse(file.modifiedTime)))
+  assert(Number.isFinite(file.permissions))
+})
+
+test('structured listing reports stat failures as a command failure instead of an empty directory', async t => {
+  const tools = findGnuShell()
+  if (!tools) return t.skip('GNU sh/find/stat are unavailable on this host')
+  const workspace = await mkdtemp(join(tmpdir(), 'ai-ssh-stat-failure-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  await mkdir(join(workspace, 'files'))
+  await writeFile(join(workspace, 'files', 'test.txt'), 'payload')
+  await mkdir(join(workspace, 'failing-tools'))
+  await writeFile(join(workspace, 'failing-tools', 'stat'), '#!/bin/sh\nexit 37\n', { mode: 0o755 })
+  const listing = await loadStructuredListing()
+  const result = spawnSync(tools.shell, [
+    '-c', `PATH="$PWD/failing-tools:$PATH"; export PATH; ${listing.buildStructuredListCommand('./files')}`
+  ], { cwd: workspace, env: tools.env, encoding: 'utf8', windowsHide: true })
+  assert.notEqual(result.status, 0, 'The caller must be able to fall back to SFTP')
+  assert.equal(result.stdout, '')
+})
 
 test('exec output cleanup only removes the first line when it is an actual command echo', async () => {
   const source = await readFile(sshHandlersPath, 'utf8')

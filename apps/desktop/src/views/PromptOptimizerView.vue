@@ -378,49 +378,23 @@ const savePrompt = async () => {
 
   try {
     const currentSessionId = localStorage.getItem('current-session-id')
-    let savedToDatabase = false
-
-    // 1. 如果有当前会话ID，保存到数据库
-    if (currentSessionId) {
-      try {
-        // 保存到 localStorage（本地缓存）
-        const sessionConfigKey = `chat-session-config-${currentSessionId}`
-        const existingConfig = localStorage.getItem(sessionConfigKey)
-        const config = existingConfig ? JSON.parse(existingConfig) : {}
-
-        config.systemPrompt = generatedPrompt.value
-        config.updatedAt = new Date().toISOString()
-
-        localStorage.setItem(sessionConfigKey, JSON.stringify(config))
-
-        // 保存到数据库
-        await chatService.updateSession(currentSessionId, {
-          config: {
-            systemPrompt: generatedPrompt.value
-          }
-        })
-
-        savedToDatabase = true
-
-        // 触发事件通知会话更新
-        window.dispatchEvent(
-          new CustomEvent('session-prompt-updated', {
-            detail: { sessionId: currentSessionId, systemPrompt: generatedPrompt.value }
-          })
-        )
-      } catch (dbError: any) {
-        console.error('[PromptOptimizer] ⚠️ 数据库保存失败，仅保存到本地:', dbError)
-        // 数据库保存失败，但 localStorage 已保存，继续执行
-      }
+    if (!currentSessionId) {
+      $alert('请先打开一个聊天会话，然后再保存提示词。提示词需要关联到具体的会话。')
+      return
     }
 
-    // 2. 显示保存结果
-    const message = currentSessionId
-      ? `✅ 提示词已保存成功！\n\n` +
-        `• 已应用到当前会话\n` +
-        `• 已保存到${savedToDatabase ? '数据库和' : ''}本地配置`
-      : `⚠️ 请先打开一个聊天会话，然后再保存提示词。\n\n提示词需要关联到具体的会话。`
-    $alert(message)
+    await chatService.updateSession(currentSessionId, {
+      config: {
+        systemPrompt: generatedPrompt.value,
+        updatedAt: new Date().toISOString()
+      }
+    })
+    window.dispatchEvent(
+      new CustomEvent('session-prompt-updated', {
+        detail: { sessionId: currentSessionId, systemPrompt: generatedPrompt.value }
+      })
+    )
+    $alert('提示词已保存到当前会话的本地配置。')
   } catch (error: any) {
     $alert('❌ 保存失败：' + error.message)
   }

@@ -211,6 +211,7 @@ import { findNode } from '@/utils/tree-utils'
 import AutocompletePopup from '@/components/terminal/AutocompletePopup.vue'
 import ShortcutCommandsModal from '@/components/terminal/ShortcutCommandsModal.vue'
 import ServerEnvDocEditor from '@/components/docs/ServerEnvDocEditor.vue'
+import { bindTerminalSelection } from '@/utils/terminal-selection'
 import AIChatOpenCodeStyle from '@/components/chat/AIChatOpenCodeStyle.vue'
 import { useTerminalAutocomplete } from '@/composables/useTerminalAutocomplete'
 import { registerModelSelectionSyncListeners } from '@/utils/model-sync-events'
@@ -335,9 +336,8 @@ const contextMenuStyle = computed(() => ({
   top: `${contextMenuY.value}px`,
   left: `${contextMenuX.value}px`
 }))
-const hasSelection = computed(() => {
-  return terminal.value?.hasSelection() || false
-})
+const hasSelection = ref(false)
+let terminalSelectionDisposable: { dispose(): void } | null = null
 
 interface RemoteEditSession {
   sessionKey: string
@@ -441,6 +441,10 @@ const initTerminal = () => {
   // 挂载到 DOM
   terminal.value.open(terminalContainer.value)
   fitAddon.value.fit()
+  terminalSelectionDisposable?.dispose()
+  terminalSelectionDisposable = bindTerminalSelection(terminal.value, selected => {
+    hasSelection.value = selected
+  })
 
   // 清理旧的监听器（如果存在）
   if (terminalDataDisposable.value) {
@@ -1419,6 +1423,9 @@ onBeforeUnmount(() => {
   unregisterModelSyncListeners?.()
   cleanupListeners()
   stopAllRemoteEditSessions()
+  terminalSelectionDisposable?.dispose()
+  terminalSelectionDisposable = null
+  hasSelection.value = false
 
   // 清理终端输入监听器
   if (terminalDataDisposable.value) {

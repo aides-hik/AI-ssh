@@ -81,6 +81,7 @@
                 class="form-input"
                 min="1"
                 max="50"
+                @change="contextWindow = normalizeSessionContextWindow(contextWindow)"
               />
             </div>
           </div>
@@ -108,7 +109,7 @@
 import { ref, onMounted, watch, computed } from 'vue'
 
 import { useI18n } from 'vue-i18n'
-import { chatService } from '../services/chat.service'
+import { chatService, normalizeSessionContextWindow } from '../services/chat.service'
 
 const { t: $t } = useI18n()
 
@@ -221,7 +222,7 @@ const loadSessionConfig = async () => {
 
     // 从 config 中加载高级设置
     if (session.config) {
-      contextWindow.value = (session.config as any).contextWindow || 50
+      contextWindow.value = normalizeSessionContextWindow(session.config.contextWindow)
       enableStreaming.value = (session.config as any).enableStreaming !== false
     }
 

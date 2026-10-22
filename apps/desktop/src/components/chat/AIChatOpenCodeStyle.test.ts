@@ -3,9 +3,116 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const chatViewPath = join(currentDir, 'AIChatOpenCodeStyle.vue')
+
+async function loadSendHandler(overrides: Record<string, any> = {}) {
+  const source = await readFile(chatViewPath, 'utf8')
+  const script = source.slice(source.indexOf('>') + 1, source.indexOf('</script>'))
+  const parsed = ts.createSourceFile('chat.ts', script, ts.ScriptTarget.Latest, true)
+  const declaration = parsed.statements.find(statement =>
+    ts.isFunctionDeclaration(statement) && statement.name?.text === 'handleSendMessage'
+  )
+  assert(declaration, 'The actual component submit handler must exist')
+  const javascript = ts.transpileModule(declaration.getText(parsed), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
+  }).outputText
+  const state = {
+    props: { currentProvider: { id: 'openai' }, currentModel: { id: 'test-model' }, connectionId: 'test-ssh' },
+    inputMessage: { value: '  保留这段草稿  ' },
+    isGenerating: { value: false },
+    error: { value: null as Error | null },
+    statuses: [] as string[],
+    requests: [] as string[],
+    inputRef: { value: { focus() {} } },
+    nextTick: (callback: () => void) => callback(),
+    resizeInputHeight() {},
+    normalizeUserErrorMessage: (message: string) => message,
+    console: { error() {} },
+    ...overrides
+  }
+  const dependencies = {
+    ...state,
+    setStatus: (_stage: string, message: string) => state.statuses.push(message),
+    sendMessageWithTools: overrides.sendMessageWithTools || (async (content: string) => { state.requests.push(content) })
+  }
+  const run = new Function(...Object.keys(dependencies), javascript + '\nreturn handleSendMessage')(
+    ...Object.values(dependencies)
+  ) as () => Promise<void>
+  return { state, run }
+}
+
+test('sending without a model keeps the draft and shows an actionable error', async () => {
+  const { state, run } = await loadSendHandler({
+    props: { currentProvider: null, currentModel: null, connectionId: 'test-ssh' }
+  })
+  await run()
+  assert.equal(state.inputMessage.value, '  保留这段草稿  ')
+  assert.match(state.error.value?.message || '', /选择.*模型/)
+  assert.equal(state.requests.length, 0)
+})
+
+test('model HTTP errors explain authentication, quota and service failures without displaying response bodies', async () => {
+  const source = await readFile(chatViewPath, 'utf8')
+  const script = source.slice(source.indexOf('>') + 1, source.indexOf('</script>'))
+  const parsed = ts.createSourceFile('chat.ts', script, ts.ScriptTarget.Latest, true)
+  const declaration = parsed.statements.find(statement =>
+    ts.isFunctionDeclaration(statement) && statement.name?.text === 'normalizeUserErrorMessage'
+  )
+  assert(declaration)
+  const javascript = ts.transpileModule(declaration.getText(parsed), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 }
+  }).outputText
+  const normalize = new Function(javascript + '\nreturn normalizeUserErrorMessage')() as (error: string) => string
+  for (const status of [401, 403]) {
+    const message = normalize(`HTTP ${status}: forbidden - private response body`)
+    assert.match(message, /API Key.*权限/)
+    assert.match(message, new RegExp(`HTTP ${status}`))
+    assert.doesNotMatch(message, /private response body/)
+  }
+  assert.match(normalize('HTTP 429: limit'), /检查配额/)
+  assert.match(normalize('HTTP 503: unavailable'), /HTTP 503.*模型是否可用/)
+})
+
+test('sending without an SSH connection keeps the draft and shows an actionable error', async () => {
+  const { state, run } = await loadSendHandler({
+    props: { currentProvider: { id: 'openai' }, currentModel: { id: 'test-model' }, connectionId: '' }
+  })
+  await run()
+  assert.equal(state.inputMessage.value, '  保留这段草稿  ')
+  assert.match(state.error.value?.message || '', /建立 SSH 连接/)
+  assert.equal(state.requests.length, 0)
+})
+
+test('an unexpected send failure is displayed and restores the submitted draft', async () => {
+  const failure = new Error('local fixture failed')
+  const { state, run } = await loadSendHandler({
+    sendMessageWithTools: async () => { throw failure }
+  })
+  await run()
+  assert.equal(state.error.value, failure)
+  assert.equal(state.inputMessage.value, '保留这段草稿')
+  assert.equal(state.statuses.at(-1), failure.message)
+})
+
+test('a failed request preserves a new draft typed while waiting', async () => {
+  const { state, run } = await loadSendHandler()
+  const { run: fail } = await loadSendHandler({
+    inputMessage: state.inputMessage,
+    sendMessageWithTools: async () => {
+      state.inputMessage.value = '用户新写的草稿'
+      throw new Error('local fixture failed')
+    }
+  })
+  await fail()
+  assert.equal(state.inputMessage.value, '用户新写的草稿')
+  state.inputMessage.value = '正常发送'
+  await run()
+  assert.deepEqual(state.requests, ['正常发送'])
+  assert.equal(state.inputMessage.value, '')
+})
 
 test('chat input stays editable while generation is in progress', async () => {
   const source = await readFile(chatViewPath, 'utf8')

@@ -199,6 +199,34 @@ async function callOpenAI(
   }
 }
 
+// Network chunks can split JSON records and UTF-8 characters at arbitrary positions.
+async function* readStreamLines(response: Response): AsyncGenerator<string> {
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error('Response body is not readable')
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let completed = false
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      buffer += done ? decoder.decode() : decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        if (line.trim()) yield line.replace(/\r$/, '')
+      }
+      if (done) {
+        completed = true
+        if (buffer.trim()) yield buffer.replace(/\r$/, '')
+        return
+      }
+    }
+  } finally {
+    if (!completed) await reader.cancel().catch(() => {})
+    reader.releaseLock()
+  }
+}
+
 /**
  * 处理 OpenAI 流式响应
  */
@@ -207,13 +235,6 @@ async function handleOpenAIStream(
   onChunk: (chunk: StreamChunk) => void,
   model: AIModel
 ): Promise<ChatCompletionResponse> {
-  const reader = response.body?.getReader()
-  const decoder = new TextDecoder()
-
-  if (!reader) {
-    throw new Error('Response body is not readable')
-  }
-
   let fullContent = ''
   let actualModel = ''
   let usageData: any = null
@@ -223,56 +244,43 @@ async function handleOpenAIStream(
   let firstTokenTime: number | null = null
   let tokenCount = 0
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
+  for await (const line of readStreamLines(response)) {
+    if (line.startsWith('data: ')) {
+      const data = line.slice(6)
 
-      if (done) break
+      if (data === '[DONE]') {
+        onChunk({ content: '', done: true })
+        break
+      }
 
-      const chunk = decoder.decode(value, { stream: true })
-      const lines = chunk.split('\n').filter(line => line.trim() !== '')
+      try {
+        const parsed = JSON.parse(data)
+        const content = parsed.choices[0]?.delta?.content || ''
 
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6)
-
-          if (data === '[DONE]') {
-            onChunk({ content: '', done: true })
-            break
-          }
-
-          try {
-            const parsed = JSON.parse(data)
-            const content = parsed.choices[0]?.delta?.content || ''
-
-            // 捕获 model 字段
-            if (parsed.model && !actualModel) {
-              actualModel = parsed.model
-            }
-
-            // 捕获 usage 信息（可能在最后一个chunk中）
-            if (parsed.usage) {
-              usageData = parsed.usage
-            }
-
-            if (content) {
-              // 记录首个 Token 时间
-              if (!firstTokenTime) {
-                firstTokenTime = Date.now()
-              }
-
-              fullContent += content
-              tokenCount++
-              onChunk({ content, done: false })
-            }
-          } catch {
-            // 忽略解析错误
-          }
+        // 捕获 model 字段
+        if (parsed.model && !actualModel) {
+          actualModel = parsed.model
         }
+
+        // 捕获 usage 信息（可能在最后一个chunk中）
+        if (parsed.usage) {
+          usageData = parsed.usage
+        }
+
+        if (content) {
+          // 记录首个 Token 时间
+          if (!firstTokenTime) {
+            firstTokenTime = Date.now()
+          }
+
+          fullContent += content
+          tokenCount++
+          onChunk({ content, done: false })
+        }
+      } catch {
+        // 忽略解析错误
       }
     }
-  } finally {
-    reader.releaseLock()
   }
 
   const endTime = Date.now()
@@ -355,7 +363,8 @@ async function callAnthropic(
       'anthropic-version': '2023-06-01',
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal: request.signal
   })
 
   if (!response.ok) {
@@ -395,48 +404,28 @@ async function handleAnthropicStream(
   onChunk: (chunk: StreamChunk) => void,
   _model: AIModel
 ): Promise<ChatCompletionResponse> {
-  const reader = response.body?.getReader()
-  const decoder = new TextDecoder()
-
-  if (!reader) {
-    throw new Error('Response body is not readable')
-  }
-
   let fullContent = ''
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
+  for await (const line of readStreamLines(response)) {
+    if (line.startsWith('data: ')) {
+      const data = line.slice(6)
 
-      if (done) break
+      try {
+        const parsed = JSON.parse(data)
 
-      const chunk = decoder.decode(value, { stream: true })
-      const lines = chunk.split('\n').filter(line => line.trim() !== '')
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6)
-
-          try {
-            const parsed = JSON.parse(data)
-
-            if (parsed.type === 'content_block_delta') {
-              const content = parsed.delta?.text || ''
-              if (content) {
-                fullContent += content
-                onChunk({ content, done: false })
-              }
-            } else if (parsed.type === 'message_stop') {
-              onChunk({ content: '', done: true })
-            }
-          } catch {
-            // 忽略解析错误
+        if (parsed.type === 'content_block_delta') {
+          const content = parsed.delta?.text || ''
+          if (content) {
+            fullContent += content
+            onChunk({ content, done: false })
           }
+        } else if (parsed.type === 'message_stop') {
+          onChunk({ content: '', done: true })
         }
+      } catch {
+        // 忽略解析错误
       }
     }
-  } finally {
-    reader.releaseLock()
   }
 
   return {
@@ -495,7 +484,8 @@ async function callGoogle(
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal: request.signal
   })
 
   if (!response.ok) {
@@ -788,7 +778,8 @@ async function callOllama(
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal: request.signal
   })
 
   if (!response.ok) {
@@ -821,44 +812,24 @@ async function handleOllamaStream(
   response: Response,
   onChunk: (chunk: StreamChunk) => void
 ): Promise<ChatCompletionResponse> {
-  const reader = response.body?.getReader()
-  const decoder = new TextDecoder()
-
-  if (!reader) {
-    throw new Error('Response body is not readable')
-  }
-
   let fullContent = ''
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
+  for await (const line of readStreamLines(response)) {
+    try {
+      const parsed = JSON.parse(line)
+      const content = parsed.message?.content || ''
 
-      if (done) break
-
-      const chunk = decoder.decode(value, { stream: true })
-      const lines = chunk.split('\n').filter(line => line.trim() !== '')
-
-      for (const line of lines) {
-        try {
-          const parsed = JSON.parse(line)
-          const content = parsed.message?.content || ''
-
-          if (content) {
-            fullContent += content
-            onChunk({ content, done: false })
-          }
-
-          if (parsed.done) {
-            onChunk({ content: '', done: true })
-          }
-        } catch {
-          // 忽略解析错误
-        }
+      if (content) {
+        fullContent += content
+        onChunk({ content, done: false })
       }
+
+      if (parsed.done) {
+        onChunk({ content: '', done: true })
+      }
+    } catch {
+      // 忽略解析错误
     }
-  } finally {
-    reader.releaseLock()
   }
 
   return {

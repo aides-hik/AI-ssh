@@ -4,6 +4,12 @@ export interface ChatSession {
   config?: Record<string, any>
 }
 
+export function normalizeSessionContextWindow(value: unknown): number {
+  if (value === '' || value === null || value === undefined) return 50
+  const count = Number(value)
+  return Number.isFinite(count) ? Math.min(50, Math.max(1, Math.floor(count))) : 50
+}
+
 class ChatService {
   private getStorageKey(sessionId: string) {
     return `chat-session-config-${sessionId}`
@@ -29,6 +35,10 @@ class ChatService {
 
     if (updateData.title !== undefined) {
       nextConfig.title = updateData.title
+    }
+
+    if (nextConfig.contextWindow !== undefined) {
+      nextConfig.contextWindow = normalizeSessionContextWindow(nextConfig.contextWindow)
     }
 
     localStorage.setItem(this.getStorageKey(sessionId), JSON.stringify(nextConfig))

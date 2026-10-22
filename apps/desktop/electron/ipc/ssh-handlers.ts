@@ -1,7 +1,9 @@
 import { dialog, ipcMain } from 'electron'
-import { Client, SFTPWrapper } from 'ssh2'
+import { Client, SFTPWrapper, type ConnectConfig } from 'ssh2'
 import fs from 'fs/promises'
 import path from 'path'
+import { homedir } from 'node:os'
+import { randomUUID } from 'node:crypto'
 import { windowEvents } from '../shared/events'
 import { getSSHTreeService } from '../services/ssh-tree.service'
 import { Events, emit } from '../../src/services/event-bus'
@@ -15,7 +17,7 @@ interface SSHConnection {
   password?: string
   privateKey?: string
   passphrase?: string
-  authType?: 'password' | 'privateKey' | 'agent'
+  authType?: 'password' | 'privateKey' | 'agent' | 'PASSWORD' | 'PRIVATE_KEY' | 'SSH_AGENT'
   timeout?: number
   keepAlive?: boolean
   keepAliveInterval?: number
@@ -49,20 +51,69 @@ interface PendingExec {
   reject: (error: Error) => void
 }
 
+interface PendingTransfer {
+  connectionId: string
+  cancel: () => void
+}
+
 function normalizeCredential(value: unknown): string | undefined {
   if (value === undefined || value === null || value === '') return undefined
   return typeof value === 'string' ? value : String(value)
 }
 
+async function createSSHConnectConfig(config: Partial<SSHConnection>): Promise<ConnectConfig> {
+  const connectConfig: ConnectConfig = {
+    host: config.host,
+    port: config.port,
+    username: config.username,
+    readyTimeout: (config.timeout ?? 10) * 1000
+  }
+  if (config.keepAlive !== false) {
+    connectConfig.keepaliveInterval = (config.keepAliveInterval ?? 15) * 1000
+    connectConfig.keepaliveCountMax = 3
+  }
+
+  const privateKey = normalizeCredential(config.privateKey)
+  const authType = config.authType?.toLowerCase()
+  if (authType === 'agent' || authType === 'ssh_agent') {
+    const agent = process.env.SSH_AUTH_SOCK?.trim() ||
+      (process.platform === 'win32' ? '\\\\.\\pipe\\openssh-ssh-agent' : undefined)
+    if (!agent) throw new Error('SSH Agent 未配置，请先启动 agent 并设置 SSH_AUTH_SOCK')
+    connectConfig.agent = agent
+  } else if (authType === 'privatekey' || authType === 'private_key' || (!authType && privateKey)) {
+    if (!privateKey) throw new Error('请选择私钥文件或填写私钥内容')
+    if (/^\s*-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/.test(privateKey)) {
+      connectConfig.privateKey = privateKey
+    } else {
+      const filename = /^~[\\/]/.test(privateKey)
+        ? path.join(homedir(), privateKey.slice(2))
+        : privateKey
+      try {
+        connectConfig.privateKey = await fs.readFile(filename)
+      } catch (error: any) {
+        throw new Error(`无法读取私钥文件（${error.code || '读取失败'}），请检查路径和访问权限`, { cause: error })
+      }
+    }
+    const passphrase = normalizeCredential(config.passphrase)
+    if (passphrase !== undefined) connectConfig.passphrase = passphrase
+  } else {
+    const password = normalizeCredential(config.password)
+    if (password !== undefined) connectConfig.password = password
+  }
+  return connectConfig
+}
+
 class SSHManager {
   private connections: Map<string, SSHConnection> = new Map()
   private pendingExecs: Map<string, PendingExec> = new Map()
+  private pendingTransfers: Map<string, PendingTransfer> = new Map()
   private fileListShellChannels: Map<string, any> = new Map()
 
   async connect(
     config: Omit<SSHConnection, 'id' | 'client' | 'isConnected' | 'lastUsed'>
   ): Promise<string> {
-    const id = Date.now().toString()
+    const id = randomUUID()
+    const connectConfig = await createSSHConnectConfig(config)
     const client = new Client()
 
     return new Promise((resolve, reject) => {
@@ -76,6 +127,7 @@ class SSHManager {
           },
           (err, stream) => {
             if (err) {
+              client.end()
               reject(err)
               return
             }
@@ -186,6 +238,7 @@ class SSHManager {
         }
 
         this.closeFileListShell(id)
+        this.cancelConnectionTransfers(id)
 
         // 通知前端连接状态变化
         windowEvents.sendToRenderer('ssh:connection-status-changed', {
@@ -193,33 +246,6 @@ class SSHManager {
           status: 'disconnected'
         })
       })
-
-      // 连接配置
-      const connectConfig: any = {
-        host: config.host,
-        port: config.port,
-        username: config.username,
-        readyTimeout: (config.timeout ?? 10) * 1000
-      }
-
-      if (config.keepAlive !== false) {
-        connectConfig.keepaliveInterval = (config.keepAliveInterval ?? 15) * 1000
-        connectConfig.keepaliveCountMax = 3
-      }
-
-      const password = normalizeCredential(config.password)
-      if (password !== undefined) {
-        connectConfig.password = password
-      }
-
-      const privateKey = normalizeCredential(config.privateKey)
-      if (privateKey !== undefined) {
-        connectConfig.privateKey = privateKey
-        const passphrase = normalizeCredential(config.passphrase)
-        if (passphrase !== undefined) {
-          connectConfig.passphrase = passphrase
-        }
-      }
 
       client.connect(connectConfig)
     })
@@ -257,6 +283,7 @@ class SSHManager {
     }
 
     this.closeFileListShell(id)
+    this.cancelConnectionTransfers(id)
 
     // 关闭 SSH 客户端
     if (connection.client) {
@@ -884,7 +911,8 @@ class SSHManager {
 
   private buildStructuredListCommand(remotePath: string): string {
     const escapedRemotePath = this.escapeShellSingleQuotes(remotePath)
-    return `LC_ALL=C find '${escapedRemotePath}' -mindepth 1 -maxdepth 1 -exec sh -c 'for p do if [ -d "$p" ]; then t=d; else t=f; fi; identity=$(printf %s "$p" | base64 | tr -d "\\n"); stat=$(stat -c "%s\\t%Y\\t%a" -- "$p") || exit; printf "%s\\t%s\\t%s\\n" "$identity" "$t" "$stat"; done' sh {} +`
+    // GNU stat -c leaves \\t literal; --printf emits the tabs consumed by the parser.
+    return `LC_ALL=C find '${escapedRemotePath}' -mindepth 1 -maxdepth 1 -exec sh -c 'for p do if [ -d "$p" ]; then t=d; else t=f; fi; identity=$(printf %s "$p" | base64 | tr -d "\\n"); stat=$(stat --printf "%s\\t%Y\\t%a" -- "$p") || exit 1; printf "%s\\t%s\\t%s\\n" "$identity" "$t" "$stat" || exit 1; done' sh {} +`
   }
 
   private async listFilesViaPersistentShell(id: string, remotePath: string): Promise<any[] | null> {
@@ -1019,7 +1047,7 @@ class SSHManager {
   async saveConnection(
     config: Omit<SSHConnection, 'id' | 'client' | 'isConnected' | 'lastUsed'>
   ): Promise<string> {
-    const id = Date.now().toString()
+    const id = randomUUID()
     const connection: SSHConnection = {
       ...config,
       id,
@@ -1043,6 +1071,7 @@ class SSHManager {
   async testConnection(
     config: Omit<SSHConnection, 'id' | 'client' | 'isConnected' | 'lastUsed'>
   ): Promise<{ success: boolean; message: string }> {
+    const connectConfig = await createSSHConnectConfig(config)
     const client = new Client()
 
     return new Promise(resolve => {
@@ -1086,33 +1115,13 @@ class SSHManager {
         })
       })
 
-      const connectConfig: any = {
-        host: config.host,
-        port: config.port,
-        username: config.username,
-        readyTimeout: (config.timeout ?? 10) * 1000
+      try {
+        client.connect(connectConfig)
+      } catch (error) {
+        clearTimeout(timeout)
+        client.end()
+        resolve({ success: false, message: error instanceof Error ? error.message : '身份验证配置无效' })
       }
-
-      if (config.keepAlive !== false) {
-        connectConfig.keepaliveInterval = (config.keepAliveInterval ?? 15) * 1000
-        connectConfig.keepaliveCountMax = 3
-      }
-
-      const password = normalizeCredential(config.password)
-      if (password !== undefined) {
-        connectConfig.password = password
-      }
-
-      const privateKey = normalizeCredential(config.privateKey)
-      if (privateKey !== undefined) {
-        connectConfig.privateKey = privateKey
-        const passphrase = normalizeCredential(config.passphrase)
-        if (passphrase !== undefined) {
-          connectConfig.passphrase = passphrase
-        }
-      }
-
-      client.connect(connectConfig)
     })
   }
 
@@ -1174,123 +1183,96 @@ class SSHManager {
     return this.listFilesViaSftp(id, remotePath, startTime)
   }
 
-  // 上传文件
-  async uploadFile(id: string, localPath: string, remotePath: string): Promise<void> {
-    const sftp = await this.getSFTP(id)
+  private cancelConnectionTransfers(id: string): void {
+    for (const transfer of this.pendingTransfers.values()) {
+      if (transfer.connectionId === id) transfer.cancel()
+    }
+  }
 
-    // 连续进度更新
+  cancelTransfer(requestId: string): boolean {
+    const transfer = this.pendingTransfers.get(requestId)
+    if (!transfer) return false
+    transfer.cancel()
+    return true
+  }
+
+  private async transferFile(
+    id: string,
+    localPath: string,
+    remotePath: string,
+    direction: 'upload' | 'download',
+    requestId: string = randomUUID()
+  ): Promise<void> {
+    const connection = this.connections.get(id)
+    if (!connection?.client || !connection.isConnected) {
+      throw new Error('Connection not found or not connected')
+    }
+    if (this.pendingTransfers.has(requestId)) throw new Error('Transfer request ID is already active')
+
+    // Each transfer owns its SFTP channel, so cancelling it cannot interrupt another file.
+    let sftp: SFTPWrapper | undefined
+    let settled = false
     let lastReportedProgress = -1
-    let totalSize = 0 // 存储文件总大小
-    let hasError = false
-
-    const reportProgress = (progress: number, transferred: number, total: number) => {
-      // 如果已经发生错误，不再发送进度
-      if (hasError) return
-
-      // 保留一位小数，减少频繁更新但保持连续性
-      const roundedProgress = Math.round(progress * 10) / 10
-      if (roundedProgress !== lastReportedProgress) {
-        lastReportedProgress = roundedProgress
-        windowEvents.sendToRenderer('ssh:upload-progress', {
-          id,
-          localPath,
-          remotePath,
-          progress: roundedProgress,
-          transferred,
-          total
+    let totalSize = 0
+    return new Promise<void>((resolve, reject) => {
+      const finish = (error?: Error | null) => {
+        if (settled) return
+        settled = true
+        this.pendingTransfers.delete(requestId)
+        sftp?.end()
+        if (error) reject(error)
+        else resolve()
+      }
+      this.pendingTransfers.set(requestId, {
+        connectionId: id,
+        cancel: () => {
+          const error = new Error('File transfer aborted')
+          error.name = 'AbortError'
+          finish(error)
+        }
+      })
+      const reportProgress = (transferred: number, total: number) => {
+        if (settled) return
+        totalSize = total
+        const progress = total === 0 ? 100 : Math.round(transferred / total * 1000) / 10
+        if (progress === lastReportedProgress) return
+        lastReportedProgress = progress
+        windowEvents.sendToRenderer(`ssh:${direction}-progress`, {
+          id, requestId, localPath, remotePath, progress, transferred, total
         })
       }
-    }
-
-    return new Promise((resolve, reject) => {
-      sftp.fastPut(
-        localPath,
-        remotePath,
-        {
-          step: (transferred, chunk, total) => {
-            totalSize = total // 更新总大小
-            const progress = (transferred / total) * 100
-            reportProgress(progress, transferred, total)
+      const start = async () => {
+        if (direction === 'download') await fs.mkdir(path.dirname(localPath), { recursive: true })
+        if (settled) return
+        connection.client!.sftp((error, channel) => {
+          if (error) return finish(error)
+          sftp = channel
+          if (settled) { channel.end(); return }
+          channel.on('error', finish)
+          channel.once('close', () => {
+            if (!settled) finish(new Error('SFTP channel closed before transfer completed'))
+          })
+          const complete = (error?: Error | null) => {
+            if (!error && !settled) reportProgress(totalSize, totalSize)
+            finish(error)
           }
-        },
-        err => {
-          if (err) {
-            hasError = true
-            console.error(`[SSH上传失败] ${localPath} -> ${remotePath}:`, err)
-            reject(err)
-            return
-          }
-
-          // 只有在没有错误的情况下才标记完成
-          if (!hasError) {
-            // 发送最终的100%进度
-            reportProgress(100, totalSize, totalSize)
-            resolve()
-          }
-        }
-      )
+          const options = { step: (transferred: number, _chunk: number, total: number) => reportProgress(transferred, total) }
+          try {
+            if (direction === 'upload') channel.fastPut(localPath, remotePath, options, complete)
+            else channel.fastGet(remotePath, localPath, options, complete)
+          } catch (error: any) { finish(error) }
+        })
+      }
+      void start().catch(finish)
     })
   }
 
-  // 下载文件
-  async downloadFile(id: string, remotePath: string, localPath: string): Promise<void> {
-    const sftp = await this.getSFTP(id)
+  async uploadFile(id: string, localPath: string, remotePath: string, requestId?: string): Promise<void> {
+    return this.transferFile(id, localPath, remotePath, 'upload', requestId)
+  }
 
-    // 确保本地目录存在
-    const localDir = path.dirname(localPath)
-
-    try {
-      await fs.mkdir(localDir, { recursive: true })
-    } catch (error: any) {
-      // 忽略目录已存在的错误
-      if (error.code !== 'EEXIST') {
-        console.error('Failed to create directory:', localDir, error)
-      }
-    }
-
-    // 连续进度更新
-    let lastReportedProgress = -1
-    let totalSize = 0 // 存储文件总大小
-
-    const reportProgress = (progress: number, transferred: number, total: number) => {
-      // 保留一位小数，减少频繁更新但保持连续性
-      const roundedProgress = Math.round(progress * 10) / 10
-      if (roundedProgress !== lastReportedProgress) {
-        lastReportedProgress = roundedProgress
-        windowEvents.sendToRenderer('ssh:download-progress', {
-          id,
-          remotePath,
-          localPath,
-          progress: roundedProgress,
-          transferred,
-          total
-        })
-      }
-    }
-
-    return new Promise((resolve, reject) => {
-      sftp.fastGet(
-        remotePath,
-        localPath,
-        {
-          step: (transferred, chunk, total) => {
-            totalSize = total // 更新总大小
-            const progress = (transferred / total) * 100
-            reportProgress(progress, transferred, total)
-          }
-        },
-        err => {
-          if (err) {
-            reject(err)
-            return
-          }
-
-          // 发送最终的100%进度
-          reportProgress(100, totalSize, totalSize)
-          resolve()
-        }
-      )
-    })
+  async downloadFile(id: string, remotePath: string, localPath: string, requestId?: string): Promise<void> {
+    return this.transferFile(id, localPath, remotePath, 'download', requestId)
   }
 
   // Delete by the opaque raw path returned by listing, including all descendants.
@@ -1530,24 +1512,26 @@ ipcMain.handle('ssh:list-files', async (_, id: string, remotePath: string) => {
   }
 })
 
-ipcMain.handle('ssh:upload-file', async (_, id: string, localPath: string, remotePath: string) => {
+ipcMain.handle('ssh:cancel-transfer', (_, requestId: string) => sshManager.cancelTransfer(requestId))
+
+ipcMain.handle('ssh:upload-file', async (_, id: string, localPath: string, remotePath: string, requestId?: string) => {
   try {
-    await sshManager.uploadFile(id, localPath, remotePath)
+    await sshManager.uploadFile(id, localPath, remotePath, requestId)
     return { success: true }
   } catch (error: any) {
-    console.error('SSH upload file error:', error)
+    if (error.name !== 'AbortError') console.error('SSH upload file error:', error)
     throw error // 抛出异常而不是返回错误对象
   }
 })
 
 ipcMain.handle(
   'ssh:download-file',
-  async (_, id: string, remotePath: string, localPath: string) => {
+  async (_, id: string, remotePath: string, localPath: string, requestId?: string) => {
     try {
-      await sshManager.downloadFile(id, remotePath, localPath)
+      await sshManager.downloadFile(id, remotePath, localPath, requestId)
       return { success: true }
     } catch (error: any) {
-      console.error('SSH download file error:', error)
+      if (error.name !== 'AbortError') console.error('SSH download file error:', error)
       throw error // 抛出异常而不是返回错误对象
     }
   }

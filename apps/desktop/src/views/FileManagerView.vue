@@ -955,6 +955,10 @@ const ensureParentDirectories = async (remotePath: string, cache: Set<string>) =
   let current = ''
   for (const segment of segments) {
     current += `/${segment}`
+    // 已知目录存在时，其父目录也必然存在。
+    if (Array.from(cache).some(existing => existing === current || existing.startsWith(`${current}/`))) {
+      continue
+    }
     await ensureRemoteDirectoryExists(current, cache)
   }
 }
@@ -1020,7 +1024,7 @@ const uploadFilesFromDialogAsync = async (filePaths: string[], tasks: UploadTask
     const localPath = filePaths[i]
     const task = tasks[i]
 
-    if (!task) continue
+    if (!task || isUploadTaskCancelled(task.id)) continue
 
     try {
       // 启动真实进度跟踪（在状态更新之前设置监听器）
@@ -1037,10 +1041,12 @@ const uploadFilesFromDialogAsync = async (filePaths: string[], tasks: UploadTask
         await window.electronAPI!.ssh.uploadFile(
           currentConnectionId.value,
           localPath,
-          task.remotePath
+          task.remotePath,
+          task.id
         )
         // 上传成功，停止进度跟踪并设为完成状态
         progressController.stop()
+        if (isUploadTaskCancelled(task.id)) continue
         updateUploadTaskStatus(task.id, { status: 'completed', progress: 100 })
         hasSuccessfulUploads = true
       } catch (error) {
@@ -1048,6 +1054,7 @@ const uploadFilesFromDialogAsync = async (filePaths: string[], tasks: UploadTask
         throw error
       }
     } catch (error: any) {
+      if (isUploadTaskCancelled(task.id)) continue
       console.error(`[上传文件] 失败 ${task.name}:`, error)
 
       // 提供更友好的错误消息
@@ -1366,9 +1373,9 @@ const uploadDroppedFilesAsync = async (payload: DroppedFilesPayload, tasks: Uplo
 
   for (let i = 0; i < sortedFiles.length; i++) {
     const file = sortedFiles[i]
-    const task = tasks[i]
+    const task = tasks.find(task => task.localPath === file.localPath && task.name === file.relativePath)
 
-    if (!task) continue
+    if (!task || isUploadTaskCancelled(task.id)) continue
 
     try {
       // 更新任务状态为上传中
@@ -1376,6 +1383,7 @@ const uploadDroppedFilesAsync = async (payload: DroppedFilesPayload, tasks: Uplo
 
       const remotePath = joinRemotePath(currentPath.value, file.relativePath)
       await ensureParentDirectories(remotePath, remoteDirCache)
+      if (isUploadTaskCancelled(task.id)) continue
 
       // 启动真实进度跟踪
       const progressController = startRealProgressTracking(task.id, 'ssh:upload-progress', {
@@ -1388,10 +1396,12 @@ const uploadDroppedFilesAsync = async (payload: DroppedFilesPayload, tasks: Uplo
         await window.electronAPI!.ssh.uploadFile(
           currentConnectionId.value,
           file.localPath,
-          remotePath
+          remotePath,
+          task.id
         )
         // 上传成功，停止进度跟踪并设为完成状态
         progressController.stop()
+        if (isUploadTaskCancelled(task.id)) continue
         updateUploadTaskStatus(task.id, { status: 'completed', progress: 100 })
         hasSuccessfulUploads = true
       } catch (error) {
@@ -1399,6 +1409,7 @@ const uploadDroppedFilesAsync = async (payload: DroppedFilesPayload, tasks: Uplo
         throw error
       }
     } catch (error: any) {
+      if (isUploadTaskCancelled(task.id)) continue
       console.error(`[上传文件] 失败 ${file.relativePath}:`, error)
 
       // 提供更友好的错误消息
@@ -1726,7 +1737,9 @@ const updateTaskStatus = (taskId: string, updates: Partial<DownloadTask>) => {
 
 // 执行下载任务
 const executeDownloadTask = async (task: DownloadTask) => {
-  if (task.cancelled || !currentConnectionId.value || !window.electronAPI) return
+  const getTask = () => downloadTasks.value.find(t => t.id === task.id)
+  const isCancelled = () => !getTask() || getTask()!.cancelled || isDownloadCancelled
+  if (isCancelled() || !currentConnectionId.value || !window.electronAPI) return
 
   // 检查全局取消标志
   if (isDownloadCancelled) {
@@ -1737,14 +1750,11 @@ const executeDownloadTask = async (task: DownloadTask) => {
   // 等待前面的任务（简单的队列控制，避免同时下载太多）
   while (downloadTasks.value.filter(t => t.status === 'downloading').length >= 3) {
     await new Promise(resolve => setTimeout(resolve, 100))
-    if (task.cancelled || isDownloadCancelled) return
+    if (isCancelled()) return
   }
 
-  // 再等待一小段时间，避免瞬间大量并发导致目录创建冲突
-  await new Promise(resolve => setTimeout(resolve, 10))
-
   // 再次检查
-  if (isDownloadCancelled) {
+  if (isCancelled()) {
     updateTaskStatus(task.id, { cancelled: true, status: 'cancelled' })
     return
   }
@@ -1757,9 +1767,6 @@ const executeDownloadTask = async (task: DownloadTask) => {
   })
 
   updateTaskStatus(task.id, { status: 'downloading', progress: 0 })
-
-  // 获取最新的任务引用
-  const getTask = () => downloadTasks.value.find(t => t.id === task.id)
 
   try {
     // 确保本地目录存在 - 使用 path 分隔符（支持 Windows 和 Unix）
@@ -1777,14 +1784,17 @@ const executeDownloadTask = async (task: DownloadTask) => {
     const maxRetries = 3
 
     while (retryCount < maxRetries) {
+      if (isCancelled()) return
       try {
         await window.electronAPI.ssh.downloadFile(
           currentConnectionId.value,
           task.remotePath,
-          task.localPath
+          task.localPath,
+          task.id
         )
         break // 成功，退出重试循环
       } catch (downloadError: any) {
+        if (isCancelled()) return
         retryCount++
         if (retryCount >= maxRetries) {
           throw downloadError // 达到最大重试次数，抛出错误
@@ -1799,13 +1809,12 @@ const executeDownloadTask = async (task: DownloadTask) => {
 
     // 下载成功，停止进度跟踪并设为完成状态
     progressController.stop()
-    updateTaskStatus(task.id, { progress: 100, status: 'completed' })
+    if (!isCancelled()) updateTaskStatus(task.id, { progress: 100, status: 'completed' })
 
     // 检查是否所有任务都完成了
     checkAndAutoCleanup()
   } catch (error: any) {
-    progressController.stop()
-    console.error(`[下载任务] 失败: ${task.name}`, error)
+    if (!isCancelled()) console.error(`[下载任务] 失败: ${task.name}`, error)
     const currentTask = getTask()
     if (currentTask && !currentTask.cancelled) {
       updateTaskStatus(task.id, { status: 'error', error: error.message || '下载失败' })
@@ -1813,6 +1822,8 @@ const executeDownloadTask = async (task: DownloadTask) => {
 
     // 即使失败也检查是否需要清理
     checkAndAutoCleanup()
+  } finally {
+    progressController.stop()
   }
 }
 
@@ -1859,6 +1870,7 @@ const cancelDownload = (taskId: string) => {
   const task = downloadTasks.value.find(t => t.id === taskId)
   if (task) {
     updateTaskStatus(taskId, { cancelled: true, status: 'cancelled' })
+    requestTransferCancellation(taskId)
     checkAndAutoCleanup()
   }
 }
@@ -1872,6 +1884,7 @@ const cancelAllDownloads = () => {
   downloadTasks.value.forEach(task => {
     if (task.status === 'downloading' || task.status === 'pending') {
       updateTaskStatus(task.id, { cancelled: true, status: 'cancelled' })
+      requestTransferCancellation(task.id)
     }
   })
   checkAndAutoCleanup()
@@ -1898,8 +1911,20 @@ const clearCompletedTasks = () => {
 }
 
 // 上传任务管理函数
+const isUploadTaskCancelled = (taskId: string) => {
+  const task = uploadTasks.value.find(t => t.id === taskId)
+  return !task || task.cancelled === true
+}
+
+const requestTransferCancellation = (taskId: string) => {
+  window.electronAPI?.ssh.cancelTransfer(taskId).catch(error => {
+    console.warn('[传输] 取消请求失败:', error)
+  })
+}
+
 const cancelUploadTask = (taskId: string) => {
   updateUploadTaskStatus(taskId, { cancelled: true, status: 'cancelled' })
+  requestTransferCancellation(taskId)
 }
 
 const removeUploadTask = (taskId: string) => {
@@ -1919,6 +1944,7 @@ const cancelAllUploads = () => {
   uploadTasks.value.forEach(task => {
     if (task.status === 'uploading' || task.status === 'pending') {
       updateUploadTaskStatus(task.id, { cancelled: true, status: 'cancelled' })
+      requestTransferCancellation(task.id)
     }
   })
 }

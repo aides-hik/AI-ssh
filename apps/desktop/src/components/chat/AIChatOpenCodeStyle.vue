@@ -781,7 +781,6 @@ async function sendMessageWithTools(content: string) {
               break
 
             case 'error':
-              console.error('[AIChatOpenCode] 错误:', event.error)
               if (
                 stopRequested.value ||
                 event.error.name === 'AbortError' ||
@@ -791,6 +790,7 @@ async function sendMessageWithTools(content: string) {
               ) {
                 setStatus('stopped', '正在停止本次请求并保留当前进度')
               } else {
+                console.error('[AIChatOpenCode] 错误:', event.error)
                 setStatus('error', normalizeUserErrorMessage(event.error.message))
               }
               break
@@ -1111,12 +1111,31 @@ function buildSystemPrompt(
 
 async function handleSendMessage() {
   if (!inputMessage.value.trim() || isGenerating.value) return
+
+  if (!props.currentProvider || !props.currentModel || !props.connectionId) {
+    const message = !props.currentProvider || !props.currentModel
+      ? '请先选择 AI 提供商和模型后再发送'
+      : '请先建立 SSH 连接后再发送'
+    error.value = new Error(message)
+    setStatus('error', message)
+    inputRef.value?.focus()
+    return
+  }
+
   const content = inputMessage.value.trim()
   inputMessage.value = ''
   try {
     await sendMessageWithTools(content)
-  } catch (e: any) {
-    void e
+  } catch (cause: unknown) {
+    const sendError = cause instanceof Error ? cause : new Error(String(cause))
+    if (error.value !== sendError) {
+      console.error('[AIChatOpenCode] 发送失败:', sendError)
+    }
+    error.value = sendError
+    setStatus('error', normalizeUserErrorMessage(sendError.message))
+    if (!inputMessage.value.trim()) {
+      inputMessage.value = content
+    }
   }
   nextTick(() => {
     resizeInputHeight()
@@ -1447,8 +1466,15 @@ function normalizeUserErrorMessage(rawError: string): string {
     return '目标文件暂时无法读取，请确认路径存在且当前主机有权限访问。'
   }
 
-  if (cleaned.includes('HTTP ')) {
-    return '模型服务暂时响应异常，请稍后重试。'
+  const httpStatus = cleaned.match(/\bHTTP\s+(\d{3})\b/)?.[1]
+  if (httpStatus === '401' || httpStatus === '403') {
+    return `模型服务认证失败（HTTP ${httpStatus}），请检查 API Key 和模型访问权限。`
+  }
+  if (httpStatus === '429') {
+    return '模型服务请求受限（HTTP 429），请稍后重试并检查配额。'
+  }
+  if (httpStatus) {
+    return `模型服务响应异常（HTTP ${httpStatus}），请检查服务地址和模型是否可用后重试。`
   }
 
   return cleaned

@@ -92,10 +92,11 @@ const api = {
     // SFTP 相关
     listFiles: (id: string, remotePath: string) =>
       ipcRenderer.invoke('ssh:list-files', id, remotePath),
-    uploadFile: (id: string, localPath: string, remotePath: string) =>
-      ipcRenderer.invoke('ssh:upload-file', id, localPath, remotePath),
-    downloadFile: (id: string, remotePath: string, localPath: string) =>
-      ipcRenderer.invoke('ssh:download-file', id, remotePath, localPath),
+    uploadFile: (id: string, localPath: string, remotePath: string, requestId?: string) =>
+      ipcRenderer.invoke('ssh:upload-file', id, localPath, remotePath, requestId),
+    downloadFile: (id: string, remotePath: string, localPath: string, requestId?: string) =>
+      ipcRenderer.invoke('ssh:download-file', id, remotePath, localPath, requestId),
+    cancelTransfer: (requestId: string) => ipcRenderer.invoke('ssh:cancel-transfer', requestId),
     deleteFile: (id: string, remotePath: string, isDirectory: boolean, identity?: string) =>
       ipcRenderer.invoke('ssh:delete-file', id, remotePath, isDirectory, identity),
     createDirectory: (id: string, remotePath: string) =>
@@ -341,8 +342,9 @@ interface ElectronAPI {
 
     // SFTP 相关
     listFiles: (id: string, remotePath: string) => Promise<any>
-    uploadFile: (id: string, localPath: string, remotePath: string) => Promise<any>
-    downloadFile: (id: string, remotePath: string, localPath: string) => Promise<any>
+    uploadFile: (id: string, localPath: string, remotePath: string, requestId?: string) => Promise<any>
+    downloadFile: (id: string, remotePath: string, localPath: string, requestId?: string) => Promise<any>
+    cancelTransfer: (requestId: string) => Promise<boolean>
     deleteFile: (
       id: string,
       remotePath: string,

@@ -77,8 +77,9 @@ interface ElectronAPI {
 
     // SFTP 相关
     listFiles: (id: string, remotePath: string) => Promise<any>
-    uploadFile: (id: string, localPath: string, remotePath: string) => Promise<any>
-    downloadFile: (id: string, remotePath: string, localPath: string) => Promise<any>
+    uploadFile: (id: string, localPath: string, remotePath: string, requestId?: string) => Promise<any>
+    downloadFile: (id: string, remotePath: string, localPath: string, requestId?: string) => Promise<any>
+    cancelTransfer: (requestId: string) => Promise<boolean>
     deleteFile: (
       id: string,
       remotePath: string,
