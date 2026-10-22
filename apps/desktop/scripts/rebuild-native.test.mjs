@@ -18,6 +18,14 @@ const builderConfigPath = join(currentDir, '../electron-builder.yml')
 const releaseWorkflowPath = join(currentDir, '../../../.github/workflows/release.yml')
 const manualWorkflowPath = join(currentDir, '../../../.github/workflows/manual-build.yml')
 
+test('desktop packaging configuration matches the installed electron-builder schema', async () => {
+  const builderRequire = createRequire(require.resolve('electron-builder/package.json'))
+  const { getConfig, validateConfiguration } = builderRequire('app-builder-lib/out/util/config/config.js')
+  const config = await getConfig(join(currentDir, '..'), builderConfigPath)
+  // This only loads and validates configuration; it never creates an installer.
+  await validateConfiguration(config, { isEnabled: false })
+})
+
 test('native dependency preparation verifies bundled Node-API binaries without compilation', async () => {
   const source = await readFile(rebuildScriptPath, 'utf8')
 

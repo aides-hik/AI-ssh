@@ -51,8 +51,6 @@ buildDependenciesFromSource: false
 beforePack: "./build-scripts/before-pack.js"
 afterPack: "./build-scripts/after-pack.js"
 afterSign: "./build-scripts/after-sign.js"
-# 禁用子模块自动包含（避免硬链接冲突，通过 after-pack.js 手动处理）
-includeSubNodeModules: false
 icon: build/icon.ico
 win:
   target:
