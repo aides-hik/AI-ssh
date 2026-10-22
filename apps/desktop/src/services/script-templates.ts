@@ -95,7 +95,7 @@ exit /b 1
 
 APP_DIR="/var/www/my-app"
 BACKUP_DIR="/var/backups"
-DATE=\$(date +%Y%m%d_%H%M%S)
+DATE=$(date +%Y%m%d_%H%M%S)
 BACKUP_FILE="\${BACKUP_DIR}/backup_\${DATE}.tar.gz"
 
 echo "💾 开始备份..."
@@ -105,7 +105,7 @@ mkdir -p \${BACKUP_DIR}
 
 # 打包备份
 echo "📦 打包文件..."
-tar -czf \${BACKUP_FILE} -C \$(dirname \${APP_DIR}) \$(basename \${APP_DIR})
+tar -czf \${BACKUP_FILE} -C $(dirname \${APP_DIR}) $(basename \${APP_DIR})
 
 # 显示备份信息
 echo "✅ 备份完成！"
@@ -138,7 +138,7 @@ HEALTH_ENDPOINT="\${APP_URL}/health"
 echo "🏥 执行健康检查..."
 
 # 检查 HTTP 响应
-HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" \${HEALTH_ENDPOINT})
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \${HEALTH_ENDPOINT})
 
 if [ \${HTTP_CODE} -eq 200 ]; then
     echo "✅ 应用运行正常 (HTTP \${HTTP_CODE})"

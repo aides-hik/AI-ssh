@@ -106,12 +106,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
-import { useRouter } from 'vue-router'
+
 import { useI18n } from 'vue-i18n'
 import { chatService } from '../services/chat.service'
-import type { ChatSession } from '../services/chat.service'
 
-const router = useRouter()
 const { t: $t } = useI18n()
 
 // 设置章节
@@ -228,7 +226,7 @@ const loadSessionConfig = async () => {
     }
 
     isLoading.value = false
-  } catch (error: any) {
+  } catch {
     isLoading.value = false
   }
 }
@@ -269,7 +267,7 @@ const saveSessionConfig = () => {
           saveStatus.value = null
         }
       }, 2000)
-    } catch (error: any) {
+    } catch {
       saveStatus.value = 'error'
 
       // 3秒后隐藏错误提示

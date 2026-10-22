@@ -1,16 +1,16 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import tailwindcss from '@tailwindcss/vite'
 import electron from 'vite-plugin-electron'
 import renderer from 'vite-plugin-electron-renderer'
-import monacoEditorPlugin from 'vite-plugin-monaco-editor'
-import { resolve } from 'path'
+import { resolve } from 'node:path'
+
+const desktopRoot = import.meta.dirname
 
 export default defineConfig({
   plugins: [
     vue(),
-    monacoEditorPlugin({
-      languageWorkers: ['editorWorkerService', 'json', 'typescript']
-    }),
+    tailwindcss(),
     electron([
       {
         // Main process entry file
@@ -23,7 +23,7 @@ export default defineConfig({
             sourcemap: true,
             minify: process.env.NODE_ENV === 'production',
             outDir: 'dist-electron/main',
-            rollupOptions: {
+            rolldownOptions: {
               external: [
                 'electron',
                 'sqlite3',
@@ -48,7 +48,7 @@ export default defineConfig({
             sourcemap: 'inline',
             minify: process.env.NODE_ENV === 'production',
             outDir: 'dist-electron/preload',
-            rollupOptions: {
+            rolldownOptions: {
               external: ['electron']
             }
           }
@@ -59,13 +59,8 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src'),
-      '@ai-ssh/shared': resolve(__dirname, '../../packages/shared/src')
-    }
-  },
-  css: {
-    postcss: {
-      plugins: [require('tailwindcss'), require('autoprefixer')]
+      '@': resolve(desktopRoot, 'src'),
+      '@ai-ssh/shared': resolve(desktopRoot, '../../packages/shared/src')
     }
   },
   build: {

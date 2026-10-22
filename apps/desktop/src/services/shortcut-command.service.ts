@@ -37,7 +37,7 @@ class ShortcutCommandService {
       const data = localStorage.getItem(key)
       if (!data) return []
       return JSON.parse(data)
-    } catch (error) {
+    } catch {
 
       return []
     }
@@ -49,7 +49,7 @@ class ShortcutCommandService {
    */
   add(command: string, description?: string, tags?: string[], connectionId?: string): ShortcutCommand {
     const commands = this.getAll(connectionId)
-    
+
     // 检查是否已存在
     const existing = commands.find(c => c.command === command)
     if (existing) {
@@ -69,7 +69,6 @@ class ShortcutCommandService {
 
     commands.push(newCommand)
     this.save(commands, connectionId)
-    
 
     return newCommand
   }
@@ -80,7 +79,7 @@ class ShortcutCommandService {
   delete(id: string, connectionId?: string): boolean {
     const commands = this.getAll(connectionId)
     const index = commands.findIndex(c => c.id === id)
-    
+
     if (index === -1) {
 
       return false
@@ -88,7 +87,6 @@ class ShortcutCommandService {
 
     commands.splice(index, 1)
     this.save(commands, connectionId)
-    
 
     return true
   }
@@ -99,7 +97,7 @@ class ShortcutCommandService {
   update(id: string, updates: Partial<Omit<ShortcutCommand, 'id' | 'createdAt'>>, connectionId?: string): boolean {
     const commands = this.getAll(connectionId)
     const index = commands.findIndex(c => c.id === id)
-    
+
     if (index === -1) {
 
       return false
@@ -107,7 +105,6 @@ class ShortcutCommandService {
 
     commands[index] = { ...commands[index], ...updates }
     this.save(commands, connectionId)
-    
 
     return true
   }
@@ -118,7 +115,7 @@ class ShortcutCommandService {
   recordUsage(id: string, connectionId?: string): void {
     const commands = this.getAll(connectionId)
     const command = commands.find(c => c.id === id)
-    
+
     if (!command) {
 
       return
@@ -127,7 +124,6 @@ class ShortcutCommandService {
     command.usedCount++
     command.lastUsedAt = Date.now()
     this.save(commands, connectionId)
-    
 
   }
 
@@ -137,7 +133,7 @@ class ShortcutCommandService {
   search(keyword: string, connectionId?: string): ShortcutCommand[] {
     const commands = this.getAll(connectionId)
     const lowerKeyword = keyword.toLowerCase()
-    
+
     return commands.filter(c => 
       c.command.toLowerCase().includes(lowerKeyword) ||
       c.description?.toLowerCase().includes(lowerKeyword) ||
@@ -169,8 +165,8 @@ class ShortcutCommandService {
       const key = this.getStorageKey(connectionId)
       localStorage.setItem(key, JSON.stringify(commands))
 
-    } catch (error) {
-
+    } catch {
+      // Preserve command execution when the usage counter cannot be persisted.
     }
   }
 
@@ -196,7 +192,7 @@ class ShortcutCommandService {
   import(jsonData: string, connectionId?: string): boolean {
     try {
       const commands = JSON.parse(jsonData) as ShortcutCommand[]
-      
+
       // 验证数据格式
       if (!Array.isArray(commands)) {
         throw new Error('数据格式错误')
@@ -205,7 +201,7 @@ class ShortcutCommandService {
       this.save(commands, connectionId)
 
       return true
-    } catch (error) {
+    } catch {
 
       return false
     }

@@ -4,8 +4,8 @@
 
 ### 环境要求
 
-- Node.js 20 或更高版本
-- pnpm 8，仓库固定使用 `pnpm@8.12.0`
+- Node.js 26.12.1，与 `.node-version` 和 CI 一致
+- pnpm 12，仓库固定使用 `pnpm@12.15.0`；Node.js 26 不再内置 Corepack，可用 `npm install -g pnpm@12.15.0` 安装
 - 首次运行先在仓库根目录执行 `pnpm install`
 - 服务端只读取 `packages/server/.env`；可参考根目录 `.env.example` 准备配置，禁止提交真实密钥
 
@@ -42,9 +42,9 @@ pnpm dev:desktop
 
 - `pnpm dev:server` 会先清理占用的服务端端口，并在 `9229` 开启 Node 调试端口。
 - 桌面端本地功能无需账号或服务端；AI 功能请先在设置中配置自己的模型服务。
-- `better-sqlite3` 必须匹配 Electron 的 ABI。当前 Electron 为 `29.4.6`，需要准备原生绑定时执行 `pnpm --filter @ai-ssh/desktop rebuild`。
-- 重建原生绑定前先退出所有正在运行的 Electron 客户端，避免 Windows 锁定 `better_sqlite3.node`。
-- 原生模块统一由 `apps/desktop/scripts/rebuild-native.js` 通过 `prebuild-install` 下载目标 Electron/平台/架构的绑定，不要改回强制源码编译的 `electron-rebuild` 流程。
+- 当前 Electron 为 `45.0.0`，`better-sqlite3` 13 使用 Node-API，随 npm 包提供 `prebuilds/<platform>-<arch>.node`，无需按 Electron ABI 下载或编译。
+- 执行 `pnpm --filter @ai-ssh/desktop run rebuild` 校验目标平台和架构的绑定；本机目标还会验证 SQLite 查询。`rebuild` 保留为兼容脚本名，实际不编译源码。
+- 原生绑定由 `apps/desktop/scripts/rebuild-native.js` 和打包后的架构检查统一验证。不要恢复 `prebuild-install` 的旧 Electron ABI 下载流程或 `electron-rebuild` 源码编译流程。重新安装依赖前先退出所有 Electron 客户端，避免 Windows 锁定 `.node` 文件。
 - 需要在本地模拟生产客户端时使用 `pnpm --filter @ai-ssh/desktop prod:desktop`；它会构建并直接启动应用，但不会生成安装包。
 
 ### 提交前验证
@@ -54,13 +54,17 @@ pnpm dev:desktop
 ```bash
 pnpm --filter @ai-ssh/server test
 pnpm --filter @ai-ssh/desktop test
+pnpm --filter @ai-ssh/database test
 pnpm --filter @ai-ssh/server type-check
 pnpm --filter @ai-ssh/desktop type-check
 pnpm --filter @ai-ssh/database type-check
 pnpm --filter @ai-ssh/shared type-check
+pnpm lint
 ```
 
-不要为了验证客户端在本地执行根 `pnpm build`，因为它会进入桌面安装包构建流程。客户端安装包统一交给 GitHub Actions。
+TypeScript 采用官方双版本并行方案：`@typescript/native` 提供 TypeScript 7 的 `tsc`；`typescript` 别名指向 `@typescript/typescript6`，仅为 `vue-tsc` 与 ESLint 提供编译器 API。升级时同时保留原生 CLI 与 Vue 模板类型检查，不要直接删除兼容层。
+
+不要为了验证客户端在本地执行根 `pnpm build`，该命令仅构建共享包、数据库包和服务端。客户端代码可用 `pnpm --filter @ai-ssh/desktop exec vite build` 验证；`pnpm build:desktop` 和 workspace 的 `build:*` 打包命令统一交给 GitHub Actions。
 
 ## 客户端发布
 

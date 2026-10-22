@@ -215,10 +215,9 @@ import AIChatOpenCodeStyle from '@/components/chat/AIChatOpenCodeStyle.vue'
 import { useTerminalAutocomplete } from '@/composables/useTerminalAutocomplete'
 import { registerModelSelectionSyncListeners } from '@/utils/model-sync-events'
 import { shortcutCommandService, type ShortcutCommand } from '@/services/shortcut-command.service'
-import { $alert, $confirm } from '@/composables/useDialog'
-import { docStorageService } from '@/services/doc-storage.service'
+import { $alert } from '@/composables/useDialog'
+
 import type { Suggestion } from '@/types/autocomplete'
-import type { AIProvider, AIModel } from '@/types/ai-providers'
 
 // Props
 const props = defineProps<{
@@ -615,7 +614,9 @@ const setRemoteEditStatus = (
 
 const normalizeTerminalSelection = (selection: string) => {
   return selection
+    // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
     .replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '')
+    // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
     .replace(/\x1B\][^\x07]*\x07/g, '')
     .replace(/\r/g, '')
     .trim()
@@ -686,10 +687,15 @@ const getCleanedCurrentDirectory = async () => {
   let currentDir = result.output?.trim() || ''
 
   currentDir = currentDir
+    // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
     .replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '')
+    // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
     .replace(/\x1B\][^\x07]*\x07/g, '')
+    // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
     .replace(/\x1B[=>]/g, '')
+    // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
     .replace(/\x1B\[[?!][0-9;]*[a-zA-Z]/g, '')
+    // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
     .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '')
 
   const lines: string[] = currentDir
@@ -732,6 +738,7 @@ const buildLocalMirrorPath = async (remotePath: string) => {
   const baseDir = await getRemoteEditBaseDirectory()
   const remoteSegments = remotePath.split('/').filter(Boolean)
   const safeSegments = remoteSegments.map(
+    // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
     segment => segment.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim() || '_'
   )
   const folderSegments = safeSegments.slice(0, -1)
@@ -1234,12 +1241,6 @@ const handleOpenInFolder = async () => {
 }
 
 // 处理终端点击事件 - 确保焦点在终端上
-const handleTerminalClick = () => {
-  // 点击终端区域时,将焦点设置到终端
-  nextTick(() => {
-    terminal.value?.focus()
-  })
-}
 
 /**
  * 处理自动补全选择
@@ -1334,7 +1335,6 @@ const loadAIModelConfiguration = async () => {
     return
   }
 
-
   currentProvider.value = resolved.provider as any
   currentModel.value = resolved.model as any
 }
@@ -1345,9 +1345,6 @@ const handleModelChanged = () => {
 }
 
 // 监听设置更新事件
-const handleSettingsUpdated = () => {
-  loadAIModelConfiguration()
-}
 
 // 生命周期
 onMounted(async () => {
@@ -1443,7 +1440,7 @@ onBeforeUnmount(() => {
       // 再清理 terminal
       terminal.value.dispose()
       terminal.value = null
-    } catch (err) {
+    } catch {
       // 静默处理 dispose 错误，避免控制台警告
       // 这是 xterm.js addon 生命周期的已知问题
     }
@@ -1826,7 +1823,5 @@ onBeforeUnmount(() => {
   height: 100% !important;
 }
 
-.terminal-container :deep(.xterm-viewport) {
-  overflow-y: auto !important;
-}
+/* xterm 6 manages viewport scrolling through its own scrollable element. */
 </style>

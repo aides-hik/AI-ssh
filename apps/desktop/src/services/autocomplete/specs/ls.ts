@@ -16,11 +16,11 @@ export const lsSpec: CompletionSpec = {
       // 动态生成：根据用户输入的路径提供补全
       custom: async (context) => {
         const userInput = context.currentToken || ''
-        
+
         // 解析路径
-        let searchDir = ''
+        let searchDir: string
         let prefix = ''
-        
+
         if (userInput) {
           if (userInput.endsWith('/')) {
             searchDir = userInput
@@ -39,34 +39,37 @@ export const lsSpec: CompletionSpec = {
           searchDir = context.currentDirectory || '.'
           prefix = ''
         }
-        
+
         // 执行 ls -AF (显示所有文件,带类型标识)
         const lsResult = await window.electronAPI.ssh.executeSilent(
           context.connectionId,
           `cd "${searchDir}" 2>/dev/null && ls -AF 2>/dev/null`
         )
-        
+
         if (!lsResult.success || !lsResult.output) {
           return []
         }
-        
+
         // 清理输出
-        let cleaned = lsResult.output
+        const cleaned = lsResult.output
+          // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
           .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+          // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
           .replace(/\x1b\][^\x07]*\x07/g, '')
           .replace(/\r/g, '')
+          // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
           .replace(/\x1b\[\?[0-9]+[hl]/g, '')
-        
+
         const items = cleaned
           .split('\n')
           .map(i => i.trim())
           .filter(i => i.length > 0 && !i.includes('#') && !i.includes('@'))
-        
+
         return items.map(item => {
           const isDir = item.endsWith('/')
           const isExec = item.endsWith('*')
           const name = item.replace(/[/*@=|]$/, '') // 移除类型标识
-          
+
           return {
             name: prefix + name,
             icon: isDir ? '📁' : (isExec ? '⚙️' : '📄'),

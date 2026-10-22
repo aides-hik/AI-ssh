@@ -680,15 +680,6 @@ const currentUploadingTask = computed(() => {
   return uploadTasks.value.find(t => t.status === 'uploading')
 })
 
-const overallProgress = computed(() => {
-  if (downloadTasks.value.length === 0) return 0
-  const total = downloadTasks.value.length
-  const completed = downloadTasks.value.filter(t => t.status === 'completed').length
-  const downloading = downloadTasks.value.filter(t => t.status === 'downloading')
-  const downloadingProgress = downloading.reduce((sum, t) => sum + t.progress, 0)
-  return Math.round((completed * 100 + downloadingProgress) / total)
-})
-
 // 排序后的下载任务列表（正在下载 > 待下载 > 已完成）
 const sortedDownloadTasks = computed(() => {
   const statusPriority: Record<string, number> = {
@@ -830,14 +821,14 @@ const handleFileClick = (file: FileItem) => {
   }
 }
 
-const handleFileDoubleClick = (file: FileItem) => {
+const handleFileDoubleClick = (_file: FileItem) => {
   // 双击不做额外操作，避免与单击冲突
   return
 }
 
 const navigateToDirectory = (dirName: string) => {
   const basePath = displayedPath.value
-  const previousPath = basePath
+
   if (basePath === '/') {
     currentPath.value = `/${dirName}`
   } else {
@@ -858,7 +849,6 @@ const navigateToPath = () => {
 const goBack = () => {
   if (displayedPath.value === '/') return
 
-  const previousPath = displayedPath.value
   const parts = displayedPath.value.split('/').filter(p => p)
   parts.pop()
   currentPath.value = parts.length > 0 ? '/' + parts.join('/') : '/'
@@ -869,7 +859,7 @@ const goBack = () => {
 }
 
 const goHome = () => {
-  const previousPath = currentPath.value
+
   currentPath.value = '/'
 
   syncCurrentPathToRoute()
@@ -1337,7 +1327,7 @@ const traverseEntry = async (
   } else if (entry.isDirectory) {
     directories.add(relativePath)
     const reader = (entry as FileSystemDirectoryEntry).createReader()
-    let entries: FileSystemEntry[] = []
+    let entries: FileSystemEntry[]
 
     do {
       entries = await new Promise<FileSystemEntry[]>((resolve, reject) => {
@@ -1347,29 +1337,6 @@ const traverseEntry = async (
         await traverseEntry(child, relativePath, files, directories, seenDroppedFiles)
       }
     } while (entries.length > 0)
-  }
-}
-
-const uploadDroppedFiles = async (payload: DroppedFilesPayload) => {
-  const remoteDirCache = new Set<string>([normalizeRemotePath(currentPath.value)])
-
-  const sortedDirectories = Array.from(payload.directories).sort(
-    (a, b) => a.split('/').length - b.split('/').length
-  )
-
-  for (const dir of sortedDirectories) {
-    const remoteDir = joinRemotePath(currentPath.value, dir)
-    await ensureRemoteDirectoryExists(remoteDir, remoteDirCache)
-  }
-
-  const sortedFiles = [...payload.files].sort((a, b) =>
-    a.relativePath.localeCompare(b.relativePath)
-  )
-
-  for (const file of sortedFiles) {
-    const remotePath = joinRemotePath(currentPath.value, file.relativePath)
-    await ensureParentDirectories(remotePath, remoteDirCache)
-    await window.electronAPI!.ssh.uploadFile(currentConnectionId.value, file.localPath, remotePath)
   }
 }
 

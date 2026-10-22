@@ -6,6 +6,7 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+  workflow_call:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -14,27 +15,22 @@ concurrency:
 jobs:
   test:
     name: 🧪 Test & Lint
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: ⬇️ Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: 📦 Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 8.12.0
+        uses: pnpm/action-setup@v6.1.0
 
       - name: ⚡ Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7.1.0
         with:
-          node-version: '20'
+          node-version-file: '.node-version'
           cache: 'pnpm'
 
       - name: 📥 Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: 🔗 Link workspace dependencies
-        run: pnpm install
 
       - name: 🏗️ Build shared packages
         run: pnpm build:shared
@@ -42,14 +38,47 @@ jobs:
       - name: 🏗️ Build database
         run: pnpm build:database
 
-      # - name: 🔍 Type check  
-      #   run: pnpm type-check
+      - name: 🔍 Type check all workspaces
+        run: pnpm type-check
 
-      # - name: 🧹 Lint
-      #   run: pnpm lint
+      - name: 🧪 Server tests
+        run: pnpm --filter @ai-ssh/server test
+
+      - name: 🧪 Desktop tests
+        run: pnpm --filter @ai-ssh/desktop test
+
+      - name: 🧪 Database tests
+        run: pnpm --filter @ai-ssh/database test
+
+      - name: 🧹 Lint
+        run: pnpm lint
 
       - name: 🏗️ Build server
         run: pnpm build:server
+
+      - name: 📦 Build and validate server bundle
+        run: |
+          pnpm --filter @ai-ssh/server build:bundle
+          node --check packages/server/dist-bundle/index.js
+
+      - name: 🏗️ Build desktop renderer and main process
+        run: pnpm --filter @ai-ssh/desktop exec vite build
+
+      - name: 🪟 Verify Windows desktop, SSH and AI flows
+        run: pnpm --filter @ai-ssh/desktop test:windows
+
+      - name: 📤 Upload Windows validation evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: windows-validation-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            tmp/windows-validation/*.json
+            tmp/windows-validation/*/*.json
+            tmp/windows-validation/*/*.log
+            tmp/windows-validation/*/*.png
+          if-no-files-found: warn
+          retention-days: 7
 
   # 注意：完整的打包构建已移至 release.yml 工作流
   # 日常提交只进行代码测试和检查，不进行完整打包

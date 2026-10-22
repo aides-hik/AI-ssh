@@ -262,14 +262,13 @@ class Application {
       }
     })
 
+    // IPC can produce events before the first paint (and ready-to-show).
+    // Register the renderer immediately so early SSH output is not dropped.
+    windowEvents.setMainWindow(this.mainWindow)
+
     // 窗口事件处理
     this.mainWindow.on('ready-to-show', () => {
       this.mainWindow?.show()
-
-      // 设置主窗口到事件发射器
-      if (this.mainWindow) {
-        windowEvents.setMainWindow(this.mainWindow)
-      }
 
       // 调试窗口默认不显示，使用F12控制
       // if (this.isDev) {

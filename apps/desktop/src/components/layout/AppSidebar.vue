@@ -111,7 +111,7 @@ import SSHTreeNode, { type SSHTreeNodeData } from '../ssh/SSHTreeNode.vue'
 import SSHConnectionDialog from '../ssh/SSHConnectionDialog.vue'
 import { sshService } from '../../services/ssh.service'
 import { settingsService } from '../../services/settings.service'
-import { $alert, $confirm } from '@/composables/useDialog'
+import { $alert } from '@/composables/useDialog'
 
 interface Props {
   activeView: string
@@ -132,7 +132,6 @@ const inputDialogCallback = ref<((value: string) => void) | null>(null)
 // 注入 openNewTab 方法
 const openNewTab =
   inject<(id: string, name: string, icon: string, path: string) => void>('openNewTab')
-const closeTab = inject<(tabId: string) => void>('closeTab')
 
 // ============= SSH 相关（✅ 直接使用 sshService） =============
 const sshTreeData = ref<any[]>([])
@@ -555,27 +554,8 @@ const handleOpenFileManager = async (connection: SSHTreeNodeData) => {
 }
 
 // 导航到指定视图
-const navigateToView = (viewId: string) => {
-  // 触发自定义事件通知父组件切换视图
-  const event = new CustomEvent('switch-view', {
-    detail: { viewId }
-  })
-  window.dispatchEvent(event)
-}
 
 // 输入对话框方法
-const showInputPrompt = (title: string, placeholder: string, callback: (value: string) => void) => {
-  inputDialogTitle.value = title
-  inputDialogPlaceholder.value = placeholder
-  inputDialogValue.value = ''
-  inputDialogCallback.value = callback
-  showInputDialog.value = true
-
-  // 自动聚焦输入框
-  nextTick(() => {
-    inputDialogInput.value?.focus()
-  })
-}
 
 const closeInputDialog = () => {
   showInputDialog.value = false
@@ -594,14 +574,6 @@ const confirmInputDialog = () => {
 }
 
 // 处理来自 ChatTreeNode 的输入请求
-const handleRequestInput = (data: {
-  type: string
-  title: string
-  placeholder: string
-  callback: (name: string) => void
-}) => {
-  showInputPrompt(data.title, data.placeholder, data.callback)
-}
 
 // ============= 文档管理方法 (已移除) =============
 // 文档管理功能已移除

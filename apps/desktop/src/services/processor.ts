@@ -14,7 +14,6 @@ export type StreamEvent =
 import type { ModelMessage } from './messages/convert'
 import type { ChatMessage, StreamChunk } from './llm'
 import { createLLMSession } from './llm'
-import { resetToModelMessagesCache } from './messages/convert'
 import type { AIProvider, AIModel } from '@/types/ai-providers'
 
 // 流式处理器配置
@@ -84,7 +83,6 @@ export class SessionProcessor {
   }
 
   async process(): Promise<ProcessorResult> {
-    resetToModelMessagesCache()
     this.state.stepCount = 0
 
     while (this.state.stepCount < MAX_STEPS && !this.state.aborted) {

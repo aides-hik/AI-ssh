@@ -514,10 +514,6 @@ const handleModelChanged = () => {
   loadAIModelConfiguration()
 }
 
-const handleSettingsUpdated = () => {
-  loadAIModelConfiguration()
-}
-
 // 生命周期
 onMounted(async () => {
   await loadAIModelConfiguration()

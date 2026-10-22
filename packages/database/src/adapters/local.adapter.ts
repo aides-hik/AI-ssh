@@ -333,16 +333,25 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
   }
 
   async findUnique(model: string, options: any): Promise<any> {
-    const tableName = this.getTableName(model)
-    const id = options.where.id
-    const stmt = this.db.prepare(`SELECT * FROM ${tableName} WHERE id = ?`)
-    const row = stmt.get(id) as any
-    return row ? deserializeStorageRow(model, row) : null
+    const where = options?.where
+    if (
+      !where ||
+      Object.keys(where).length === 0 ||
+      Object.values(where).some(value => value === undefined)
+    ) {
+      throw new Error('A defined unique selector is required')
+    }
+
+    // Settings are unique by userId, while SSH records normally use id.
+    const rows = await this.findMany(model, { where, take: 1 })
+    return rows[0] ?? null
   }
 
   async update(model: string, options: any): Promise<any> {
     const tableName = this.getTableName(model)
-    const id = options.where.id
+    const existing = await this.findUnique(model, { where: options?.where })
+    if (!existing) return null
+    const id = existing.id
     const data = { ...options.data, updatedAt: new Date().toISOString() }
 
     // 引用列名以避免 SQL 关键字冲突（如 order）
@@ -357,12 +366,10 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
 
   async delete(model: string, options: any): Promise<any> {
     const tableName = this.getTableName(model)
-    const id = options.where.id
-
-    const item = await this.findUnique(model, { where: { id } })
+    const item = await this.findUnique(model, { where: options?.where })
     if (item) {
       const stmt = this.db.prepare(`DELETE FROM ${tableName} WHERE id = ?`)
-      stmt.run(id)
+      stmt.run(item.id)
     }
     return item
   }

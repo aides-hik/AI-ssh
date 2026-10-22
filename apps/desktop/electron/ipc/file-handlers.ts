@@ -1,6 +1,5 @@
 import { ipcMain, dialog, shell } from 'electron'
 import fs from 'fs/promises'
-import fsSync from 'fs'
 import path from 'path'
 import { windowEvents } from '../shared/events'
 import * as tar from 'tar'

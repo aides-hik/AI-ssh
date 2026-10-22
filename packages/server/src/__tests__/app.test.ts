@@ -123,6 +123,29 @@ describe('App', () => {
     expect(response.statusCode).toBe(200)
   })
 
+  it('validates authentication payloads with the current Fastify schema compiler', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: { email: 'user@example.test' }
+    })
+
+    expect(response.statusCode).toBe(400)
+    expect(response.json().message).toBe('Validation error')
+  })
+
+  it('verifies tokens issued by the current JWT plugin', async () => {
+    const token = app.jwt.sign({ userId: 'user_1', username: 'tester', role: 'USER' })
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/auth/verify',
+      headers: { authorization: `Bearer ${token}` }
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json().data.user).toEqual({ id: 'user_1', username: 'tester', role: 'USER' })
+  })
+
   it('does not expose removed system routes', async () => {
     const response = await app.inject({
       method: 'GET',

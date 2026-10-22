@@ -5,7 +5,7 @@
  */
 
 import type { Skill } from '@ai-ssh/shared'
-import type { ToolDefinition } from '@ai-ssh/shared'
+
 import { SSH_TOOLS } from '@ai-ssh/shared'
 import { SSH_SYSTEM_PROMPT } from '../../tools/prompt-templates'
 import {

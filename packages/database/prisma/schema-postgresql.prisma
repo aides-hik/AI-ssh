@@ -2,14 +2,13 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider      = "prisma-client-js"
-  output        = "../src/generated/client"
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
+  provider     = "prisma-client"
+  output       = "../src/generated/client"
+  moduleFormat = "cjs"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ==================== 用户相关表 ====================

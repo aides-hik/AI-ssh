@@ -278,11 +278,7 @@ export const UpdateServerEnvDocTool = Tool.define('update_server_env_doc', async
       if (oldString) {
         await createServerEnvBackup(docId, existingContent, 'exact-replace')
 
-        try {
-          await docStorageService.editServerEnvDoc(docId, oldString, newString)
-        } catch (error) {
-          throw error
-        }
+        await docStorageService.editServerEnvDoc(docId, oldString, newString)
       } else if (content) {
         if (existingContent && !forceReplace) {
           if (!looksLikeFullServerEnvDoc(content)) {

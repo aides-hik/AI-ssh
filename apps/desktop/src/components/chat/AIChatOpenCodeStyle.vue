@@ -1,19 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { marked } from 'marked'
-import hljs from 'highlight.js'
-import stripAnsi from 'strip-ansi'
+
 import { settingsService } from '@/services/settings.service'
 import { sshService, type SSHConnection } from '@/services/ssh.service'
 import { docStorageService } from '@/services/doc-storage.service'
 import { SSH_TOOLS } from '@/services/tools/ssh-tools'
-import {
-  Message as V2Message,
-  createUserMessage,
-  createAssistantMessage,
-  type ToolPart,
-  type TextPart
-} from '@/services/messages/message'
+import { Message as V2Message, createAssistantMessage, type ToolPart, type TextPart } from '@/services/messages/message'
 import {
   toModelMessages,
   fromUserMessage,
@@ -22,7 +15,7 @@ import {
   compactMessages,
   updateToolResult
 } from '@/services/messages/convert'
-import { SessionProcessor, type StreamEvent } from '@/services/processor'
+import { SessionProcessor } from '@/services/processor'
 import type { AIProvider, AIModel } from '@/types/ai-providers'
 
 const props = defineProps<{
@@ -623,7 +616,7 @@ async function sendMessageWithTools(content: string) {
               setStatus('thinking', '正在分析你的请求')
               break
 
-            case 'text-delta':
+            case 'text-delta': {
               if (!firstResponseRecorded) {
                 performanceMetrics.value.firstResponseMs = Date.now() - requestStartedAt
                 firstResponseRecorded = true
@@ -661,8 +654,9 @@ async function sendMessageWithTools(content: string) {
               updateStatus()
               scrollToBottom()
               break
+            }
 
-            case 'tool-call':
+            case 'tool-call': {
               if (!firstResponseRecorded) {
                 performanceMetrics.value.firstResponseMs = Date.now() - requestStartedAt
                 firstResponseRecorded = true
@@ -719,8 +713,9 @@ async function sendMessageWithTools(content: string) {
               messages.value = [...messages.value]
               scrollToBottom()
               break
+            }
 
-            case 'tool-result':
+            case 'tool-result': {
               if (!currentMsg) break
               const completed = updateToolResult(currentMsg, event.toolCallId, {
                 output: event.output.output
@@ -734,8 +729,9 @@ async function sendMessageWithTools(content: string) {
               messages.value = [...messages.value]
               scrollToBottom()
               break
+            }
 
-            case 'tool-error':
+            case 'tool-error': {
               if (!currentMsg) break
               const toolWasAborted =
                 stopRequested.value ||
@@ -759,6 +755,7 @@ async function sendMessageWithTools(content: string) {
               }
               messages.value = [...messages.value]
               break
+            }
 
             case 'done':
               if (currentMsg) {
@@ -970,7 +967,6 @@ async function refreshSessionContext(force = false) {
   if (cacheLoading.value) return
 
   const connectionId = props.connectionId
-  const serverEnvDocId = props.serverEnvDocId || connectionId || ''
 
   if (!connectionId) {
     cachedConnection.value = null
@@ -1324,11 +1320,11 @@ function getFileInfo(path: string) {
 function getToolInfo(
   toolName: string,
   input: Record<string, any> = {},
-  metadata: Record<string, any> = {}
+  _metadata: Record<string, any> = {}
 ) {
   switch (toolName) {
     case 'execute_ssh_command':
-    case 'bash':
+    case 'bash': {
       const cmd = input.command || ''
       const preview = cmd.length > 50 ? cmd.substring(0, 50) + '...' : cmd
       return {
@@ -1337,8 +1333,9 @@ function getToolInfo(
         subtitle: cmd ? `$ ${preview}` : 'Running command',
         args: []
       }
+    }
     case 'read_file':
-    case 'read':
+    case 'read': {
       const readFile = getFileInfo(input.path || input.filePath || '')
       return {
         icon: 'file-text',
@@ -1347,10 +1344,11 @@ function getToolInfo(
         pathInfo: readFile,
         args: []
       }
+    }
     case 'list_files':
     case 'list':
       return { icon: 'folder', title: 'List', subtitle: input.path || '/', args: [] }
-    case 'webfetch':
+    case 'webfetch': {
       const url = input.url || ''
       const urlPreview = url.length > 50 ? url.substring(0, 50) + '...' : url
       return {
@@ -1359,7 +1357,8 @@ function getToolInfo(
         subtitle: urlPreview || 'Fetching URL',
         args: []
       }
-    case 'edit':
+    }
+    case 'edit': {
       const editFile = getFileInfo(input.path || input.filePath || '')
       return {
         icon: 'code',
@@ -1368,8 +1367,9 @@ function getToolInfo(
         pathInfo: editFile,
         args: input.old_string ? [`Replace "${input.old_string?.substring(0, 30)}..."`] : []
       }
+    }
     case 'write':
-    case 'attempt_completion':
+    case 'attempt_completion': {
       const writeFile = getFileInfo(input.path || input.filePath || '')
       return {
         icon: 'file-plus',
@@ -1378,6 +1378,7 @@ function getToolInfo(
         pathInfo: writeFile,
         args: []
       }
+    }
     case 'todowrite':
       return { icon: 'checklist', title: 'To-dos', subtitle: '', args: [] }
     case 'todoread':
@@ -1395,13 +1396,6 @@ function getToolInfo(
         title: 'Grep',
         subtitle: input.path || '/',
         args: input.pattern ? [`pattern: ${input.pattern}`] : []
-      }
-    case 'webfetch':
-      return {
-        icon: 'globe',
-        title: 'Webfetch',
-        subtitle: input.url || '',
-        args: input.format ? [`format: ${input.format}`] : []
       }
     case 'task':
       return {
@@ -1655,7 +1649,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
           <span v-else>Load more messages</span>
         </div>
 
-        <template v-for="(msg, index) in displayMessages" :key="msg.id">
+        <template v-for="msg in displayMessages" :key="msg.id">
           <div
             class="oc-turn"
             :class="{

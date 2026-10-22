@@ -4,7 +4,7 @@
     <transition name="modal">
       <div
         v-if="confirmModal.visible"
-        class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        class="modal-overlay fixed inset-0 bg-black/50 flex items-center justify-center z-50"
         @click.self="confirmModal.visible = false"
       >
         <div class="modal-content bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
@@ -13,13 +13,13 @@
               {{ confirmModal.title || '确认操作' }}
             </h3>
           </div>
-          
+
           <div class="modal-body mb-6">
             <p class="text-gray-600 dark:text-gray-300">
               {{ confirmModal.message }}
             </p>
           </div>
-          
+
           <div class="modal-footer flex justify-end gap-3">
             <button
               @click="handleConfirmCancel"
@@ -42,12 +42,12 @@
         </div>
       </div>
     </transition>
-    
+
     <!-- 信息对话框 -->
     <transition name="modal">
       <div
         v-if="alertModal.visible"
-        class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        class="modal-overlay fixed inset-0 bg-black/50 flex items-center justify-center z-50"
         @click.self="alertModal.visible = false"
       >
         <div class="modal-content bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
@@ -73,13 +73,13 @@
               {{ alertModal.title || '提示' }}
             </h3>
           </div>
-          
+
           <div class="modal-body mb-6">
             <p class="text-gray-600 dark:text-gray-300">
               {{ alertModal.message }}
             </p>
           </div>
-          
+
           <div class="modal-footer flex justify-end">
             <button
               @click="handleAlertOk"
@@ -91,12 +91,12 @@
         </div>
       </div>
     </transition>
-    
+
     <!-- 输入对话框 -->
     <transition name="modal">
       <div
         v-if="promptModal.visible"
-        class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        class="modal-overlay fixed inset-0 bg-black/50 flex items-center justify-center z-50"
         @click.self="promptModal.visible = false"
       >
         <div class="modal-content bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
@@ -105,7 +105,7 @@
               {{ promptModal.title || '输入信息' }}
             </h3>
           </div>
-          
+
           <div class="modal-body mb-6">
             <p class="text-gray-600 dark:text-gray-300 mb-3">
               {{ promptModal.message }}
@@ -120,7 +120,7 @@
               ref="promptInput"
             />
           </div>
-          
+
           <div class="modal-footer flex justify-end gap-3">
             <button
               @click="handlePromptCancel"
@@ -318,7 +318,7 @@ const showPrompt = (options: {
     onOk: options.onOk || null,
     onCancel: options.onCancel || null
   })
-  
+
   // 聚焦输入框
   nextTick(() => {
     promptInput.value?.focus()

@@ -62,7 +62,6 @@ ipcMain.handle('settings:save', async (_, userId: string, settings: any) => {
   try {
     console.log('[Settings IPC] 📝 开始保存设置')
     console.log('[Settings IPC] userId:', userId)
-    console.log('[Settings IPC] settings:', JSON.stringify(settings, null, 2))
     const storage = getStorageManager()
     
     if (!userId) {
@@ -79,21 +78,21 @@ ipcMain.handle('settings:save', async (_, userId: string, settings: any) => {
 
     if (existing) {
       console.log('[Settings IPC] 📝 更新现有设置...')
-      const result = await storage.update('UserSettings', {
+      await storage.update('UserSettings', {
         where: { userId },
         data: { 
           data: settings,
           updatedAt: new Date()
         }
       })
-      console.log('[Settings IPC] 更新结果:', result)
+      console.log('[Settings IPC] 设置更新成功')
     } else {
       console.log('[Settings IPC] 📝 创建新设置...')
-      const result = await storage.create('UserSettings', {
+      await storage.create('UserSettings', {
         userId,
         data: settings
       })
-      console.log('[Settings IPC] 创建结果:', result)
+      console.log('[Settings IPC] 设置创建成功')
     }
 
     console.log('[Settings IPC] ✅ 设置保存成功')

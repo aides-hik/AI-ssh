@@ -172,13 +172,11 @@ export interface TranslationKeys {
 }
 
 // 从翻译 key 类型提取点标记路径
-export type TranslationPath<T = TranslationKeys> = {
-  [K in keyof T]: T[K] extends string
-    ? K
-    : T[K] extends object
-    ? `${K & string}.${TranslationPath<T[K]> & string}`
-    : never
-}[keyof T]
+export type TranslationPath<T = TranslationKeys, Prefix extends string = ''> = T extends string
+  ? Prefix
+  : {
+      [K in keyof T & string]: TranslationPath<T[K], Prefix extends '' ? K : `${Prefix}.${K}`>
+    }[keyof T & string]
 
 // 翻译函数类型
 export type TranslateFunction = (key: TranslationPath, params?: Record<string, any>) => string

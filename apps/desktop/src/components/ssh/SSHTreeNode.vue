@@ -434,8 +434,7 @@ const startEdit = () => {
 // 确认编辑
 const handleEditConfirm = () => {
   if (editName.value.trim()) {
-    props.node.name = editName.value.trim()
-    emit('update', props.node)
+    emit('update', { ...props.node, name: editName.value.trim() })
   }
   isEditing.value = false
 }

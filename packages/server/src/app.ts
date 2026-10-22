@@ -1,4 +1,4 @@
-import Fastify, { FastifyInstance } from 'fastify'
+import Fastify, { FastifyInstance, type FastifyError } from 'fastify'
 import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
 import swagger from '@fastify/swagger'
@@ -133,6 +133,14 @@ export async function buildApp(): Promise<FastifyInstance> {
                 }
               }
             }
+          },
+          503: {
+            type: 'object',
+            properties: {
+              status: { type: 'string' },
+              timestamp: { type: 'string' },
+              error: { type: 'string' }
+            }
           }
         }
       }
@@ -171,10 +179,6 @@ export async function buildApp(): Promise<FastifyInstance> {
   // 注册认证装饰器
   app.decorate('authenticate', authenticate)
 
-  // 注册 API 路由
-  await app.register(authRoutes, { prefix: '/api/v1/auth' })
-  await app.register(officialAiRoutes, { prefix: '/api/v1/ai/official' })
-
   // 404 处理
   app.setNotFoundHandler(
     typeof app.rateLimit === 'function'
@@ -194,7 +198,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   )
 
   // 全局错误处理
-  app.setErrorHandler(async (error, request, reply) => {
+  app.setErrorHandler<FastifyError>(async (error, request, reply) => {
     const statusCode = error.statusCode || 500
 
     logger.error(
@@ -203,8 +207,6 @@ export async function buildApp(): Promise<FastifyInstance> {
         stack: error.stack,
         url: request.url,
         method: request.method,
-        headers: request.headers,
-        body: request.body,
         statusCode
       },
       'Request error:'
@@ -261,6 +263,11 @@ export async function buildApp(): Promise<FastifyInstance> {
       code: error.code
     })
   })
+
+  // Fastify 5 captures the error handler when a plugin is registered.
+  // Register routes after the shared handler so validation responses stay consistent.
+  await app.register(authRoutes, { prefix: '/api/v1/auth' })
+  await app.register(officialAiRoutes, { prefix: '/api/v1/ai/official' })
 
   // 优雅关闭钩子
   app.addHook('onClose', async () => {

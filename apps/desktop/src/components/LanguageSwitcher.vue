@@ -14,17 +14,15 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
 import { setLocale, getLocale } from '../locales'
 import type { Locale } from '@ai-ssh/shared'
 
-const { locale } = useI18n()
 const currentLocale = ref<Locale>(getLocale())
 
 // 监听语言切换
 function handleChange() {
   setLocale(currentLocale.value)
-  
+
   // 显示切换成功提示
 
 }

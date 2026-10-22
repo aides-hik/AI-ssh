@@ -107,7 +107,7 @@ class DocStorageService {
     await fs.writeFile(docPath, content, 'utf-8')
 
     // 获取新的文件状态
-    const newStats = await fs.stat(docPath)
+    await fs.stat(docPath)
 
     return {
       id: path.basename(docPath, '.md'),

@@ -7,6 +7,25 @@
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- 将直接依赖和 CI 工具升级到 2026-10-22 查询到的最新稳定版本，统一使用 Node.js 26.12.1 和 pnpm 12.15.0。
+- 升级 Electron 45、Vite 8、Tailwind CSS 4、Fastify 5、Prisma 7、TypeScript 7 和 ESLint 10，并完成对应配置与 API 迁移。Vue 类型检查和 ESLint 使用官方 TypeScript 6 编译器 API 兼容包。
+- SQLite 升级到 better-sqlite3 13，校验随包提供的 Node-API 绑定及目标架构，不再下载 Electron ABI 专用绑定。
+- Monaco 编辑器使用本地打包的 worker；CI 增加全 workspace 类型检查、测试、lint 与服务端及桌面构建验证。
+- 本地 Compose 依赖升级到 PostgreSQL 18 和 Redis 8，使用新数据卷保留旧数据；已有数据需手动迁移。
+
+### Fixed
+
+- 修复服务端 ESM bundle 中模块路径变量重复声明，以及 Pino worker 被错误复制后无法启动的问题。
+- 修复本地设置按用户保存后无法回读和更新的问题，并移除设置日志中的完整配置内容。
+- 修复 Windows 客户端首次绘制前 SSH 输出可能丢失的竞态；增加真实 Electron 的重启持久化、中文文件路径、剪贴板及本机 SSH/SFTP 和模型协议验收。
+- 修复手动构建的平台筛选，默认仅构建 Windows，并增加隔离的 Windows 安装、启动、重启及卸载验收。
+
+---
+
 ## [1.8.32] - 2026-09-30
 
 ### Fixed

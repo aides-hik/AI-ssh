@@ -15,10 +15,10 @@ class ThemeService {
    * 从 localStorage 加载保存的主题，或检测系统主题
    */
   init(): void {
-    
+
     // 尝试从 localStorage 加载保存的主题
     const savedTheme = this.loadTheme()
-    
+
     if (savedTheme) {
       this.applyTheme(savedTheme)
     } else {
@@ -36,12 +36,12 @@ class ThemeService {
    * @param theme 主题模式
    */
   applyTheme(theme: ThemeMode): void {
-    
+
     const root = document.documentElement
-    
+
     // 移除所有主题类
     root.classList.remove('dark', 'light', 'dark-modern', 'light-modern', 'auto')
-    
+
     // 处理 auto 模式
     if (theme === 'auto') {
       const systemTheme = this.detectSystemTheme()
@@ -52,15 +52,14 @@ class ThemeService {
       root.classList.add(theme)
       this.currentTheme = theme
     }
-    
+
     // 保存到 localStorage
     this.saveTheme(theme)
-    
+
     // 触发自定义事件，通知其他组件主题已更改
     window.dispatchEvent(new CustomEvent('theme-changed', { 
       detail: { theme: this.currentTheme } 
     }))
-    
 
   }
 
@@ -98,10 +97,10 @@ class ThemeService {
     }
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    
+
     // 使用 addEventListener 替代已废弃的 addListener
     mediaQuery.addEventListener('change', (e) => {
-      
+
       // 只有在 auto 模式下才自动切换
       const savedTheme = this.loadTheme()
       if (savedTheme === 'auto') {
@@ -120,8 +119,8 @@ class ThemeService {
       if (saved && this.isValidTheme(saved)) {
         return saved as ThemeMode
       }
-    } catch (error) {
-
+    } catch {
+      // Fall back to the system theme when storage cannot be read.
     }
     return null
   }
@@ -132,8 +131,8 @@ class ThemeService {
   private saveTheme(theme: ThemeMode): void {
     try {
       localStorage.setItem(THEME_STORAGE_KEY, theme)
-    } catch (error) {
-
+    } catch {
+      // Keep the in-memory theme even if persistent storage is unavailable.
     }
   }
 

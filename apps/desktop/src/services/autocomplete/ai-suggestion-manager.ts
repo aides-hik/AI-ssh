@@ -75,7 +75,7 @@ export class AISuggestionManager {
         this.currentProvider = null
         this.currentModel = null
       }
-    } catch (error) {
+    } catch {
       // 加载 AI 配置失败
       this.isEnabled = false
       this.currentProvider = null
@@ -220,8 +220,6 @@ grep "error" syslog | 搜索错误日志`
 
 请根据以上信息提供 1-3 个智能命令建议。`
 
-      const startTime = Date.now()
-
       const response = await chatCompletion(this.currentProvider, this.currentModel, {
         messages: [
           { role: 'system', content: systemPrompt },
@@ -232,13 +230,11 @@ grep "error" syslog | 搜索错误日志`
         stream: false
       })
 
-      const elapsed = Date.now() - startTime
-
       // 解析 AI 响应
       const suggestions = this.parseAIResponse(response.content)
 
       return suggestions
-    } catch (error: any) {
+    } catch {
       // AI 请求失败
       return []
     }

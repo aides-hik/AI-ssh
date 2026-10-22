@@ -190,7 +190,7 @@ export function OnEvent(event: string) {
   return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
     const originalMethod = descriptor.value
 
-    descriptor.value = function (...args: any[]) {
+    descriptor.value = function (..._args: any[]) {
       const eventBus = (this as any).eventBus || globalEventBus
       const boundMethod = originalMethod.bind(this)
 

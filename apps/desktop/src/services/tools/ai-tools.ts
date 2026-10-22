@@ -29,7 +29,7 @@ export function createReadFileTool(context: ToolContext) {
       path: z.string().describe('Absolute path to the file to read'),
       encoding: z.enum(['utf-8', 'base64']).optional().default('utf-8').describe('File encoding')
     }),
-    execute: async ({ path, encoding }: { path: string; encoding?: string }) => {
+    execute: async ({ path }: { path: string; encoding?: string }) => {
       const result = await readRemoteFile(context.connectionId, path)
       if (!result.success) {
         throw new Error(result.error || `Failed to read file: ${path}`)

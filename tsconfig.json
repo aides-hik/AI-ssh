@@ -19,16 +19,15 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "baseUrl": ".",
     "paths": {
       "@ai-ssh/shared/*": [
-        "packages/shared/src/*"
+        "./packages/shared/src/*"
       ],
       "@ai-ssh/database/*": [
-        "packages/database/src/*"
+        "./packages/database/src/*"
       ],
       "@ai-ssh/server/*": [
-        "packages/server/src/*"
+        "./packages/server/src/*"
       ]
     }
   },

@@ -2,12 +2,9 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
 import { createRouter, createWebHashHistory } from 'vue-router'
-import BootstrapVueNext from 'bootstrap-vue-next'
+import { createBootstrap } from 'bootstrap-vue-next/plugins/createBootstrap'
 
 // 样式导入
-import 'bootstrap/dist/css/bootstrap.css'
-import 'bootstrap-vue-next/dist/bootstrap-vue-next.css'
-import 'bootstrap-icons/font/bootstrap-icons.css'
 import './assets/styles/main.css'
 
 // 应用组件和路由
@@ -24,7 +21,9 @@ import i18n from './locales'
 const app = createApp(App)
 
 // 设置 Vue 错误处理器
-app.config.errorHandler = (err: any, instance: any, info: string) => {}
+app.config.errorHandler = (error, _instance, info) => {
+  console.error(`[Vue] ${info}`, error)
+}
 
 // 创建 Pinia store
 const pinia = createPinia()
@@ -40,7 +39,7 @@ const router = createRouter({
 app.use(pinia)
 app.use(router)
 app.use(i18n) // 添加国际化支持
-app.use(BootstrapVueNext)
+app.use(createBootstrap())
 app.use(DialogPlugin)
 
 // 挂载应用

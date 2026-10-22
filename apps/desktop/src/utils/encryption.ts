@@ -38,17 +38,17 @@ function base64Decode(encoded: string): string {
  */
 export function encryptApiKey(apiKey: string): string {
   if (!apiKey) return ''
-  
+
   try {
     // 1. XOR 加密
     const xorEncrypted = xorEncrypt(apiKey, ENCRYPTION_KEY)
-    
+
     // 2. Base64 编码
     const base64Encrypted = base64Encode(xorEncrypted)
-    
+
     // 3. 添加版本标识
     return `v1:${base64Encrypted}`
-  } catch (error) {
+  } catch {
 
     return apiKey // 失败时返回原文
   }
@@ -59,25 +59,25 @@ export function encryptApiKey(apiKey: string): string {
  */
 export function decryptApiKey(encrypted: string): string {
   if (!encrypted) return ''
-  
+
   try {
     // 检查版本标识
     if (!encrypted.startsWith('v1:')) {
       // 如果没有版本标识，可能是旧格式或明文
       return encrypted
     }
-    
+
     // 1. 移除版本标识
     const base64Encrypted = encrypted.substring(3)
-    
+
     // 2. Base64 解码
     const xorEncrypted = base64Decode(base64Encrypted)
-    
+
     // 3. XOR 解密
     const decrypted = xorEncrypt(xorEncrypted, ENCRYPTION_KEY)
-    
+
     return decrypted
-  } catch (error) {
+  } catch {
 
     return encrypted // 失败时返回原文
   }
@@ -88,16 +88,16 @@ export function decryptApiKey(encrypted: string): string {
  */
 export function maskApiKey(apiKey: string): string {
   if (!apiKey) return ''
-  
+
   if (apiKey.length <= 8) {
     return '•'.repeat(apiKey.length)
   }
-  
+
   // 显示前4个和后4个字符，中间用 • 代替
   const start = apiKey.substring(0, 4)
   const end = apiKey.substring(apiKey.length - 4)
   const middle = '•'.repeat(Math.min(20, apiKey.length - 8))
-  
+
   return `${start}${middle}${end}`
 }
 
@@ -108,7 +108,7 @@ export function validateApiKey(provider: string, apiKey: string): { valid: boole
   if (!apiKey || apiKey.trim() === '') {
     return { valid: false, message: 'API Key 不能为空' }
   }
-  
+
   // 各服务商的 API Key 格式验证
   const patterns: Record<string, { pattern: RegExp; message: string }> = {
     openai: {
@@ -124,12 +124,12 @@ export function validateApiKey(provider: string, apiKey: string): { valid: boole
       message: 'Google API Key 格式无效'
     }
   }
-  
+
   const validation = patterns[provider]
   if (validation && !validation.pattern.test(apiKey)) {
     return { valid: false, message: validation.message }
   }
-  
+
   return { valid: true }
 }
 

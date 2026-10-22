@@ -35,16 +35,16 @@ export const gitSpec: CompletionSpec = {
               context.connectionId,
               'git status --short 2>/dev/null | awk \'{print $2}\''
             )
-            
+
             if (!result.success || !result.output) {
               return []
             }
-            
+
             const files = result.output
               .split('\n')
               .map(f => f.trim())
               .filter(f => f.length > 0)
-            
+
             return files.map(file => ({
               name: file,
               description: '修改的文件',
@@ -107,7 +107,7 @@ export const gitSpec: CompletionSpec = {
           description: '分支名称',
           isOptional: true,
           generators: {
-            script: 'git branch | sed "s/\*//" | awk \'{print $1}\'',
+            script: 'git branch | sed "s/*//" | awk \'{print $1}\'',
             postProcess: (output) => {
               const branches = output.split('\n').filter(b => b.trim())
               return branches.map(branch => ({
@@ -155,7 +155,7 @@ export const gitSpec: CompletionSpec = {
         name: 'branch',
         description: '分支名称或文件路径',
         generators: {
-          script: 'git branch -a | sed "s/\*//" | sed "s/remotes\\/origin\\///" | awk \'{print $1}\' | sort -u',
+          script: 'git branch -a | sed "s/*//" | sed "s/remotes\\/origin\\///" | awk \'{print $1}\' | sort -u',
           postProcess: (output) => {
             const branches = output.split('\n').filter(b => b.trim())
             return branches.map(branch => ({

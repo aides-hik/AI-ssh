@@ -95,7 +95,7 @@ test('execute cancellation is registered before ssh2 returns its stream', async 
 test('remote env doc resolves HOME and uses temp-file rename through dedicated IPC', async () => {
   const source = await readFile(sshHandlersPath, 'utf8')
 
-  assert.match(source, /printf '%s' \"\$HOME\"/)
+  assert.match(source, /printf '%s' "\$HOME"/)
   assert.match(source, /\$\{fullPath\}\.tmp-/)
   assert.match(source, /_extensions\?\.\['posix-rename@openssh\.com'\] === '1'/)
   assert.match(source, /ext_openssh_rename\.bind\(sftp\)/)
@@ -106,7 +106,7 @@ test('remote env doc resolves HOME and uses temp-file rename through dedicated I
 test('file listing carries opaque raw path identity into recursive deletion', async () => {
   const source = await readFile(sshHandlersPath, 'utf8')
 
-  assert.match(source, /identity=\$\(printf %s \"\$p\" \| base64/)
+  assert.match(source, /identity=\$\(printf %s "\$p" \| base64/)
   assert.match(source, /name: this\.displayNameFromIdentity\(identity\)/)
   assert.match(source, /base64 -d \| xargs -0 rm \$\{removeFlag\} --/)
   assert.doesNotMatch(source, /const itemPath = `\$\{remotePath\}\/\$\{item\.filename\}`/)

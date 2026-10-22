@@ -308,7 +308,6 @@ class SSHManager {
       const timeout = 300000 // 5分钟超时，支持长时间运行的命令（apt, yum, 下载等）
       let settled = false
       let execStream: any = null
-      let commandSentTime = Date.now()
       let wasAborted = false
 
       // 超时处理
@@ -443,14 +442,15 @@ class SSHManager {
           if (!pendingExec || pendingExec.aborted) {
             try {
               stream.close()
-            } catch {}
+            } catch {
+              // The stream may already have closed while cancellation was pending.
+            }
             settleReject(this.createCommandAbortError())
             return
           }
           pendingExec.stream = stream
         }
 
-        commandSentTime = Date.now()
 
         stream.on('data', onData)
         stream.stderr.on('data', onStderr)
@@ -582,14 +582,17 @@ class SSHManager {
           output += data.toString('utf8')
         })
 
-        stream.on('close', (code: number) => {
+        stream.on('close', () => {
           clearTimeout(timeout)
 
           // 清理输出 - 移除 ANSI 转义序列和多余空白
-          let cleaned = output
+          const cleaned = output
+            // eslint-disable-next-line no-control-regex -- Strip terminal ANSI escape sequences.
             .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '') // ANSI 颜色代码
+            // eslint-disable-next-line no-control-regex -- OSC sequences end with the BEL control character.
             .replace(/\x1b\][^\x07]*\x07/g, '') // OSC 序列
             .replace(/\r/g, '') // 回车符
+            // eslint-disable-next-line no-control-regex -- Strip terminal private mode escape sequences.
             .replace(/\x1b\[\?[0-9]+[hl]/g, '') // 私有模式设置
             .trim()
 
@@ -969,7 +972,6 @@ class SSHManager {
           return
         }
 
-        const transformStartAt = Date.now()
         const files = list.map(item => ({
           name: item.filename,
           type: item.attrs.isDirectory() ? 'directory' : 'file',
@@ -977,11 +979,7 @@ class SSHManager {
           modifiedTime: new Date(item.attrs.mtime * 1000).toISOString(),
           permissions: item.attrs.mode
         }))
-        const transformFinishedAt = Date.now()
-
-        const sortStartAt = Date.now()
         this.sortListedFiles(files)
-        const sortFinishedAt = Date.now()
 
         resolve(files)
       })

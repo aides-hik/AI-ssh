@@ -67,7 +67,6 @@ test('file manager keeps parent-row navigation aligned with the displayed file l
     /<div v-if="displayedPath !== '\/'" class="file-item parent-dir" @click="goBack">/
   )
   assert.match(source, /const basePath = displayedPath\.value/)
-  assert.match(source, /const previousPath = displayedPath\.value/)
   assert.match(source, /const parts = displayedPath\.value\.split\('\/'\)\.filter\(p => p\)/)
 })
 

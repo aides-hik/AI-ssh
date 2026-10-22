@@ -47,7 +47,7 @@ export function useTerminalAutocomplete(
         aliasManager.getAliases(connectionId.value),
         envManager.getEnvVariables(connectionId.value)
       ])
-    } catch (error) {
+    } catch {
       // 预加载数据失败
     }
   }
@@ -163,7 +163,7 @@ export function useTerminalAutocomplete(
       } else {
         hidePopup()
       }
-    } catch (error) {
+    } catch {
       // 补全错误
       hidePopup()
     }
@@ -247,7 +247,7 @@ export function useTerminalAutocomplete(
 
       popupPosition.x = x
       popupPosition.y = y
-    } catch (error) {
+    } catch {
       // 更新弹窗位置错误
     }
   }
@@ -315,7 +315,7 @@ export function useTerminalAutocomplete(
       }
 
       hidePopup()
-    } catch (error) {
+    } catch {
       // 插入建议错误
     }
   }
@@ -399,7 +399,9 @@ export function useTerminalAutocomplete(
       }
 
       // 清理 ANSI 转义序列
+      // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
       fullLine = fullLine.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+      // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
       fullLine = fullLine.replace(/\x1b\][^\x07]*\x07/g, '')
 
       // 尝试从提示符中提取目录
@@ -422,7 +424,7 @@ export function useTerminalAutocomplete(
       const textBeforeCursor = fullLine.substring(0, buffer.cursorX).trim()
 
       return { command: textBeforeCursor, directory }
-    } catch (error) {
+    } catch {
       // 读取当前行错误
       return { command: '', directory: '' }
     }

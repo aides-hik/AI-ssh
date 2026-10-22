@@ -1,3 +1,6 @@
+import typography from '@tailwindcss/typography'
+import forms from '@tailwindcss/forms'
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -64,9 +67,5 @@ export default {
       }
     }
   },
-  plugins: [
-    require('@tailwindcss/typography'),
-    require('@tailwindcss/forms')
-  ],
-  darkMode: 'class'
+  plugins: [typography, forms]
 }

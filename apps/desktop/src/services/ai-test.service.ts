@@ -310,7 +310,7 @@ async function testOllama(provider: AIProvider): Promise<TestResult> {
         error: `HTTP ${response.status}: ${response.statusText}`
       }
     }
-  } catch (error: any) {
+  } catch {
     return {
       success: false,
       message: 'Ollama 未运行',

@@ -60,16 +60,16 @@ export const npmSpec: CompletionSpec = {
               context.connectionId,
               'test -f package.json && cat package.json 2>/dev/null'
             )
-            
+
             if (!result.success || !result.output) {
               return []
             }
-            
+
             try {
               // 尝试解析 JSON
               const pkg = JSON.parse(result.output.trim())
               const scripts = pkg.scripts || {}
-              
+
               return Object.keys(scripts).map(name => ({
                 name,
                 description: scripts[name],
@@ -77,7 +77,7 @@ export const npmSpec: CompletionSpec = {
                 type: 'arg' as const,
                 priority: 90
               }))
-            } catch (error) {
+            } catch {
               // 无法解析 package.json
               return []
             }

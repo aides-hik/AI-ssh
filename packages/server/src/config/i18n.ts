@@ -9,9 +9,8 @@ import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 import type { Locale } from '@ai-ssh/shared'
 
-// ESM 模式下获取 __dirname
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
+// Use a scoped name so bundling cannot collide with the CommonJS compatibility banner.
+const localeModuleDir = dirname(fileURLToPath(import.meta.url))
 
 /**
  * 初始化 i18next
@@ -29,7 +28,7 @@ export async function initI18n() {
     // 后端配置
     backend: {
       // 翻译文件路径：locales/{{lng}}/{{ns}}.json
-      loadPath: join(__dirname, '../locales/{{lng}}/{{ns}}.json')
+      loadPath: join(localeModuleDir, '../locales/{{lng}}/{{ns}}.json')
     },
 
     // 插值配置

@@ -1,12 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
-
-const webUtils = (
-  require('electron') as {
-    webUtils: {
-      getPathForFile: (file: File) => string
-    }
-  }
-).webUtils
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 // 自定义 API 定义
 const api = {
@@ -460,8 +452,5 @@ if (process.contextIsolated) {
     console.error('Failed to expose electron APIs:', error)
   }
 } else {
-  // @ts-ignore (define in dts)
-  window.electronAPI = api as ElectronAPI
-  // @ts-ignore (define in dts)
-  window.api = api as ElectronAPI // 添加别名
+  Object.assign(window, { electronAPI: api, api })
 }

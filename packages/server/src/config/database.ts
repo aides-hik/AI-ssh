@@ -1,6 +1,5 @@
 import { logger } from '../utils/safe-logger.js'
-// 直接导入 Prisma 客户端，避免浏览器兼容层的问题
-import { PrismaClient } from '../../../database/src/generated/client/index.js'
+import { createPostgresClient, type PrismaClient } from '@ai-ssh/database/postgres'
 
 class Database {
   private static instance: PrismaClient | null = null
@@ -11,7 +10,7 @@ class Database {
    */
   static getInstance(): PrismaClient {
     if (!Database.instance) {
-      Database.instance = new PrismaClient({
+      Database.instance = createPostgresClient(process.env.DATABASE_URL || '', {
         log: process.env.NODE_ENV === 'development' ? ['query', 'info', 'warn', 'error'] : ['error']
       })
     }

@@ -318,10 +318,6 @@ export async function fetchOpenRouterModels(
 
     const data = await response.json()
 
-    // 调试：打印第一个模型的完整数据结构
-    if (data.data && data.data.length > 0) {
-    }
-
     const models: AIModel[] = data.data.map((model: any) => {
       // 提取价格信息（OpenRouter 返回的价格是字符串，单位是每 token）
       let price: AIModel['price'] | undefined

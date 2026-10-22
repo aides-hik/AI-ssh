@@ -43,7 +43,7 @@ export const loggerMiddleware = {
       request.log.info(
         {
           statusCode: reply.statusCode,
-          responseTime: reply.getResponseTime()
+          responseTime: reply.elapsedTime
         },
         'Request completed'
       )

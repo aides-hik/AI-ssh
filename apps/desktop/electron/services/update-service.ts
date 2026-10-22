@@ -428,7 +428,7 @@ export class UpdateService {
 
     await this.deps.fileStore.mkdir(path.dirname(filePath))
 
-    let bytes = new Uint8Array()
+    let bytes: Uint8Array
     if (response.body) {
       const reader = response.body.getReader()
       const chunks: Uint8Array[] = []

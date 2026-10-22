@@ -62,10 +62,11 @@ async function afterPack(context) {
     console.log('[after-pack] ✅ 验证完成')
   } catch (error) {
     console.error('[after-pack] ❌ 验证失败:', error.message)
-    // 不抛出错误，允许打包继续
+    // Generated clients must already have been compiled before packaging.
+    throw error
   }
 
-  verifyNativeBindings(resourcesPath, arch)
+  verifyNativeBindings(resourcesPath, arch, electronPlatformName)
 }
 
 function getResourcesPath(electronPlatformName, appOutDir) {
@@ -81,7 +82,7 @@ function getResourcesPath(electronPlatformName, appOutDir) {
   return path.join(appOutDir, appBundle, 'Contents', 'Resources')
 }
 
-function verifyNativeBindings(resourcesPath, arch) {
+function verifyNativeBindings(resourcesPath, arch, targetPlatform) {
   const expectedArch = { 0: 'ia32', 1: 'x64', 3: 'arm64' }[arch]
   if (!expectedArch) {
     throw new Error(`[after-pack] 不支持的目标架构: ${arch}`)
@@ -89,16 +90,15 @@ function verifyNativeBindings(resourcesPath, arch) {
 
   const nodeModulesPath = path.join(resourcesPath, 'app', 'node_modules')
   const bindingPaths = [
-    path.join(nodeModulesPath, 'better-sqlite3', 'build', 'Release', 'better_sqlite3.node'),
+    path.join(nodeModulesPath, 'better-sqlite3', 'prebuilds', `${targetPlatform}-${expectedArch}.node`),
     path.join(
       nodeModulesPath,
       '@ai-ssh',
       'database',
       'node_modules',
       'better-sqlite3',
-      'build',
-      'Release',
-      'better_sqlite3.node'
+      'prebuilds',
+      `${targetPlatform}-${expectedArch}.node`
     )
   ].filter(bindingPath => fs.existsSync(bindingPath))
 
@@ -165,36 +165,13 @@ function ensureWorkspacePackage(nodeModulesPath, packageName, sourcePackage, inc
  * 确保 Prisma Client 已生成并复制到正确位置
  */
 function ensurePrismaClient(packagePath) {
-  const prismaGeneratedSrc = path.join(packagePath, 'src', 'generated', 'client-sqlite')
-  const prismaGeneratedTarget = path.join(packagePath, 'dist', 'src', 'generated', 'client-sqlite')
-
-  // 检查是否需要生成 Prisma Client
-  if (!fs.existsSync(prismaGeneratedSrc) && !fs.existsSync(prismaGeneratedTarget)) {
-    console.log(`[after-pack] 🔧 尝试生成 Prisma Client...`)
-    try {
-      const { execSync } = require('child_process')
-      const databasePath = path.resolve(__dirname, '../../../packages/database')
-      execSync('pnpm prisma generate', {
-        cwd: databasePath,
-        stdio: 'inherit'
-      })
-      console.log(`[after-pack] ✅ Prisma Client 生成成功`)
-    } catch (error) {
-      console.warn(`[after-pack] ⚠️ Prisma Client 生成失败: ${error.message}`)
+  for (const client of ['client', 'client-sqlite']) {
+    const compiledClient = path.join(packagePath, 'dist', 'src', 'generated', client, 'client.js')
+    if (!fs.existsSync(compiledClient)) {
+      throw new Error(`[after-pack] Missing compiled Prisma client: ${compiledClient}. Run pnpm build:database before packaging.`)
     }
   }
-
-  // 确保 dist/src/generated/client-sqlite 存在
-  if (fs.existsSync(prismaGeneratedSrc)) {
-    console.log(`[after-pack] 📦 复制 Prisma Client 到 dist...`)
-    fs.mkdirSync(prismaGeneratedTarget, { recursive: true })
-    copyRecursiveSync(prismaGeneratedSrc, prismaGeneratedTarget)
-    console.log(`[after-pack] ✅ Prisma Client 已复制到 dist`)
-  } else if (fs.existsSync(prismaGeneratedTarget)) {
-    console.log(`[after-pack] ✅ Prisma Client 已存在于 dist`)
-  } else {
-    console.warn(`[after-pack] ⚠️ Prisma Client 文件未找到`)
-  }
+  console.log('[after-pack] ✅ Prisma 7 clients were compiled and packaged')
 }
 
 /**
@@ -218,7 +195,7 @@ function verifyWorkspaceDependencies(nodeModulesPath, packageName) {
       return
     }
 
-    let missingDeps = []
+    const missingDeps = []
     for (const dep in deps) {
       // 跳过工作空间内部依赖
       if (dep.startsWith('@ai-ssh/')) continue

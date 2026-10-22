@@ -1,10 +1,33 @@
-@import 'tailwindcss/base';
-@import 'tailwindcss/components';
-@import 'tailwindcss/utilities';
+/* Preserve the original Bootstrap → Tailwind → application cascade in v4. */
+@layer bootstrap, theme, base, components, utilities;
+@import 'bootstrap/dist/css/bootstrap.css' layer(bootstrap);
+@import 'bootstrap-vue-next/dist/bootstrap-vue-next.css' layer(bootstrap);
+@import 'bootstrap-icons/font/bootstrap-icons.css' layer(bootstrap);
+@import 'tailwindcss';
 
 /* 导入 VSCode 官方主题 */
 @import './themes/dark-modern.css';
 @import './themes/light-modern.css';
+
+/* Tailwind v4 no longer discovers JavaScript configuration automatically. */
+@config '../../../tailwind.config.mjs';
+@custom-variant dark (&:where(.dark, .dark *, .dark-modern, .dark-modern *));
+
+/* Retain the v3 defaults used by the existing terminal and dialog layouts. */
+@layer base {
+  *,
+  ::before,
+  ::after,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+
+  button,
+  [role='button'] {
+    cursor: pointer;
+  }
+}
 
 /* 默认主题（深色） */
 :root {

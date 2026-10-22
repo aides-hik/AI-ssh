@@ -265,7 +265,7 @@ async function handleOpenAIStream(
               tokenCount++
               onChunk({ content, done: false })
             }
-          } catch (e) {
+          } catch {
             // 忽略解析错误
           }
         }
@@ -393,7 +393,7 @@ async function callAnthropic(
 async function handleAnthropicStream(
   response: Response,
   onChunk: (chunk: StreamChunk) => void,
-  model: AIModel
+  _model: AIModel
 ): Promise<ChatCompletionResponse> {
   const reader = response.body?.getReader()
   const decoder = new TextDecoder()
@@ -429,7 +429,7 @@ async function handleAnthropicStream(
             } else if (parsed.type === 'message_stop') {
               onChunk({ content: '', done: true })
             }
-          } catch (e) {
+          } catch {
             // 忽略解析错误
           }
         }
@@ -490,43 +490,39 @@ async function callGoogle(
     }
   }
 
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(body)
-    })
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  })
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
 
-      throw new Error(error.error?.message || `HTTP ${response.status}: ${response.statusText}`)
-    }
+    throw new Error(error.error?.message || `HTTP ${response.status}: ${response.statusText}`)
+  }
 
-    // 流式响应
-    if (request.stream && onChunk) {
-      return await handleGoogleStream(response, onChunk)
-    }
+  // 流式响应
+  if (request.stream && onChunk) {
+    return await handleGoogleStream(response, onChunk)
+  }
 
-    // 非流式响应
-    const data = await response.json()
-    const candidate = data.candidates?.[0]
-    const content = candidate?.content?.parts?.[0]?.text || ''
+  // 非流式响应
+  const data = await response.json()
+  const candidate = data.candidates?.[0]
+  const content = candidate?.content?.parts?.[0]?.text || ''
 
-    return {
-      content,
-      model: model.id,
-      usage: {
-        promptTokens: data.usageMetadata?.promptTokenCount || 0,
-        completionTokens: data.usageMetadata?.candidatesTokenCount || 0,
-        totalTokens: data.usageMetadata?.totalTokenCount || 0
-      },
-      finishReason: candidate?.finishReason
-    }
-  } catch (error) {
-    throw error
+  return {
+    content,
+    model: model.id,
+    usage: {
+      promptTokens: data.usageMetadata?.promptTokenCount || 0,
+      completionTokens: data.usageMetadata?.candidatesTokenCount || 0,
+      totalTokens: data.usageMetadata?.totalTokenCount || 0
+    },
+    finishReason: candidate?.finishReason
   }
 }
 
@@ -545,9 +541,7 @@ async function handleGoogleStream(
   }
 
   let fullContent = ''
-  let objectCount = 0
   let buffer = '' // 缓冲区用于累积完整的 JSON 对象
-  let braceCount = 0 // 用于追踪 { } 平衡
 
   try {
     while (true) {
@@ -562,10 +556,11 @@ async function handleGoogleStream(
 
             if (content) {
               fullContent += content
-              objectCount++
               onChunk({ content, done: false })
             }
-          } catch (e) {}
+          } catch {
+            // Ignore malformed stream frames and continue reading the next JSON object.
+          }
         }
 
         break
@@ -648,10 +643,11 @@ async function handleGoogleStream(
 
                 if (content) {
                   fullContent += content
-                  objectCount++
                   onChunk({ content, done: false })
                 }
-              } catch (e) {}
+              } catch {
+                // Ignore malformed stream frames and continue reading the next JSON object.
+              }
 
               // 继续处理下一个对象
               buffer = trimmed.substring(i + 1)
@@ -673,8 +669,6 @@ async function handleGoogleStream(
     }
 
     onChunk({ content: '', done: true })
-  } catch (error) {
-    throw error
   } finally {
     reader.releaseLock()
   }
@@ -858,7 +852,7 @@ async function handleOllamaStream(
           if (parsed.done) {
             onChunk({ content: '', done: true })
           }
-        } catch (e) {
+        } catch {
           // 忽略解析错误
         }
       }

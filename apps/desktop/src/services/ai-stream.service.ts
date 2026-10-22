@@ -165,7 +165,7 @@ export async function* streamAIResponse(
               yield { type: 'done', done: true }
               return
             }
-          } catch (e) {
+          } catch {
             // 忽略解析错误
           }
         }

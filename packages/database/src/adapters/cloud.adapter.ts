@@ -79,7 +79,9 @@ export class CloudStorageAdapter extends BaseStorageAdapter {
         console.error(`Cloud database connection attempt ${attempts} failed:`, error)
         
         if (attempts >= maxAttempts) {
-          throw new Error(`Failed to connect to cloud database after ${maxAttempts} attempts`)
+          throw new Error(`Failed to connect to cloud database after ${maxAttempts} attempts`, {
+            cause: error
+          })
         }
         
         // 等待后重试

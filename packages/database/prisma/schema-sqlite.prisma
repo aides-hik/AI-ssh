@@ -1,13 +1,13 @@
 // SQLite schema for local desktop storage
 
 generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/client-sqlite"
+  provider     = "prisma-client"
+  output       = "../src/generated/client-sqlite"
+  moduleFormat = "cjs"
 }
 
 datasource db {
   provider = "sqlite"
-  url      = "file:./local.db"
 }
 
 model User {

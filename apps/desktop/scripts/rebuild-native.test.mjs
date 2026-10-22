@@ -5,6 +5,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createBuildMatrix } from '../../../scripts/build-matrix.mjs'
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
@@ -17,14 +18,14 @@ const builderConfigPath = join(currentDir, '../electron-builder.yml')
 const releaseWorkflowPath = join(currentDir, '../../../.github/workflows/release.yml')
 const manualWorkflowPath = join(currentDir, '../../../.github/workflows/manual-build.yml')
 
-test('native dependency preparation downloads an Electron prebuilt binary', async () => {
+test('native dependency preparation verifies bundled Node-API binaries without compilation', async () => {
   const source = await readFile(rebuildScriptPath, 'utf8')
 
-  assert.match(source, /prebuild-install\/bin\.js/)
-  assert.match(source, /'--runtime=electron'/)
+  assert.match(source, /'prebuilds'/)
+  assert.match(source, /SELECT 1 AS ready/)
   assert.match(source, /TARGET_ARCH/)
   assert.match(source, /assertNativeArch\(bindingPath, targetArch\)/)
-  assert.doesNotMatch(source, /electron-rebuild/)
+  assert.doesNotMatch(source, /electron-rebuild|prebuild-install|node-gyp/)
 })
 
 test('native binary architecture is checked before and after packaging', async () => {
@@ -34,7 +35,7 @@ test('native binary architecture is checked before and after packaging', async (
   ])
 
   assert.match(nativeArchSource, /Native binding architecture mismatch/)
-  assert.match(afterPackSource, /verifyNativeBindings\(resourcesPath, arch\)/)
+  assert.match(afterPackSource, /verifyNativeBindings\(resourcesPath, arch, electronPlatformName\)/)
   assert.match(afterPackSource, /'Contents', 'Resources'/)
   assert.match(afterPackSource, /assertNativeArch\(bindingPath, expectedArch\)/)
 })
@@ -79,8 +80,9 @@ test('release builds macOS architectures separately with target-specific native 
 test('manual builds use the same target-specific native binding strategy', async () => {
   const source = await readFile(manualWorkflowPath, 'utf8')
 
-  assert.match(source, /build_script: 'build:mac:x64'/)
-  assert.match(source, /build_script: 'build:mac:arm64'/)
-  assert.match(source, /pnpm install --frozen-lockfile --ignore-scripts/)
+  assert.deepEqual(createBuildMatrix('macos').include.map(target => target.build_script), ['build:mac:x64', 'build:mac:arm64'])
+  assert.match(source, /fromJSON\(needs\.plan\.outputs\.matrix\)/)
+  assert.match(source, /pnpm install --frozen-lockfile\s*\n/)
+  assert.doesNotMatch(source, /--ignore-scripts|node-gyp|better_sqlite3_binary_host/)
   assert.match(source, /TARGET_ARCH: \$\{\{ matrix\.target_arch \}\}/)
 })

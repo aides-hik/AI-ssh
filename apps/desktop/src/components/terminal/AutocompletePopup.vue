@@ -17,7 +17,7 @@
           <kbd>Esc</kbd> 关闭
         </span>
       </div>
-      
+
       <div class="autocomplete-list" ref="listRef">
         <div
           v-for="(suggestion, index) in suggestions"
@@ -39,8 +39,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
-import type { Suggestion, SuggestionType } from '@/types/autocomplete'
+import { ref, computed, watch } from 'vue'
+import type { Suggestion } from '@/types/autocomplete'
 
 interface Props {
   suggestions: Suggestion[]
@@ -133,10 +133,10 @@ function selectCurrent() {
  */
 function scrollToSelected() {
   if (!listRef.value) return
-  
+
   const items = listRef.value.querySelectorAll('.autocomplete-item')
   const selectedItem = items[selectedIndex.value] as HTMLElement
-  
+
   if (selectedItem) {
     selectedItem.scrollIntoView({
       block: 'nearest',
@@ -148,17 +148,6 @@ function scrollToSelected() {
 /**
  * 获取类型标签
  */
-function getTypeLabel(type: SuggestionType): string {
-  const labels: Record<SuggestionType, string> = {
-    subcommand: '命令',
-    option: '选项',
-    arg: '参数',
-    file: '文件',
-    folder: '目录',
-    special: '特殊'
-  }
-  return labels[type] || type
-}
 
 /**
  * 检查是否有选中项

@@ -15,11 +15,11 @@ export const findSpec: CompletionSpec = {
       // 目录补全
       custom: async (context) => {
         const userInput = context.currentToken || ''
-        
+
         // 解析路径
-        let searchDir = ''
+        let searchDir: string
         let prefix = ''
-        
+
         if (userInput) {
           if (userInput.endsWith('/')) {
             searchDir = userInput
@@ -38,29 +38,32 @@ export const findSpec: CompletionSpec = {
           searchDir = context.currentDirectory || '.'
           prefix = ''
         }
-        
+
         // 执行 ls -F，只显示目录
         const lsResult = await window.electronAPI.ssh.executeSilent(
           context.connectionId,
           `cd "${searchDir}" 2>/dev/null && ls -F 2>/dev/null | grep "/$" | sed "s|/||"`
         )
-        
+
         if (!lsResult.success || !lsResult.output) {
           return []
         }
-        
+
         // 清理输出
-        let cleaned = lsResult.output
+        const cleaned = lsResult.output
+          // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
           .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+          // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
           .replace(/\x1b\][^\x07]*\x07/g, '')
           .replace(/\r/g, '')
+          // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
           .replace(/\x1b\[\?[0-9]+[hl]/g, '')
-        
+
         const dirs = cleaned
           .split('\n')
           .map(d => d.trim())
           .filter(d => d.length > 0 && !d.includes('#') && !d.includes('@'))
-        
+
         return dirs.map(dir => ({
           name: prefix + dir,
           icon: '📁',

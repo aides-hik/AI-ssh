@@ -1,5 +1,5 @@
 // 直接导入生成的 Prisma 客户端，避免包装层问题
-import { PrismaClient, User, UserRole } from '../../../database/src/generated/client/index.js'
+import { type PrismaClient, type User, UserRole } from '@ai-ssh/database/postgres'
 import bcrypt from 'bcryptjs'
 import { logger } from '../utils/safe-logger.js'
 import Database from '../config/database.js'

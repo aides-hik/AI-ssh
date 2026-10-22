@@ -16,8 +16,6 @@ export type ModelMessage = {
   index?: number
 }
 
-let globalSeenToolCallIds = new Set<string>()
-
 const MAX_MODEL_TEXT_LENGTH = 4000
 const MAX_TOOL_OUTPUT_LENGTH = 3000
 
@@ -87,10 +85,6 @@ function summarizeToolOutput(toolName: string, output: string): string {
   }
 
   return summarizeForModel(output, MAX_TOOL_OUTPUT_LENGTH)
-}
-
-export function resetToModelMessagesCache() {
-  globalSeenToolCallIds = new Set<string>()
 }
 
 export function fromUserMessage(content: string): Message {

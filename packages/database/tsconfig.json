@@ -4,14 +4,13 @@
     "lib": [
       "ES2022"
     ],
-    "module": "CommonJS",
-    "moduleResolution": "Node",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "composite": true,
     "outDir": "./dist",
     "rootDir": ".",
-    "baseUrl": "./src",
     "noEmit": false,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,

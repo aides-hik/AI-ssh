@@ -1,7 +1,5 @@
 // apps/desktop/src/services/messages/message.ts
 
-import type { ChatMessage } from '../llm'
-
 // 消息角色
 export type MessageRole = 'user' | 'assistant' | 'system' | 'tool'
 

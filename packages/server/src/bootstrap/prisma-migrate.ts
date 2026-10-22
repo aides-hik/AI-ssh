@@ -7,7 +7,10 @@ import { logger } from '../utils/safe-logger.js'
 
 const require = createRequire(import.meta.url)
 const bootstrapDir = dirname(fileURLToPath(import.meta.url))
-const databasePackageDir = resolve(bootstrapDir, '../../../database')
+const bundledDatabaseDir = resolve(bootstrapDir, 'database')
+const databasePackageDir = existsSync(resolve(bundledDatabaseDir, 'prisma/schema-postgresql.prisma'))
+  ? bundledDatabaseDir
+  : resolve(bootstrapDir, '../../../database')
 const migrationsDir = resolve(databasePackageDir, 'prisma/migrations')
 const prismaSchemaPath = resolve(databasePackageDir, 'prisma/schema-postgresql.prisma')
 
@@ -73,7 +76,7 @@ function runPrisma(args: string[], env?: NodeJS.ProcessEnv): Promise<void> {
  *
  * 说明：
  * - Prisma 没有稳定的“API 形式 migrate deploy”，因此这里用子进程调用 CLI。
- * - Windows 下直接 spawn('npx') 可能因为 PATH/扩展名解析导致 ENOENT，这里通过 shell:true 解决。
+ * - 直接使用 Node 执行 Prisma CLI，避免 Windows shell 路径解析问题。
  */
 export async function autoMigrateIfEnabled(enabled: boolean): Promise<void> {
   if (!enabled) return
@@ -87,7 +90,7 @@ export async function autoMigrateIfEnabled(enabled: boolean): Promise<void> {
 
     if (hasMigrations) {
       logger.info('AUTO_MIGRATE enabled, running: prisma migrate deploy')
-      await runPrisma(['migrate', 'deploy'])
+      await runPrisma(['migrate', 'deploy', '--schema', prismaSchemaPath])
       logger.info('Prisma migrate deploy completed')
       return
     }
@@ -95,7 +98,8 @@ export async function autoMigrateIfEnabled(enabled: boolean): Promise<void> {
     logger.warn(
       'AUTO_MIGRATE enabled but no prisma migrations found, running prisma db push instead'
     )
-    await runPrisma(['db', 'push', '--schema', prismaSchemaPath, '--skip-generate'])
+    // Prisma 7 no longer generates a client during db push.
+    await runPrisma(['db', 'push', '--schema', prismaSchemaPath])
     logger.info('Prisma db push completed')
   } catch (error) {
     logger.error({ error }, 'Prisma migrate deploy failed')

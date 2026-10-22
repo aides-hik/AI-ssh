@@ -21,7 +21,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate:
+    name: 🧪 Validate release
+    uses: ./.github/workflows/build.yml
+
   create-release:
+    needs: validate
     name: 📝 Create Release
     runs-on: ubuntu-latest
     outputs:
@@ -30,7 +35,7 @@ jobs:
       version: ${{ steps.get_version.outputs.version }}
     steps:
       - name: ⬇️ Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
@@ -80,14 +85,14 @@ jobs:
           echo "## 🔧 系统要求" >> $GITHUB_OUTPUT
           echo "" >> $GITHUB_OUTPUT
           echo "- Windows 10/11 (64-bit)" >> $GITHUB_OUTPUT
-          echo "- macOS 10.15 或更高版本" >> $GITHUB_OUTPUT
+          echo "- macOS 13 或更高版本" >> $GITHUB_OUTPUT
           echo "- Ubuntu 20.04 或其他主流 Linux 发行版" >> $GITHUB_OUTPUT
           echo "" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: 🎯 Create Release
         id: create_release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3.0.3
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
           name: AI SSH Assistant ${{ steps.get_version.outputs.version }}
@@ -125,17 +130,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: ⬇️ Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: 📦 Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 8.12.0
+        uses: pnpm/action-setup@v6.1.0
 
       - name: ⚡ Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7.1.0
         with:
-          node-version: '20'
+          node-version-file: '.node-version'
           cache: 'pnpm'
 
       # Linux specific dependencies
@@ -145,27 +148,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libnss3-dev libatk-bridge2.0-dev libdrm-dev libxcomposite-dev libxdamage-dev libxrandr-dev libgbm-dev libxss1 libasound2-dev
 
-      # macOS specific setup
-      - name: 🍎 Setup macOS Python for node-gyp
-        if: runner.os == 'macOS'
-        run: |
-          pip3 install --break-system-packages setuptools
-          xcode-select --print-path || sudo xcode-select --install
-
-      # Windows specific setup - install setuptools for node-gyp
-      - name: 🪟 Setup Windows Python for node-gyp
-        if: matrix.platform == 'Windows'
-        run: |
-          pip3 install setuptools
-
       - name: 📥 Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - name: 🔗 Link workspace dependencies
-        run: pnpm install --ignore-scripts
-
-      - name: 🏗️ Generate Prisma Client
-        run: pnpm db:generate
+        run: pnpm install --frozen-lockfile
 
       - name: 🏗️ Build shared packages
         run: pnpm build:shared
@@ -196,8 +180,7 @@ jobs:
           rm -rf apps/desktop/release
           echo "✅ Cleaned release directory"
 
-      # 在 Windows 上让 electron-builder 自动处理原生模块重建
-      # 不设置跳过环境变量，确保 better-sqlite3 正确编译
+      # 构建脚本校验 better-sqlite3 随包提供的目标架构 Node-API 绑定。
 
       - name: 🚀 Build desktop app
         run: pnpm --filter @ai-ssh/desktop ${{ matrix.build_script }}
@@ -205,7 +188,6 @@ jobs:
           ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
           ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
           TARGET_ARCH: ${{ matrix.target_arch }}
-          npm_config_better_sqlite3_binary_host: https://npmmirror.com/mirrors/better-sqlite3
           VITE_APP_VERSION: ${{ needs.create-release.outputs.version }}
           DEBUG: electron-builder # 启用详细日志
 
@@ -227,7 +209,7 @@ jobs:
           find apps/desktop/release -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.dmg" -o -name "*.zip" -o -name "*.exe" \) || true
 
       - name: 📤 Upload Release Assets
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3.0.3
         with:
           tag_name: ${{ needs.create-release.outputs.version }}
           files: |

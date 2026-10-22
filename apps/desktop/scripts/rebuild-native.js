@@ -1,51 +1,38 @@
-/** Prepare the better-sqlite3 binary for the target Electron runtime. */
-const { execFileSync } = require('child_process')
-const fs = require('fs')
-const path = require('path')
+/** Verify the Node-API SQLite binaries shipped with better-sqlite3 13. */
+const fs = require('node:fs')
+const path = require('node:path')
 const { assertNativeArch } = require('./native-arch')
 
 const desktopDir = path.resolve(__dirname, '..')
-const electronVersion = require(path.join(desktopDir, 'node_modules/electron/package.json')).version
 const betterSqliteDir = path.dirname(
   require.resolve('better-sqlite3/package.json', { paths: [desktopDir] })
 )
-const prebuildInstall = require.resolve('prebuild-install/bin.js', { paths: [desktopDir] })
 const targetArch = process.env.TARGET_ARCH || process.arch
-
-console.log(`Preparing better-sqlite3 for Electron ${electronVersion} (${process.platform}-${targetArch})`)
+const targetPlatform = process.platform === 'linux' && !process.report.getReport().header.glibcVersionRuntime
+  ? 'linuxmusl'
+  : process.platform
+const bindingPath = path.join(betterSqliteDir, 'prebuilds', `${targetPlatform}-${targetArch}.node`)
 
 try {
-  fs.rmSync(path.join(betterSqliteDir, 'build'), { recursive: true, force: true })
-  execFileSync(
-    process.execPath,
-    [
-      prebuildInstall,
-      '--runtime=electron',
-      `--target=${electronVersion}`,
-      `--platform=${process.platform}`,
-      `--arch=${targetArch}`
-    ],
-    {
-      cwd: betterSqliteDir,
-      env: {
-        ...process.env,
-        npm_config_better_sqlite3_binary_host:
-          process.env.npm_config_better_sqlite3_binary_host ||
-          'https://npmmirror.com/mirrors/better-sqlite3'
-      },
-      stdio: 'inherit'
-    }
-  )
-
-  const bindingPath = path.join(betterSqliteDir, 'build', 'Release', 'better_sqlite3.node')
   if (!fs.existsSync(bindingPath)) {
-    throw new Error(`Native binding was not created at ${bindingPath}`)
+    throw new Error(`Missing SQLite Node-API binary: ${bindingPath}. Reinstall dependencies for a supported platform.`)
   }
 
   assertNativeArch(bindingPath, targetArch)
 
-  console.log(`better-sqlite3 prebuilt binary is ready (${targetArch})`)
+  // Cross-architecture CI can inspect the target binary but cannot load it.
+  if (targetArch === process.arch) {
+    const Database = require(path.join(betterSqliteDir, 'lib', 'index.js'))
+    const database = new Database(':memory:', { nativeBinding: bindingPath })
+    try {
+      const result = database.prepare('SELECT 1 AS ready').get()
+      if (result.ready !== 1) throw new Error('SQLite startup query failed')
+    } finally {
+      database.close()
+    }
+  }
+  console.log(`SQLite Node-API binary is ready (${targetPlatform}-${targetArch})`)
 } catch (error) {
   console.error('Failed to prepare better-sqlite3:', error.message)
-  process.exit(1)
+  process.exitCode = 1
 }

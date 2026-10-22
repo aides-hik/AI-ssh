@@ -11,31 +11,30 @@
     "composite": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "baseUrl": "./src",
     "noEmit": false,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "paths": {
       "@/*": [
-        "./*"
+        "./src/*"
       ],
       "@/controllers/*": [
-        "./controllers/*"
+        "./src/controllers/*"
       ],
       "@/services/*": [
-        "./services/*"
+        "./src/services/*"
       ],
       "@/middleware/*": [
-        "./middleware/*"
+        "./src/middleware/*"
       ],
       "@/utils/*": [
-        "./utils/*"
+        "./src/utils/*"
       ],
       "@/config/*": [
-        "./config/*"
+        "./src/config/*"
       ],
       "@/types/*": [
-        "./types/*"
+        "./src/types/*"
       ]
     },
     "types": [

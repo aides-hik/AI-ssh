@@ -112,7 +112,7 @@
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2 flex-1">
                     <i
-                      class="bi bi-cpu text-vscode-accent flex-shrink-0"
+                      class="bi bi-cpu text-vscode-accent shrink-0"
                       style="font-size: 16px"
                     ></i>
                     <div class="flex flex-col gap-0.5 flex-1 min-w-0">
@@ -126,7 +126,7 @@
                     v-if="
                       currentModel.id === model.id && currentModel.providerId === model.providerId
                     "
-                    class="text-vscode-accent flex-shrink-0 ml-2"
+                    class="text-vscode-accent shrink-0 ml-2"
                     width="16"
                     height="16"
                     viewBox="0 0 16 16"
@@ -247,7 +247,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useTheme } from '../../composables/useTheme'
 import { themeService } from '../../services/theme.service'
 import { settingsService } from '../../services/settings.service'
 import { sshService } from '../../services/ssh.service'
@@ -267,10 +266,6 @@ const { t: $t } = useI18n()
 const openNewTab =
   inject<(id: string, name: string, icon: string, path: string) => void>('openNewTab')
 
-// 主题 Composable
-const theme = useTheme()
-const { mode, currentTheme } = theme
-
 // 响应式数据
 const activeMenu = ref<string | null>(null)
 const menuPosition = ref(0)
@@ -280,7 +275,7 @@ const currentFilePath = computed(() => $t('titlebar.appWelcome'))
 const showModelDropdown = ref(false)
 
 // 模型接口定义（用于标题栏显示）
-interface TitleBarModel extends TitleBarModelOption {}
+type TitleBarModel = TitleBarModelOption
 
 // 当前选择的模型
 const currentModel = ref<TitleBarModel>({
@@ -342,7 +337,7 @@ const loadCurrentModel = () => {
       }
       resetCurrentModel()
     }
-  } catch (error) {
+  } catch {
     localStorage.removeItem('selectedAIModel')
     resetCurrentModel()
   }
@@ -391,18 +386,6 @@ onBeforeUnmount(() => {
 })
 
 // 当前主题标签（旧系统）
-const currentThemeLabel = computed(() => {
-  switch (mode.value) {
-    case 'light':
-      return $t('titlebar.lightTheme')
-    case 'dark':
-      return $t('titlebar.darkTheme')
-    case 'auto':
-      return $t('titlebar.autoTheme')
-    default:
-      return mode.value
-  }
-})
 
 // 新主题系统
 const currentNewTheme = ref(themeService.getCurrentTheme())
@@ -620,9 +603,6 @@ const closeWindow = () => {
 }
 
 // 主题切换
-const toggleTheme = () => {
-  theme.toggleMode()
-}
 
 // 模型切换相关方法
 const toggleModelDropdown = () => {
@@ -679,7 +659,9 @@ const selectModel = async (model: TitleBarModel) => {
         })
       )
     }
-  } catch (error) {}
+  } catch (error) {
+    console.error('Failed to save model selection:', error)
+  }
 }
 
 const openModelSettings = () => {

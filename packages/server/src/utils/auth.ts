@@ -51,7 +51,7 @@ export function requireRole(roles: string | string[]) {
 export async function optionalAuth(request: FastifyRequest, _reply: FastifyReply) {
   try {
     await request.jwtVerify()
-  } catch (error) {
+  } catch {
     // 忽略认证错误，允许匿名访问
   }
 }

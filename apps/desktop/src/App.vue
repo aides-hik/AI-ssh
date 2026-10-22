@@ -38,7 +38,7 @@
       <!-- 侧边栏 -->
       <div
         v-if="showSidebar"
-        class="vscode-sidebar bg-vscode-bg-light border-r border-vscode-border flex-shrink-0"
+        class="vscode-sidebar bg-vscode-bg-light border-r border-vscode-border shrink-0"
         :style="{ width: sidebarWidth + 'px' }"
       >
         <AppSidebar :active-view="activeView" />
@@ -158,7 +158,6 @@ const openTabs = computed(() =>
 )
 
 // 当前激活的标签 ID
-const activeTabId = ref('ssh')
 
 // 方法
 const setActiveView = (viewId: string) => {
@@ -217,7 +216,7 @@ const closeTab = (tabId: string) => {
     router
       .push(newTab.path)
       .then(() => {})
-      .catch(err => {})
+      .catch(_err => {})
   }
 }
 
@@ -397,8 +396,8 @@ const handleKeydown = (event: KeyboardEvent) => {
     if (window.electronAPI?.toggleDevTools) {
       window.electronAPI
         .toggleDevTools()
-        .then((opened: boolean) => {})
-        .catch((error: any) => {})
+        .then((_opened: boolean) => {})
+        .catch((_error: any) => {})
     }
   }
 }

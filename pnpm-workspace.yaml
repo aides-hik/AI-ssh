@@ -3,10 +3,10 @@ packages:
   - 'packages/*'
 
 # 共享依赖配置
-shared-workspace-lockfile: true
+sharedWorkspaceLockfile: true
 
 # 依赖提升配置
-hoist-pattern:
+hoistPattern:
   - '*eslint*'
   - '*prettier*'
   - '*typescript*'
@@ -16,9 +16,28 @@ hoist-pattern:
   - 'vite'
   - 'vite-*'
 
-# 公共依赖不提升
-public-hoist-pattern:
+# 兼容 Electron 打包器的公共依赖提升
+publicHoistPattern:
   - '*'
 
 # 严格的 peer 依赖
-strict-peer-dependencies: false
+strictPeerDependencies: false
+
+# SQLite 13 ships Node-API binaries; rebuild-native.js verifies the target binary.
+allowBuilds:
+  electron: true
+  electron-winstaller: true
+  esbuild: true
+  '@prisma/engines': true
+  prisma: true
+  sharp: true
+  better-sqlite3: false
+  cpu-features: false
+  ssh2: false
+
+minimumReleaseAgeExclude:
+  - '@fastify/multipart@10.1.6'
+  - '@fastify/static@10.1.7'
+  - i18next@26.5.5
+  - openai@7.42.0
+  - tsc-alias@1.9.9

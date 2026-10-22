@@ -50,8 +50,7 @@ describe('autoMigrateIfEnabled', () => {
         'db',
         'push',
         '--schema',
-        expect.stringMatching(/schema-postgresql\.prisma$/),
-        '--skip-generate'
+        expect.stringMatching(/schema-postgresql\.prisma$/)
       ],
       expect.objectContaining({
         cwd: expect.stringMatching(/packages[\\/]database$/),
@@ -62,7 +61,7 @@ describe('autoMigrateIfEnabled', () => {
   })
 
   it('uses prisma migrate deploy when migrations exist', async () => {
-    existsSyncMock.mockReturnValue(true)
+    existsSyncMock.mockImplementation(path => String(path).endsWith('migrations'))
     readdirSyncMock.mockReturnValue(['20260410_init'])
 
     const { autoMigrateIfEnabled } = await import('./prisma-migrate.js')
@@ -70,7 +69,13 @@ describe('autoMigrateIfEnabled', () => {
 
     expect(spawnMock).toHaveBeenCalledWith(
       process.execPath,
-      [expect.stringMatching(/prisma[\\/]build[\\/]index\.js$/), 'migrate', 'deploy'],
+      [
+        expect.stringMatching(/prisma[\\/]build[\\/]index\.js$/),
+        'migrate',
+        'deploy',
+        '--schema',
+        expect.stringMatching(/schema-postgresql\.prisma$/)
+      ],
       expect.objectContaining({
         cwd: expect.stringMatching(/packages[\\/]database$/),
         shell: false

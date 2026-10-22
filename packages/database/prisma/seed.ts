@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole } from '../src/generated/client/index.js'
+import { createPostgresClient, UserRole } from '../src/postgres.js'
 import * as bcrypt from 'bcryptjs'
 
 const databaseUrl = process.env.CLOUD_DATABASE_URL || process.env.DATABASE_URL
@@ -7,13 +7,7 @@ if (!databaseUrl) {
   throw new Error('Missing CLOUD_DATABASE_URL or DATABASE_URL for Prisma seed')
 }
 
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: databaseUrl
-    }
-  }
-})
+const prisma = createPostgresClient(databaseUrl)
 
 async function main() {
   console.log('🌱 开始插入种子数据...')

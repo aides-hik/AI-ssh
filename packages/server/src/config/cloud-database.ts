@@ -1,5 +1,5 @@
 import { logger } from '../utils/safe-logger.js'
-import { PrismaClient } from '../../../database/src/generated/client/index.js'
+import { createPostgresClient, type PrismaClient } from '@ai-ssh/database/postgres'
 
 /**
  * 云数据库配置 - 专门用于用户认证和云端数据存储
@@ -17,12 +17,7 @@ class CloudDatabase {
         process.env.DATABASE_URL ||
         'postgresql://ai_ssh_user:ai_ssh_password@localhost:5432/ai_ssh_assistant'
 
-      CloudDatabase.instance = new PrismaClient({
-        datasources: {
-          db: {
-            url: cloudDatabaseUrl
-          }
-        },
+      CloudDatabase.instance = createPostgresClient(cloudDatabaseUrl, {
         log: process.env.NODE_ENV === 'development' ? ['query', 'info', 'warn', 'error'] : ['error']
       })
     }

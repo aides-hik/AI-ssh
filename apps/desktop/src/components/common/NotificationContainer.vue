@@ -5,13 +5,13 @@
         v-for="notification in notifications"
         :key="notification.id"
         :class="[
-          'notification-item w-full bg-white dark:bg-gray-800 shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden',
+          'notification-item w-full bg-white dark:bg-gray-800 shadow-lg rounded-lg pointer-events-auto ring-1 ring-black/5 overflow-hidden',
           getNotificationTypeClass(notification.type)
         ]"
       >
         <div class="p-1">
           <div class="flex items-center">
-            <div class="flex-shrink-0">
+            <div class="shrink-0">
               <div
                 :class="[
                   'w-5 h-5 rounded-full flex items-center justify-center text-white text-xs',
@@ -48,10 +48,10 @@
               </div>
             </div>
 
-            <div class="ml-4 flex-shrink-0 flex">
+            <div class="ml-4 shrink-0 flex">
               <button
                 @click="removeNotification(notification.id)"
-                class="bg-white dark:bg-gray-800 rounded-md inline-flex text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                class="bg-white dark:bg-gray-800 rounded-md inline-flex text-gray-400 hover:text-gray-500 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
                 <span class="sr-only">关闭</span>
                 <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">

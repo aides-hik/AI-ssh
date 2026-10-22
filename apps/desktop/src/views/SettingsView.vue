@@ -1701,9 +1701,9 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { storeToRefs } from 'pinia'
+
 import ProviderIcon from '../components/common/ProviderIcon.vue'
-import LanguageSwitcher from '../components/LanguageSwitcher.vue'
+
 import { useTheme } from '../composables/useTheme'
 import { themeService, type ThemeMode } from '../services/theme.service'
 import { settingsService } from '../services/settings.service'
@@ -1722,7 +1722,7 @@ import {
   type AIProvider,
   type AIModel
 } from '../types/ai-providers'
-import { decryptApiKey } from '../utils/encryption'
+
 import { mergeSavedProviderWithDefault } from '../utils/provider-config-merge'
 import { buildInitialAIProviders } from '../utils/initial-ai-providers'
 import {
@@ -2125,10 +2125,6 @@ const openStorageDirectory = async () => {
 }
 
 // 主题变化处理
-const onThemeChange = () => {
-  theme.setMode(mode.value)
-  showSuccessNotification('主题模式已更新')
-}
 
 // 新主题系统的切换处理
 const onThemeModeChange = () => {
@@ -2226,7 +2222,7 @@ const saveSettings = async () => {
     }
 
     // ✅ 使用 settingsService，自动处理 userId
-    const result = await settingsService.saveSettings(settings)
+    await settingsService.saveSettings(settings)
 
     // 更新主题 Composable
     theme.setMode(mode.value)
@@ -2235,7 +2231,7 @@ const saveSettings = async () => {
 
     // 触发设置更新事件
     window.dispatchEvent(new CustomEvent('settings-updated'))
-  } catch (error) {
+  } catch {
     showNotification('保存设置失败', 'error')
   }
 }
@@ -2328,7 +2324,7 @@ const loadSettings = async () => {
         storageMode.value = 'local'
       }
     }
-  } catch (error) {
+  } catch {
     // 失败时尝试从 localStorage 迁移
     await migrateFromLocalStorage()
   }
@@ -2369,7 +2365,7 @@ const migrateFromLocalStorage = async () => {
       // 重新加载设置
       await loadSettings()
     }
-  } catch (error) {
+  } catch {
     showNotification('设置迁移失败，请手动重新配置', 'error')
   }
 }
@@ -2457,7 +2453,7 @@ const testProviderConnection = async (provider: AIProvider) => {
     } else {
       showNotification('所有模型测试失败', 'error')
     }
-  } catch (error: any) {
+  } catch {
     showNotification('测试连接失败', 'error')
   } finally {
     testingProviders.value[provider.id] = false
@@ -2637,7 +2633,7 @@ const toggleModelDetails = (providerId: string) => {
   }
 }
 
-const onModelToggle = (providerId: string, modelId: string) => {
+const onModelToggle = (_providerId: string, _modelId: string) => {
   // 保存 AI 服务商配置
   saveAIProviderConfigs()
 }
@@ -2813,7 +2809,9 @@ const saveAIProviderConfigs = async () => {
 
     // 触发自定义事件通知其他组件配置已更新
     window.dispatchEvent(new CustomEvent('ai-provider-configs-updated'))
-  } catch (error) {}
+  } catch (error) {
+    console.error('Failed to save AI provider settings:', error)
+  }
 }
 
 // 监听 AI 服务商配置变化

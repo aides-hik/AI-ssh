@@ -34,7 +34,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import * as monaco from 'monaco-editor'
-import loader from '@monaco-editor/loader'
+import '@/config/monaco-workers'
 import { docStorageService } from '@/services/doc-storage.service'
 
 interface Props {
@@ -59,21 +59,18 @@ let editor: monaco.editor.IStandaloneCodeEditor | null = null
 const saving = ref(false)
 const saveStatus = ref<{ type: 'success' | 'error'; icon: string; message: string } | null>(null)
 
-// 配置 Monaco Editor
-loader.config({ monaco })
-
 // 加载或创建文档
 const loadDocument = async () => {
   try {
     // 尝试读取现有文档
     let doc = await docStorageService.readServerEnvDoc(props.connectionId)
-    
+
     if (!doc && props.connectionInfo) {
       // 如果不存在，生成模板
       const template = docStorageService.generateServerEnvTemplate(props.connectionInfo)
       doc = await docStorageService.saveServerEnvDoc(props.connectionId, template)
     }
-    
+
     if (editor && doc) {
       editor.setValue(doc.content)
     }
@@ -95,15 +92,15 @@ const handleSave = async () => {
   try {
     const content = editor.getValue()
     const doc = await docStorageService.saveServerEnvDoc(props.connectionId, content)
-    
+
     saveStatus.value = {
       type: 'success',
       icon: 'bi bi-check-circle-fill',
       message: '文档已保存'
     }
-    
+
     emit('saved', doc)
-    
+
     // 3秒后清除状态提示
     setTimeout(() => {
       saveStatus.value = null
@@ -148,10 +145,10 @@ onMounted(async () => {
 
   // 加载文档
   await loadDocument()
-  
+
   // 设置主题为 VSCode 风格
   monaco.editor.setTheme('vs-dark')
-  
+
   // 聚焦编辑器
   editor.focus()
 })

@@ -1,4 +1,4 @@
-import { Tool } from './tools/tool'
+
 import type { AIProvider, AIModel } from '../types/ai-providers'
 import { zodToOpenAIParameters } from './zod-schema'
 import { isRetiredManagedProvider } from '../utils/standalone-providers'
@@ -210,7 +210,7 @@ export class LLMSession {
                     if (tc.arguments) {
                       try {
                         parsedArgs = JSON.parse(tc.arguments)
-                      } catch (e) {
+                      } catch {
                         // parse error
                       }
                     }
@@ -232,7 +232,7 @@ export class LLMSession {
                 }
                 return
               }
-            } catch (e) {
+            } catch {
               // Ignore malformed SSE events without discarding the stream.
             }
           }
@@ -304,7 +304,7 @@ export class LLMSession {
           let args = {}
           try {
             args = JSON.parse(argsStr)
-          } catch (e) {
+          } catch {
             // parse error
           }
           return {

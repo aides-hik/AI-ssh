@@ -13,44 +13,44 @@ export class AliasManager {
   private aliasCache = new Map<string, AliasEntry[]>()
   private lastFetch = new Map<string, number>()
   private readonly CACHE_TTL = 60000 // 60秒缓存 (别名很少改变)
-  
+
   /**
    * 获取所有别名
    */
   async getAliases(connectionId: string): Promise<AliasEntry[]> {
     const now = Date.now()
     const lastTime = this.lastFetch.get(connectionId) || 0
-    
+
     // 如果缓存有效，直接返回
     if (now - lastTime < this.CACHE_TTL) {
       return this.aliasCache.get(connectionId) || []
     }
-    
+
     try {
       // 使用 alias 命令获取当前 shell 中的所有别名
       const result = await window.electronAPI.ssh.executeSilent(
         connectionId,
         'alias 2>/dev/null'
       )
-      
+
       if (!result.success || !result.output) {
         return []
       }
-      
+
       // 解析别名
       const entries = this.parseAliases(result.output)
-      
+
       // 更新缓存
       this.aliasCache.set(connectionId, entries)
       this.lastFetch.set(connectionId, now)
-      
+
       return entries
-    } catch (error) {
+    } catch {
             // 获取别名错误
       return []
     }
   }
-  
+
   /**
    * 解析 alias 命令输出
    */
@@ -60,7 +60,7 @@ export class AliasManager {
       .split('\n')
       .map(l => l.trim())
       .filter(l => l.length > 0)
-    
+
     for (const line of lines) {
       // alias 输出格式: alias name='command'
       // 或: alias name="command"
@@ -68,7 +68,7 @@ export class AliasManager {
       if (match) {
         const alias = match[1].trim()
         const command = match[3].trim()
-        
+
         entries.push({
           alias,
           command,
@@ -76,10 +76,10 @@ export class AliasManager {
         })
       }
     }
-    
+
     return entries
   }
-  
+
   /**
    * 获取别名建议
    */
@@ -88,18 +88,18 @@ export class AliasManager {
     prefix: string
   ): Promise<AliasEntry[]> {
     const aliases = await this.getAliases(connectionId)
-    
+
     if (!prefix || prefix.trim().length === 0) {
       return aliases
     }
-    
+
     // 过滤匹配前缀的别名
     const prefixLower = prefix.toLowerCase()
     return aliases.filter(a => 
       a.alias.toLowerCase().startsWith(prefixLower)
     )
   }
-  
+
   /**
    * 解析别名（递归展开）
    * @param alias 别名名称
@@ -114,27 +114,27 @@ export class AliasManager {
     if (maxDepth <= 0) {
       return alias // 防止循环别名
     }
-    
+
     const aliases = await this.getAliases(connectionId)
     const entry = aliases.find(a => a.alias === alias)
-    
+
     if (!entry) {
       return alias // 不是别名
     }
-    
+
     // 递归展开别名中的别名
     const firstWord = entry.command.split(/\s+/)[0]
     const resolved = await this.resolveAlias(firstWord, connectionId, maxDepth - 1)
-    
+
     // 如果第一个词被展开了，替换它
     if (resolved !== firstWord) {
       const rest = entry.command.substring(firstWord.length)
       return resolved + rest
     }
-    
+
     return entry.command
   }
-  
+
   /**
    * 清除缓存
    */

@@ -21,20 +21,21 @@ AI 工具调用会实际操作服务器。当前主聊天的工具执行尚未�
 
 ### 1. 准备环境
 
-- Node.js **20 或更高版本**。
-- pnpm **8.12.0**，与根目录 `packageManager` 保持一致。
+- Node.js **26.12.1**，与 [.node-version](./.node-version) 和 CI 保持一致。
+- pnpm **12.15.0**，与根目录 `packageManager` 保持一致。
 - Git；首次安装依赖和原生模块时需要网络连接。
+
+桌面运行环境为 Windows 10/11 64 位、macOS 13 或更新版本，以及兼容 Electron 的 64 位 Linux 发行版。macOS 最低版本随 Electron 45 升级到 13。
 
 ```bash
 git clone https://github.com/aides-hik/AI-ssh.git
 cd AI-ssh
 
-corepack enable
-corepack prepare pnpm@8.12.0 --activate
+npm install -g pnpm@12.15.0
 pnpm --version
 ```
 
-确认最后输出 `8.12.0`。如果当前 Node.js 环境没有 Corepack，可以使用 `npm install -g pnpm@8.12.0` 安装指定版本。项目脚本会继续调用 `pnpm`，因此要确保当前终端中的 `pnpm` 也是这个版本。
+确认最后输出 `12.15.0`。Node.js 26 不再内置 Corepack，上述命令直接安装仓库要求的 pnpm。项目脚本也会调用 `pnpm`，因此要确保当前终端中的版本一致。
 
 ### 2. 安装并启动
 
@@ -47,7 +48,7 @@ pnpm --filter @ai-ssh/desktop run rebuild
 pnpm dev:desktop
 ```
 
-`build:database` 会生成 Prisma 客户端并构建数据库包，桌面端使用本地 SQLite，**此步骤不需要运行 PostgreSQL 或 Redis**。`run rebuild` 为当前 Electron 准备匹配的 SQLite 原生绑定；执行前请退出已经打开的客户端。
+`build:database` 会生成 Prisma 客户端并构建数据库包，桌面端使用本地 SQLite，**此步骤不需要运行 PostgreSQL 或 Redis**。`run rebuild` 校验随 `better-sqlite3` 13 包提供的 Node-API 原生绑定及本机查询，不编译源码。重新安装依赖前请退出已经打开的客户端。
 
 启动后会自动打开 Electron 窗口。Vite 页面默认位于 `http://127.0.0.1:5173`；浏览器可用于查看界面，完整的 SSH、SFTP 和本地数据库功能需要在 Electron 窗口中使用。
 
@@ -113,7 +114,9 @@ docker compose up -d postgres redis
 
 数据库名、用户名和密码见 [docker-compose.yml](./docker-compose.yml) 的 `postgres.environment`，默认端口分别为 `5432` 和 `6379`。它们是本地开发示例配置，服务端 `.env` 中的连接信息必须与实际服务一致。
 
-当前 Compose 文件中的其他服务引用了仓库未提供的部署文件，因此这里仅使用 `postgres` 和 `redis`。
+Compose 只提供本地数据库和缓存依赖，固定使用 PostgreSQL `18.6-alpine3.24` 与 Redis `8.10.2-alpine3.23`，端口只绑定到 `127.0.0.1`。服务端仍通过下面的 `pnpm dev:server` 启动；仓库没有 API 容器镜像或 Web 前端部署文件。也可使用 `pnpm docker:pull` 拉取这两个镜像、`pnpm docker:up` 启动、`pnpm docker:down` 停止。
+
+从旧 Compose 升级时，新配置使用 `postgres18_data` 与 `redis8_data` 新数据卷；旧的 `postgres_data`、`redis_data` 卷不会自动删除或迁移。需要保留旧业务数据时，先从旧 PostgreSQL 导出，再恢复到新数据库；不要将 PostgreSQL 15 的数据目录直接挂载给 18。未恢复数据前，新环境是空库和空缓存。PostgreSQL 18 的卷挂载点已按官方镜像要求改为 `/var/lib/postgresql`。
 
 ### 2. 创建服务端配置
 
@@ -197,15 +200,29 @@ pnpm --filter @ai-ssh/server type-check
 pnpm --filter @ai-ssh/database type-check
 pnpm --filter @ai-ssh/shared type-check
 pnpm --filter @ai-ssh/server test
+pnpm --filter @ai-ssh/desktop test
+pnpm --filter @ai-ssh/database test
+pnpm lint
 ```
 
-桌面端目前使用 Node.js 内置测试运行器，没有统一的 `test` 脚本。可以指定测试文件运行，例如：
+也可以使用 `pnpm test` 和 `pnpm type-check` 运行所有 workspace 的测试与类型检查。桌面端和数据库单元测试使用 Node.js 内置测试运行器，服务端使用 Vitest。日常 CI、手动构建的验证阶段和 Release 前置检查复用相同的测试、类型检查与构建流程。
 
-```bash
-node --import tsx --test apps/desktop/src/utils/standalone-providers.test.ts apps/desktop/electron/services/update-service.test.ts
-```
+TypeScript CLI 使用 **7.0.2** 原生编译器。Vue 模板检查及 ESLint 仍需要经典 JavaScript 编译器 API，因此按 [TypeScript 官方并行安装方案](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/) 保留 `@typescript/typescript6` **6.0.2** 兼容层：`@typescript/native` 提供 `tsc`，`typescript` 别名为 Vue 与 ESLint 提供 API。不要移除这个兼容依赖，也不要跳过 `vue-tsc` 模板检查。
 
 ### 预览生产版本与生成安装包
+
+Windows x64 可以先执行可重复的本地集成验收：
+
+```bash
+pnpm build:shared
+pnpm build:database
+pnpm --filter @ai-ssh/desktop exec vite build
+pnpm --filter @ai-ssh/desktop test:windows
+```
+
+测试会启动真实 Electron，使用 `tmp/windows-validation/` 下的隔离数据目录，检查界面与重启持久化、Windows 文件路径、SSH/SFTP，以及模型接口的流式响应和取消。SSH 与模型服务只监听本机临时端口，使用临时测试凭据，不连接真实服务器或消耗模型额度。每次验收的结果 JSON 和日志保留在该目录中；这组测试不会生成或安装安装包。
+
+需要验证 Windows 安装程序时，在 GitHub Actions 手动运行 [Manual Build](./.github/workflows/manual-build.yml)，选择 `windows` 并启用测试。该流程只构建所选平台，在一次性 Windows runner 上完成安装、启动和卸载验收，再上传安装包及验收记录。当前工作区有未提交修改时，须先将要验证的版本提交并推送到所选分支；无需创建发布 tag。
 
 本地需要验证生产模式时执行以下命令，它会构建并启动桌面应用，不生成安装包：
 
@@ -213,13 +230,15 @@ node --import tsx --test apps/desktop/src/utils/standalone-providers.test.ts app
 pnpm --filter @ai-ssh/desktop run prod:desktop
 ```
 
-安装包统一通过 GitHub Actions 的 [Release 工作流](./.github/workflows/release.yml) 构建。不要在本地执行根 `pnpm build`、`pnpm build:desktop` 或 `electron-builder` 来验证普通改动。
+根 `pnpm build` 只构建共享包、数据库包与服务端。验证客户端构建可运行 `pnpm --filter @ai-ssh/desktop exec vite build`，它不会生成安装包。
+
+安装包统一通过 GitHub Actions 的 [Release 工作流](./.github/workflows/release.yml) 构建。不要在本地执行 `pnpm build:desktop`、workspace 的 `build:*` 打包脚本或 `electron-builder` 来验证普通改动。
 
 发布时先统一根目录及四个 workspace 包的版本号，更新 [CHANGELOG.md](./CHANGELOG.md)，完成测试和类型检查，再将提交及对应的 `vX.Y.Z` tag 推送到仓库。也可以在 Actions 中手动运行 Release 并输入版本号；tag 必须指向包含该版本代码的提交。
 
 构建目标为 Windows x64、macOS x64、macOS arm64、Linux x64，产物包含 Windows 安装程序、两种架构的 DMG、Linux AppImage 和 DEB，以及更新 manifest。发布后检查全部矩阵任务和附件是否齐全。
 
-GitHub 仓库 Variables 支持 `DESKTOP_VITE_API_BASE_URL`、`DESKTOP_UPDATE_REPOSITORY`、`DESKTOP_UPDATE_MANIFEST_URL`，用于写入客户端构建配置。推送 `main` 只触发常规构建，不会自动发布安装包。
+GitHub 仓库 Variables 支持 `DESKTOP_VITE_API_BASE_URL`、`DESKTOP_UPDATE_REPOSITORY`、`DESKTOP_UPDATE_MANIFEST_URL`，用于写入客户端构建配置。推送 `main` 会运行测试、类型检查、lint 和不生成安装包的构建；不会自动发布安装包。
 
 ## 常见问题
 
@@ -231,7 +250,7 @@ GitHub 仓库 Variables 支持 `DESKTOP_VITE_API_BASE_URL`、`DESKTOP_UPDATE_REP
 
 在仓库根目录执行 `pnpm build:database`，成功后重新启动桌面端。数据库包源文件变化后也需要重新构建。
 
-### 提示 `better-sqlite3`、`NODE_MODULE_VERSION` 或原生绑定错误
+### 提示 SQLite 原生绑定缺失或架构不匹配
 
 先退出所有 Electron 客户端，再执行：
 
@@ -239,18 +258,15 @@ GitHub 仓库 Variables 支持 `DESKTOP_VITE_API_BASE_URL`、`DESKTOP_UPDATE_REP
 pnpm --filter @ai-ssh/desktop run rebuild
 ```
 
-项目使用 Electron `29.4.6`，重建脚本通过 `prebuild-install` 下载对应平台和架构的绑定。这里的 `run` 不要省略，以免调用 pnpm 自带的 `rebuild` 命令。
+项目使用 Electron `45.0.0` 与 `better-sqlite3` 13。SQLite 绑定使用 Node-API，文件随 npm 包放在 `prebuilds/<platform>-<arch>.node`；无需按 Electron ABI 重新下载，也不需要本地 C++ 编译环境。脚本会校验目标架构，本机目标还会执行内存数据库查询。这里的 `run` 不要省略，以免调用 pnpm 自带的 `rebuild` 命令。
 
-Windows 下若下载时出现跨盘 `EXDEV` 错误，可在 PowerShell 中将缓存放到当前项目所在磁盘后重试：
-
-```powershell
-$env:npm_config_cache = Join-Path (Get-Location) 'node_modules/.cache/npm'
-pnpm --filter @ai-ssh/desktop run rebuild
-```
+如果绑定文件缺失，重新执行 `pnpm install --frozen-lockfile`；如果使用了 `TARGET_ARCH`，确认它与目标安装包架构一致。旧版本的 `prebuild-install` 缓存配置不再适用。
 
 ### 安装依赖时卡在 `cpu-features` 编译
 
-该模块用于 SSH 的可选 CPU 特性检测。若本地缺少编译环境，可以先跳过依赖安装脚本，再补齐独立桌面运行所需的客户端生成和原生文件：
+该模块用于 SSH 的可选 CPU 特性检测。仓库的 `pnpm-workspace.yaml` 已明确跳过 `cpu-features`、`ssh2` 和 `better-sqlite3` 的源码安装脚本，并允许 Electron 等必要依赖的安装脚本。使用固定的 pnpm 12.15.0 安装时，不需要本地 C++ 编译环境。
+
+若曾手动使用 `--ignore-scripts` 安装，可按下面的流程补齐 Electron 可执行文件、Prisma 客户端，并验证 SQLite 绑定：
 
 ```bash
 pnpm install --frozen-lockfile --ignore-scripts
@@ -259,11 +275,11 @@ pnpm build:database
 pnpm --filter @ai-ssh/desktop run rebuild
 ```
 
-此方式用于桌面端启动排查；后续使用其他需要安装脚本的依赖时，仍应单独完成相应安装。
+此方式用于桌面端启动排查；通常直接使用 `pnpm install --frozen-lockfile` 即可按仓库配置运行依赖安装脚本。
 
 ### Electron 安装不完整或没有下载可执行文件
 
-若安装时跳过了依赖脚本，可在根目录手动执行 Electron 安装脚本，然后重新准备 SQLite 绑定：
+若安装时跳过了依赖脚本，可在根目录手动执行 Electron 安装脚本，然后验证 SQLite 绑定：
 
 ```bash
 node apps/desktop/node_modules/electron/install.js
