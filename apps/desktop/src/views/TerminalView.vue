@@ -143,12 +143,30 @@
       ></div>
 
       <!-- AI助手面板 -->
-      <div v-if="!isAIAssistantMinimized" class="ai-assistant-panel">
-        <div class="ai-panel-header" title="收起AI助手">
-          <h3 class="ai-panel-title">AI 助手</h3>
+      <div
+        v-show="!isAIAssistantMinimized"
+        :id="aiPanelId"
+        ref="aiPanel"
+        class="ai-assistant-panel"
+        role="complementary"
+        aria-label="会话助手"
+      >
+        <div class="ai-panel-header">
+          <div class="ai-panel-heading">
+            <span class="ai-panel-mark" aria-hidden="true"><i class="bi bi-stars"></i></span>
+            <h3 class="ai-panel-title">会话助手</h3>
+          </div>
           <div class="ai-panel-header-actions">
-            <button class="btn-icon" title="收起AI助手" @click="minimizeAIAssistant">
-              <i class="bi bi-chevron-right"></i>
+            <button
+              type="button"
+              class="btn-icon ai-panel-collapse"
+              title="收起AI助手"
+              aria-label="收起 AI 助手，展开终端"
+              :aria-controls="aiPanelId"
+              :aria-expanded="!isAIAssistantMinimized"
+              @click="minimizeAIAssistant"
+            >
+              <i class="bi bi-chevron-right" aria-hidden="true"></i>
             </button>
           </div>
         </div>
@@ -165,13 +183,18 @@
       </div>
 
       <button
-        v-else
+        v-if="isAIAssistantMinimized"
+        ref="aiLauncher"
+        type="button"
         class="ai-assistant-floating-toggle"
         title="展开AI助手"
+        aria-label="展开 AI 助手"
+        :aria-controls="aiPanelId"
+        :aria-expanded="!isAIAssistantMinimized"
         @click="expandAIAssistant"
       >
         <span class="ai-floating-toggle-label">AI 助手</span>
-        <i class="bi bi-chevron-left"></i>
+        <i class="bi bi-chevron-left" aria-hidden="true"></i>
       </button>
     </div>
 
@@ -197,7 +220,8 @@ import {
   watch,
   computed,
   nextTick,
-  inject
+  inject,
+  useId
 } from 'vue'
 import { useRoute } from 'vue-router'
 import { Terminal } from '@xterm/xterm'
@@ -323,6 +347,9 @@ const terminalDataDisposable = ref<any>(null) // 保存 terminal.onData 的 disp
 const terminalSessionId = ref<string>('terminal-' + Date.now()) // 终端会话ID
 const showAIAssistant = ref(true) // AI助手面板显示状态
 const isAIAssistantMinimized = ref(false)
+const aiPanelId = `session-assistant-${useId()}`
+const aiPanel = ref<HTMLElement | null>(null)
+const aiLauncher = ref<HTMLButtonElement | null>(null)
 const showServerEnvDocEditor = ref(false) // 服务器环境文档编辑器显示状态
 const currentProvider = ref<any>(null) // 当前 AI provider
 const currentModel = ref<any>(null) // 当前 AI model
@@ -507,7 +534,8 @@ const handleResize = () => {
           lastRemoteDimensions?.id === connId &&
           lastRemoteDimensions.cols === dims.cols &&
           lastRemoteDimensions.rows === dims.rows
-        ) return
+        )
+          return
         const requested = { id: connId, cols: dims.cols, rows: dims.rows }
         lastRemoteDimensions = requested
         window.electronAPI.ssh.resize(connId, dims.cols, dims.rows).catch(err => {
@@ -636,13 +664,15 @@ const setRemoteEditStatus = (
 }
 
 const normalizeTerminalSelection = (selection: string) => {
-  return selection
-    // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
-    .replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '')
-    // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
-    .replace(/\x1B\][^\x07]*\x07/g, '')
-    .replace(/\r/g, '')
-    .trim()
+  return (
+    selection
+      // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
+      .replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '')
+      // eslint-disable-next-line no-control-regex -- Strip terminal ANSI/control sequences from SSH output.
+      .replace(/\x1B\][^\x07]*\x07/g, '')
+      .replace(/\r/g, '')
+      .trim()
+  )
 }
 
 const sanitizeRemoteSelectionToPath = (selection: string) => {
@@ -1013,12 +1043,16 @@ const handleReconnect = async (options: { silent?: boolean } = {}) => {
   }
 }
 
-const minimizeAIAssistant = () => {
+const minimizeAIAssistant = async () => {
   isAIAssistantMinimized.value = true
+  await nextTick()
+  aiLauncher.value?.focus({ preventScroll: true })
 }
 
-const expandAIAssistant = () => {
+const expandAIAssistant = async () => {
   isAIAssistantMinimized.value = false
+  await nextTick()
+  aiPanel.value?.querySelector<HTMLTextAreaElement>('textarea')?.focus({ preventScroll: true })
 }
 
 const handleConnectionStatusClick = async () => {
@@ -1494,6 +1528,9 @@ onBeforeUnmount(() => {
   flex-direction: column;
   height: 100%;
   background-color: var(--vscode-bg);
+  min-width: 0;
+  min-height: 0;
+  container-type: inline-size;
 }
 
 .terminal-main {
@@ -1564,12 +1601,17 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 .connection-name {
   font-size: 13px;
   font-weight: 500;
   color: var(--vscode-fg);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .status-badge {
@@ -1580,6 +1622,7 @@ onBeforeUnmount(() => {
   border-radius: 3px;
   font-size: 11px;
   font-weight: 500;
+  flex-shrink: 0;
 }
 
 .status-badge.clickable {
@@ -1634,7 +1677,9 @@ onBeforeUnmount(() => {
   color: var(--vscode-fg-muted);
   cursor: pointer;
   border-radius: 3px;
-  transition: all 0.15s ease;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out;
 }
 
 .btn-icon:hover {
@@ -1655,6 +1700,8 @@ onBeforeUnmount(() => {
   flex: 1;
   display: flex;
   overflow: hidden;
+  min-width: 0;
+  min-height: 0;
 }
 
 .terminal-container {
@@ -1662,17 +1709,19 @@ onBeforeUnmount(() => {
   padding: 0 0;
   overflow: hidden;
   background-color: var(--vscode-terminal-background);
-  transition: flex 0.3s ease;
+  min-width: 0;
+  min-height: 0;
 }
 
 .terminal-container.with-ai-panel {
-  flex: 0.6;
+  flex: 1;
 }
 
 /* AI 助手面板样式 */
 .ai-assistant-panel {
-  flex: 0.4;
-  min-width: 0;
+  flex: 0 0 clamp(320px, 40%, 460px);
+  width: clamp(320px, 40%, 460px);
+  min-width: 320px;
   min-height: 0;
   border-left: 1px solid var(--vscode-border);
   background-color: var(--vscode-bg);
@@ -1685,19 +1734,85 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
+  min-height: 45px;
+  flex: 0 0 auto;
+  gap: 10px;
+  padding: 7px 10px 7px 13px;
   border-bottom: 1px solid var(--vscode-border);
+}
+
+.ai-panel-heading {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex-shrink: 0;
+  gap: 7px;
+}
+
+.ai-panel-mark {
+  display: inline-flex;
+  align-items: center;
+  color: var(--vscode-accent);
+  font-size: 15px;
 }
 
 .ai-panel-title {
   margin: 0;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .ai-panel-header-actions {
   display: flex;
   gap: 4px;
+  align-items: center;
+  min-width: 0;
+}
+
+.ai-panel-collapse {
+  flex-shrink: 0;
+  border-radius: 8px;
+  touch-action: manipulation;
+}
+
+.ai-panel-collapse:focus-visible,
+.ai-assistant-floating-toggle:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 3px;
+}
+
+@container (max-width: 720px) {
+  .terminal-main {
+    flex-direction: column;
+  }
+
+  .terminal-view .terminal-container {
+    flex: 1 1 0;
+  }
+
+  .terminal-view .ai-assistant-panel {
+    flex: 0 1 56%;
+    min-height: min(360px, 80%);
+    width: 100%;
+    min-width: 0;
+    border-left: 0;
+    border-top: 1px solid var(--vscode-border);
+  }
+
+  .ai-panel-collapse > i {
+    transform: rotate(90deg);
+  }
+}
+
+@container (max-width: 420px) {
+  .ai-panel-header {
+    gap: 8px;
+    padding-left: 11px;
+  }
+  .ai-panel-heading {
+    gap: 6px;
+  }
 }
 
 .ai-assistant-floating-toggle {

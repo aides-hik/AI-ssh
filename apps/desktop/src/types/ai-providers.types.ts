@@ -20,6 +20,15 @@ export interface AIProvider {
   config?: Record<string, any>
 }
 
+export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+export interface ModelReasoningConfig {
+  protocol: 'openai' | 'openrouter' | 'deepseek' | 'qwen' | 'gemini'
+  supportedEfforts?: ReasoningEffort[]
+  supportsToggle?: boolean
+  mandatory?: boolean
+}
+
 export interface AIModel {
   id: string
   name: string
@@ -42,6 +51,8 @@ export interface AIModel {
   recommended?: boolean
   enabled?: boolean // 是否启用该模型（默认启用）
   isCustom?: boolean // 是否为用户手动添加的模型
+  // Optional capabilities reported by the model service; false explicitly disables adjustment.
+  reasoning?: ModelReasoningConfig | false
 }
 
 // 默认服务商配置允许携带预置 API Key 和额外配置

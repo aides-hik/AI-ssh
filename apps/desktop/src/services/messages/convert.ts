@@ -7,12 +7,17 @@ export type ModelMessage = {
   tool_calls?: Array<{
     id: string
     type: 'function'
+    extra_content?: Record<string, unknown>
     function: {
       name: string
       arguments: string
     }
   }>
   tool_call_id?: string
+  // Provider reasoning state stays in memory, outside visible and persisted chat history.
+  reasoning_content?: string
+  reasoning_details?: Array<Record<string, unknown>>
+  responseItems?: Array<Record<string, unknown>>
   index?: number
 }
 

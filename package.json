@@ -1,6 +1,6 @@
 {
   "name": "ai-ssh-assistant",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Prism — AI-powered SSH workspace",
   "private": true,
   "workspaces": [

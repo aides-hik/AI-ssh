@@ -1,6 +1,6 @@
 {
   "name": "@ai-ssh/desktop",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Prism Desktop Application",
   "main": "dist-electron/main/index.js",
   "private": true,

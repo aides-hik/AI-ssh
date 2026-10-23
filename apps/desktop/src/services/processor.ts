@@ -15,6 +15,7 @@ import type { ModelMessage } from './messages/convert'
 import type { ChatMessage, StreamChunk } from './llm'
 import { createLLMSession } from './llm'
 import type { AIProvider, AIModel } from '@/types/ai-providers'
+import type { ReasoningSelection } from '../utils/model-reasoning'
 
 // 流式处理器配置
 export interface ProcessorConfig {
@@ -25,6 +26,7 @@ export interface ProcessorConfig {
   connectionId?: string
   serverEnvDocId?: string
   abortSignal?: AbortSignal
+  reasoning?: ReasoningSelection
   onEvent?: (event: StreamEvent) => void
   onToolExecute?: (toolName: string, input: any) => Promise<{ output: string }>
 }
@@ -42,7 +44,7 @@ export interface ProcessorResult {
 
 // 会话状态
 interface SessionState {
-  toolCalls: Map<string, { name: string; input: any }>
+  toolCalls: Map<string, { name: string; input: any; extraContent?: Record<string, unknown> }>
   aborted: boolean
   stepCount: number
 }
@@ -58,7 +60,18 @@ export class SessionProcessor {
   private messages: ModelMessage[]
 
   constructor(config: ProcessorConfig, onProgress?: (msg: string) => void) {
-    this.config = config
+    this.config = {
+      ...config,
+      provider: { ...config.provider, config: config.provider.config ? { ...config.provider.config } : undefined },
+      model: {
+        ...config.model,
+        reasoning: config.model.reasoning ? {
+          ...config.model.reasoning,
+          supportedEfforts: config.model.reasoning.supportedEfforts ? [...config.model.reasoning.supportedEfforts] : undefined
+        } : config.model.reasoning
+      },
+      reasoning: config.reasoning ?? 'default'
+    }
     this.messages = [...config.messages]
     this.state = {
       toolCalls: new Map(),
@@ -117,14 +130,26 @@ export class SessionProcessor {
     toolCalls?: Array<{ callId: string; name: string; input: any }>
   }> {
     let accumulatedText = ''
+    let accumulatedReasoning = ''
+    const responseItems: Array<Record<string, unknown>> = []
+    const reasoningDetails: Array<Record<string, unknown>> = []
 
-    const iterator = this.llmStream()
-    let result = await iterator.next()
-
-    while (!result.done && !this.state.aborted) {
-      const chunk = result.value
+    for await (const chunk of this.llmStream()) {
+      if (this.state.aborted) break
 
       switch (chunk.type) {
+        case 'reasoning':
+          accumulatedReasoning += chunk.content || ''
+          break
+
+        case 'reasoning-details':
+          if (chunk.reasoningDetails) reasoningDetails.push(...chunk.reasoningDetails)
+          break
+
+        case 'response-item':
+          if (chunk.responseItem) responseItems.push(chunk.responseItem)
+          break
+
         case 'text':
           accumulatedText += chunk.content || ''
           this.emit({ type: 'text-delta', delta: chunk.content || '' })
@@ -133,7 +158,8 @@ export class SessionProcessor {
         case 'tool-call':
           this.state.toolCalls.set(chunk.toolCallId!, {
             name: chunk.toolName!,
-            input: chunk.toolInput
+            input: chunk.toolInput,
+            extraContent: chunk.toolExtraContent
           })
           this.emit({
             type: 'tool-call',
@@ -151,6 +177,7 @@ export class SessionProcessor {
             const toolCallsArray = Array.from(this.state.toolCalls.entries()).map(([id, tc]) => ({
               id: id,
               type: 'function' as const,
+              ...(tc.extraContent ? { extra_content: tc.extraContent } : {}),
               function: {
                 name: tc.name,
                 arguments: typeof tc.input === 'string' ? tc.input : JSON.stringify(tc.input)
@@ -161,6 +188,9 @@ export class SessionProcessor {
             this.messages.push({
               role: 'assistant',
               content: accumulatedText,
+              ...(accumulatedReasoning ? { reasoning_content: accumulatedReasoning } : {}),
+              ...(reasoningDetails.length ? { reasoning_details: reasoningDetails } : {}),
+              ...(responseItems.length ? { responseItems } : {}),
               tool_calls: toolCallsArray
             })
 
@@ -174,10 +204,13 @@ export class SessionProcessor {
             return { finish: 'tool-calls', toolCalls }
           }
 
-          if (accumulatedText) {
+          if (accumulatedText || responseItems.length || reasoningDetails.length) {
             this.messages.push({
               role: 'assistant',
-              content: accumulatedText
+              content: accumulatedText,
+              ...(accumulatedReasoning ? { reasoning_content: accumulatedReasoning } : {}),
+              ...(reasoningDetails.length ? { reasoning_details: reasoningDetails } : {}),
+              ...(responseItems.length ? { responseItems } : {})
             })
           }
 
@@ -185,7 +218,6 @@ export class SessionProcessor {
           return { finish: 'stop' }
       }
 
-      result = await iterator.next()
     }
 
     return { finish: 'stop' }
@@ -195,6 +227,7 @@ export class SessionProcessor {
     toolCalls: Array<{ callId: string; name: string; input: any }>
   ): Promise<void> {
     for (const tc of toolCalls) {
+      this.throwIfAborted()
       this.emit({
         type: 'tool-call',
         toolCallId: tc.callId,
@@ -257,6 +290,15 @@ export class SessionProcessor {
         })
       }
     }
+    this.throwIfAborted()
+  }
+
+  private throwIfAborted(): void {
+    if (!this.state.aborted && !this.config.abortSignal?.aborted) return
+    this.state.aborted = true
+    const error = new Error('Request aborted')
+    error.name = 'AbortError'
+    throw error
   }
 
   private async *llmStream(): AsyncGenerator<StreamChunk, void, unknown> {
@@ -269,7 +311,8 @@ export class SessionProcessor {
       this.config.connectionId || '',
       msg => this.onProgress?.(msg),
       this.config.serverEnvDocId,
-      this.config.abortSignal
+      this.config.abortSignal,
+      this.config.reasoning
     )
 
     yield* session.stream(messages)
@@ -286,6 +329,7 @@ export class SessionProcessor {
         chatMsg.tool_calls = msg.tool_calls.map(tc => ({
           id: tc.id,
           type: tc.type,
+          ...(tc.extra_content ? { extra_content: tc.extra_content } : {}),
           function: tc.function
         }))
       }
@@ -293,6 +337,9 @@ export class SessionProcessor {
       if (msg.tool_call_id) {
         chatMsg.tool_call_id = msg.tool_call_id
       }
+      if (msg.reasoning_content !== undefined) chatMsg.reasoning_content = msg.reasoning_content
+      if (msg.reasoning_details) chatMsg.reasoning_details = msg.reasoning_details
+      if (msg.responseItems) chatMsg.responseItems = msg.responseItems
 
       return chatMsg
     })

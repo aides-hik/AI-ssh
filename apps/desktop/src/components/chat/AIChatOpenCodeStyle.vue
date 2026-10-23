@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { marked } from 'marked'
 
 import { settingsService } from '@/services/settings.service'
@@ -8,7 +10,6 @@ import { docStorageService } from '@/services/doc-storage.service'
 import { SSH_TOOLS } from '@/services/tools/ssh-tools'
 import { Message as V2Message, createAssistantMessage, type ToolPart, type TextPart } from '@/services/messages/message'
 import {
-  toModelMessages,
   fromUserMessage,
   filterValidMessages,
   filterCompactedMessages,
@@ -16,7 +17,16 @@ import {
   updateToolResult
 } from '@/services/messages/convert'
 import { SessionProcessor } from '@/services/processor'
+import { ProcessorHistory } from '@/services/messages/processor-history'
 import type { AIProvider, AIModel } from '@/types/ai-providers'
+import ReasoningSlider from './ReasoningSlider.vue'
+import {
+  getReasoningCapability,
+  normalizeReasoningSelection,
+  readReasoningPreferences,
+  reasoningPreferenceKey,
+  type ReasoningSelection
+} from '@/utils/model-reasoning'
 
 const props = defineProps<{
   currentProvider: AIProvider | null
@@ -31,26 +41,76 @@ const emit = defineEmits<{
   openServerEnvDoc: []
 }>()
 
-const PLACEHOLDERS = [
-  'What would you like to do?',
-  'Execute a shell command',
-  'Read a file',
-  'List directory contents',
-  'Deploy your application',
-  'Check system status'
-]
+const { locale } = useI18n()
+const router = useRouter()
+const ui = computed(() => locale.value.startsWith('zh') ? {
+  context: '当前主机', noConnection: '尚未连接主机', configure: '配置模型',
+  emptyTitle: '从一个问题开始', emptyText: '排查报错、解释命令，或一起梳理下一步。',
+  placeholder: '描述问题，或粘贴终端输出…', draftPlaceholder: '继续补充，当前回复结束后可发送…',
+  promptHint: '选择一个起点，编辑后发送', user: '你', assistant: 'Prism',
+  older: '加载更早的消息', latest: '回到最新', thinking: '处理中', done: '已完成',
+  failed: '未完成', stopped: '已停止', send: '发送消息', stop: '停止生成', stopping: '正在停止',
+  copy: '复制', copied: '已复制', details: '展开或收起过程', model: '选择模型',
+  sendHint: '发送', newlineHint: '换行', environment: '环境文档',
+  connectionHint: '连接主机后，AI 可以协助处理当前终端的问题。',
+  modelHint: '先配置模型服务，再开始对话。'
+} : {
+  context: 'Current host', noConnection: 'No host connected', configure: 'Configure model',
+  emptyTitle: 'Start with a question', emptyText: 'Troubleshoot an error, explain a command, or plan your next step.',
+  placeholder: 'Ask a question or paste terminal output…', draftPlaceholder: 'Draft your next message while the response finishes…',
+  promptHint: 'Choose a starting point, then edit and send', user: 'You', assistant: 'Prism',
+  older: 'Load earlier messages', latest: 'Back to latest', thinking: 'Working', done: 'Complete',
+  failed: 'Incomplete', stopped: 'Stopped', send: 'Send message', stop: 'Stop generating', stopping: 'Stopping',
+  copy: 'Copy', copied: 'Copied', details: 'Toggle process details', model: 'Choose model',
+  sendHint: 'send', newlineHint: 'new line', environment: 'Environment',
+  connectionHint: 'Connect a host so AI can help with this terminal.',
+  modelHint: 'Configure a model service to start chatting.'
+})
+const quickPrompts = computed(() => locale.value.startsWith('zh') ? [
+  { icon: 'bi-activity', title: '检查主机状态', prompt: '请检查当前主机的 CPU、内存、磁盘和运行中的服务，先给出只读检查结果。' },
+  { icon: 'bi-terminal', title: '分析终端报错', prompt: '请帮我分析这段终端输出，说明原因并给出排查步骤：\n' },
+  { icon: 'bi-list-check', title: '梳理部署步骤', prompt: '请帮我梳理部署步骤，先确认环境和依赖，不要直接修改服务器。我的项目是：\n' }
+] : [
+  { icon: 'bi-activity', title: 'Check host health', prompt: 'Check CPU, memory, disk, and running services on this host. Start with read-only observations.' },
+  { icon: 'bi-terminal', title: 'Explain an error', prompt: 'Help me understand this terminal output and suggest troubleshooting steps:\n' },
+  { icon: 'bi-list-check', title: 'Plan a deployment', prompt: 'Help me plan a deployment. Check the environment and dependencies first, without changing the server. My project is:\n' }
+])
+const hasModel = computed(() => Boolean(props.currentProvider && props.currentModel))
+const modelLabel = computed(() => props.currentModel?.name || props.currentModel?.id || ui.value.model)
+const REASONING_PREFERENCES_KEY = 'prism.reasoning-preferences.v1'
+const reasoningPreferences = ref<Record<string, ReasoningSelection>>({})
+try {
+  reasoningPreferences.value = readReasoningPreferences(localStorage.getItem(REASONING_PREFERENCES_KEY))
+} catch { /* Storage may be unavailable; session-only preferences still work. */ }
+const reasoningCapability = computed(() => getReasoningCapability(props.currentProvider, props.currentModel))
+const reasoningSelection = computed<ReasoningSelection>({
+  get() {
+    const { currentProvider, currentModel } = props
+    if (!currentProvider || !currentModel) return 'default'
+    return normalizeReasoningSelection(reasoningCapability.value, reasoningPreferences.value[reasoningPreferenceKey(currentProvider, currentModel)])
+  },
+  set(value) {
+    const { currentProvider, currentModel } = props
+    if (isGenerating.value || !currentProvider || !currentModel) return
+    reasoningPreferences.value[reasoningPreferenceKey(currentProvider, currentModel)] = normalizeReasoningSelection(reasoningCapability.value, value)
+    try {
+      localStorage.setItem(REASONING_PREFERENCES_KEY, JSON.stringify(reasoningPreferences.value))
+    } catch { /* Keep the current session usable when storage is full or blocked. */ }
+  }
+})
 
 const inputMessage = ref('')
 const isGenerating = ref(false)
+const activeAssistantId = ref<string | null>(null)
 const isStopping = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
 const messages = ref<V2Message[]>([])
+const processorHistory = new ProcessorHistory()
 const error = ref<any>(null)
 const abortController = ref<AbortController | null>(null)
 const expandedTools = ref<Set<string>>(new Set())
 const expandedTurns = ref<Set<string>>(new Set())
 const visibleCount = ref(5)
-const loadMoreRef = ref<HTMLElement | null>(null)
 const isLoadingMore = ref(false)
 const copiedId = ref<string | null>(null)
 const responseCopied = ref(false)
@@ -80,13 +140,15 @@ const stopRequested = ref(false)
 const interruptionState = ref<InterruptionState | null>(null)
 const durationInterval = ref<number | null>(null)
 const sessionStartTime = ref<number | null>(null)
-const placeholderIndex = ref(0)
 const inputRef = ref<HTMLTextAreaElement | null>(null)
+const followLatest = ref(true)
+let scrollFrame = 0
+let viewportObserver: ResizeObserver | null = null
 const serverEnvMenuOpen = ref(false)
 const serverEnvMenuRef = ref<HTMLElement | null>(null)
 
-const INPUT_MIN_HEIGHT = 48
-const INPUT_MAX_HEIGHT = 104
+const INPUT_MIN_HEIGHT = 64
+const INPUT_MAX_HEIGHT = 176
 
 interface TodoItem {
   id: string
@@ -182,6 +244,10 @@ const displayMessages = computed<DisplayMessage[]>(() => {
   }))
   return mapped
 })
+
+const earlierMessageCount = computed(() => Math.max(0,
+  messages.value.filter(msg => msg.info.role === 'user' || msg.info.role === 'assistant').length - visibleCount.value
+))
 
 const currentConnectionDisplay = computed(() => {
   const connection = cachedConnection.value
@@ -359,27 +425,27 @@ const debugToolChain = computed(() => {
   }))
 })
 
-watch(displayMessages, () => {
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-  }
-})
+watch(displayMessages, () => scrollToBottom(), { flush: 'post' })
 
 onMounted(() => {
   nextTick(() => {
     resizeInputHeight()
   })
 
-  setupInfiniteScroll()
-  startDurationTimer()
-  startPlaceholderRotation()
+  viewportObserver = new ResizeObserver(() => {
+    if (messagesContainer.value?.clientHeight) scrollToBottom()
+  })
+  if (messagesContainer.value) viewportObserver.observe(messagesContainer.value)
+
   document.addEventListener('pointerdown', handlePointerDownOutsideMenu)
   void refreshSessionContext()
 })
 
 onUnmounted(() => {
   stopDurationTimer()
-  stopPlaceholderRotation()
+  viewportObserver?.disconnect()
+  if (scrollFrame) cancelAnimationFrame(scrollFrame)
+  abortController.value?.abort()
   document.removeEventListener('pointerdown', handlePointerDownOutsideMenu)
 })
 
@@ -398,17 +464,9 @@ watch(inputMessage, () => {
   })
 })
 
-function startPlaceholderRotation() {
-  setInterval(() => {
-    placeholderIndex.value = (placeholderIndex.value + 1) % PLACEHOLDERS.length
-  }, 4000)
-}
-
-function stopPlaceholderRotation() {
-  // Timer will be cleaned up by Vue
-}
-
 function startDurationTimer() {
+  stopDurationTimer()
+  sessionDuration.value = ''
   sessionStartTime.value = Date.now()
   durationInterval.value = window.setInterval(() => {
     if (sessionStartTime.value) {
@@ -428,30 +486,21 @@ function startDurationTimer() {
 function stopDurationTimer() {
   if (durationInterval.value) {
     clearInterval(durationInterval.value)
+    durationInterval.value = null
   }
 }
 
-function setupInfiniteScroll() {
-  const observer = new IntersectionObserver(
-    entries => {
-      if (
-        entries[0].isIntersecting &&
-        visibleCount.value <
-          messages.value.filter(m => m.info.role === 'user' || m.info.role === 'assistant').length
-      ) {
-        isLoadingMore.value = true
-        setTimeout(() => {
-          visibleCount.value += 5
-          isLoadingMore.value = false
-        }, 500)
-      }
-    },
-    { threshold: 0.1 }
-  )
-
-  if (loadMoreRef.value) {
-    observer.observe(loadMoreRef.value)
-  }
+async function loadEarlierMessages() {
+  const container = messagesContainer.value
+  if (!container || isLoadingMore.value) return
+  const previousHeight = container.scrollHeight
+  const previousTop = container.scrollTop
+  followLatest.value = false
+  isLoadingMore.value = true
+  visibleCount.value += 10
+  await nextTick()
+  container.scrollTop = previousTop + container.scrollHeight - previousHeight
+  isLoadingMore.value = false
 }
 
 function extractTodos(part: ToolPart): TodoItem[] {
@@ -530,12 +579,28 @@ async function sendMessageWithTools(content: string) {
     throw new Error('未建立 SSH 连接')
   }
 
+  // Keep every tool round on the model and reasoning level chosen when Send was pressed.
+  const requestProvider: AIProvider = { ...props.currentProvider }
+  const requestModel: AIModel = {
+    ...props.currentModel,
+    capabilities: { ...props.currentModel.capabilities },
+    reasoning: props.currentModel.reasoning ? {
+      ...props.currentModel.reasoning,
+      supportedEfforts: props.currentModel.reasoning.supportedEfforts ? [...props.currentModel.reasoning.supportedEfforts] : undefined
+    } : props.currentModel.reasoning
+  }
+  const requestReasoning = reasoningSelection.value
+  const requestConnectionId = props.connectionId
+  const requestSessionId = props.sessionId
+  const requestEnvDocId = props.serverEnvDocId
+
   isGenerating.value = true
   error.value = null
   abortController.value = new AbortController()
+  const requestSignal = abortController.value.signal
   stopRequested.value = false
   interruptionState.value = null
-  sessionStartTime.value = Date.now()
+  startDurationTimer()
   performanceMetrics.value = {
     prepMs: null,
     firstResponseMs: null,
@@ -560,21 +625,24 @@ async function sendMessageWithTools(content: string) {
     {
       const settings = await settingsService.getSettings()
       const providerConfig = (settings?.aiProviders || []).find(
-        (p: any) => p.id === props.currentProvider?.id
+        (p: any) => p.id === requestProvider.id
       )
-      if (!providerConfig?.apiKey && props.currentProvider?.id !== 'ollama') {
+      if (!providerConfig?.apiKey && requestProvider.id !== 'ollama') {
         throw new Error('未找到 API 密钥配置')
       }
+      requestProvider.apiKey = providerConfig?.apiKey || requestProvider.apiKey
     }
+    requestSignal.throwIfAborted()
 
     const userMsg = fromUserMessage(content)
     messages.value.push(userMsg)
 
     await nextTick()
-    scrollToBottom()
+    scrollToBottom(true)
 
-    const serverEnvDocId = props.serverEnvDocId || props.connectionId || ''
-    await refreshSessionContext()
+    const serverEnvDocId = requestEnvDocId || requestConnectionId
+    await refreshSessionContext(false, requestConnectionId)
+    requestSignal.throwIfAborted()
     const currentConnection = cachedConnection.value
     const serverEnvDoc = cachedServerEnvDoc.value
     setStatus('thinking', '正在分析你的请求')
@@ -595,7 +663,11 @@ async function sendMessageWithTools(content: string) {
         role: 'system' as const,
         content: buildSystemPrompt(currentConnection, serverEnvDoc, serverEnvDocId)
       },
-      ...toModelMessages(compactedMessages)
+      ...processorHistory.toModelMessages(
+        compactedMessages,
+        JSON.stringify([requestProvider.id, requestProvider.endpoint, requestModel.id, requestConnectionId, requestSessionId]),
+        true // Missing or interrupted tool state is summarized instead of replaying incomplete calls.
+      )
     ]
     performanceMetrics.value.prepMs = Date.now() - requestStartedAt
 
@@ -605,11 +677,12 @@ async function sendMessageWithTools(content: string) {
       {
         messages: modelMessages,
         tools: SSH_TOOLS,
-        provider: props.currentProvider!,
-        model: props.currentModel!,
-        connectionId: props.connectionId,
+        provider: requestProvider,
+        model: requestModel,
+        reasoning: requestReasoning,
+        connectionId: requestConnectionId,
         serverEnvDocId,
-        abortSignal: abortController.value?.signal,
+        abortSignal: requestSignal,
         onEvent: event => {
           switch (event.type) {
             case 'start':
@@ -638,10 +711,11 @@ async function sendMessageWithTools(content: string) {
                 currentMsg = createAssistantMessage(
                   `msg_${Date.now()}`,
                   userMsg.info.id,
-                  props.sessionId,
+                  requestSessionId,
                   'ssh-agent'
                 )
                 messages.value.push(currentMsg)
+                activeAssistantId.value = currentMsg.info.id
               }
               appendAssistantTextBlock(currentMsg, event.delta)
               const activeMsg = currentMsg
@@ -668,7 +742,6 @@ async function sendMessageWithTools(content: string) {
               if (slowExecutionTimer) {
                 clearTimeout(slowExecutionTimer)
               }
-              performanceMetrics.value.toolCalls += 1
               slowExecutionTimer = window.setTimeout(() => {
                 if (
                   isGenerating.value &&
@@ -685,10 +758,11 @@ async function sendMessageWithTools(content: string) {
                 currentMsg = createAssistantMessage(
                   `msg_${Date.now()}`,
                   userMsg.info.id,
-                  props.sessionId,
+                  requestSessionId,
                   'ssh-agent'
                 )
                 messages.value.push(currentMsg)
+                activeAssistantId.value = currentMsg.info.id
               }
               // 检查是否已存在相同的 tool call
               const existingToolPart = currentMsg.parts.find(
@@ -697,6 +771,7 @@ async function sendMessageWithTools(content: string) {
               if (existingToolPart) {
                 break
               }
+              performanceMetrics.value.toolCalls += 1
               const tp: ToolPart = {
                 type: 'tool',
                 tool: event.toolName,
@@ -724,7 +799,7 @@ async function sendMessageWithTools(content: string) {
               if (idx !== -1) messages.value[idx] = completed
               currentMsg = completed
               if (event.output.output.includes('已更新文档内容')) {
-                void refreshSessionContext(true)
+                void refreshSessionContext(true, requestConnectionId)
               }
               messages.value = [...messages.value]
               scrollToBottom()
@@ -801,14 +876,14 @@ async function sendMessageWithTools(content: string) {
           if (!tool) throw new Error(`Unknown tool: ${toolName}`)
           const info = await tool.init()
           return await info.execute(input, {
-            sessionID: props.sessionId || '',
+            sessionID: requestSessionId || '',
             messageID: '',
             agent: 'ssh-agent',
-            abort: abortController.value?.signal || new AbortController().signal,
+            abort: requestSignal,
             metadata: () => ({}),
             extra: {
-              connectionId: props.connectionId,
-              serverEnvDocId: props.serverEnvDocId || ''
+              connectionId: requestConnectionId,
+              serverEnvDocId: requestEnvDocId || ''
             }
           })
         }
@@ -816,7 +891,11 @@ async function sendMessageWithTools(content: string) {
       () => {}
     )
 
-    await processor.process()
+    const result = await processor.process()
+    const completedAssistant = currentMsg as V2Message | null
+    if (!requestSignal.aborted && completedAssistant && result.messages) {
+      processorHistory.remember(completedAssistant.info.id, result.messages)
+    }
   } catch (err: any) {
     const wasAborted =
       stopRequested.value ||
@@ -849,6 +928,7 @@ async function sendMessageWithTools(content: string) {
   } finally {
     isGenerating.value = false
     isStopping.value = false
+    stopDurationTimer()
     abortController.value = null
     if (slowThinkingTimer) clearTimeout(slowThinkingTimer)
     if (slowExecutionTimer) clearTimeout(slowExecutionTimer)
@@ -963,10 +1043,8 @@ function logPerformanceSummary(result: 'success' | 'error' | 'aborted') {
   void result
 }
 
-async function refreshSessionContext(force = false) {
+async function refreshSessionContext(force = false, connectionId = props.connectionId) {
   if (cacheLoading.value) return
-
-  const connectionId = props.connectionId
 
   if (!connectionId) {
     cachedConnection.value = null
@@ -974,7 +1052,7 @@ async function refreshSessionContext(force = false) {
     return
   }
 
-  if (!force && cachedConnection.value && cachedServerEnvDoc.value !== null) {
+  if (!force && cachedConnection.value?.id === connectionId && cachedServerEnvDoc.value !== null) {
     sessionContextStats.value = {
       connectionSource: 'cache',
       envDocSource: 'cache',
@@ -1111,6 +1189,7 @@ function buildSystemPrompt(
 
 async function handleSendMessage() {
   if (!inputMessage.value.trim() || isGenerating.value) return
+  activeAssistantId.value = null
 
   if (!props.currentProvider || !props.currentModel || !props.connectionId) {
     const message = !props.currentProvider || !props.currentModel
@@ -1124,6 +1203,7 @@ async function handleSendMessage() {
 
   const content = inputMessage.value.trim()
   inputMessage.value = ''
+  inputRef.value?.focus()
   try {
     await sendMessageWithTools(content)
   } catch (cause: unknown) {
@@ -1139,11 +1219,17 @@ async function handleSendMessage() {
   }
   nextTick(() => {
     resizeInputHeight()
-    inputRef.value?.focus()
   })
 }
 
 function handleInputKeydown(event: KeyboardEvent) {
+  if (event.isComposing || event.keyCode === 229) return
+  if (event.key === 'Escape' && serverEnvMenuOpen.value) {
+    event.preventDefault()
+    serverEnvMenuOpen.value = false
+    serverEnvMenuRef.value?.querySelector<HTMLButtonElement>('button')?.focus()
+    return
+  }
   if (
     event.key === 'Enter' &&
     !event.shiftKey &&
@@ -1166,12 +1252,9 @@ function resizeInputHeight() {
   input.style.overflowY = input.scrollHeight > INPUT_MAX_HEIGHT ? 'auto' : 'hidden'
 }
 
-function openServerEnvMenu() {
-  serverEnvMenuOpen.value = true
-}
-
 function closeServerEnvMenu() {
   serverEnvMenuOpen.value = false
+  serverEnvMenuRef.value?.querySelector<HTMLButtonElement>('button')?.focus()
 }
 
 function openServerEnvDoc() {
@@ -1221,12 +1304,46 @@ function handlePointerDownOutsideMenu(event: PointerEvent) {
   serverEnvMenuOpen.value = false
 }
 
-function scrollToBottom() {
-  nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-    }
+function handleMessagesScroll() {
+  const container = messagesContainer.value
+  if (!container) return
+  followLatest.value = container.scrollHeight - container.scrollTop - container.clientHeight < 56
+}
+
+function scrollToBottom(force = false) {
+  if (force) followLatest.value = true
+  if (!followLatest.value || scrollFrame) return
+  scrollFrame = requestAnimationFrame(() => {
+    scrollFrame = 0
+    if (!followLatest.value) return
+    const container = messagesContainer.value
+    if (container) container.scrollTop = container.scrollHeight
   })
+}
+
+function useQuickPrompt(prompt: string) {
+  inputMessage.value = inputMessage.value.trim() ? `${inputMessage.value}\n\n${prompt}` : prompt
+  nextTick(() => {
+    inputRef.value?.focus()
+    inputRef.value?.setSelectionRange(inputMessage.value.length, inputMessage.value.length)
+  })
+}
+
+function openModelSettings() {
+  void router.push({ path: '/settings', query: { section: 'ai-providers' } })
+}
+
+function messageStatus(msg: DisplayMessage): { label: string; kind: string } | null {
+  if (msg.role !== 'assistant') return null
+  if (msg.id === activeAssistantId.value) {
+    if (isGenerating.value) return { label: isStopping.value ? ui.value.stopping : ui.value.thinking, kind: 'info' }
+    if (currentStage.value === 'error') return { label: ui.value.failed, kind: 'error' }
+    if (currentStage.value === 'stopped') return { label: ui.value.stopped, kind: 'muted' }
+  }
+  if (msg.blocks.some(block => block.type === 'tool' && block.toolPart.state.status === 'error')) {
+    return { label: ui.value.failed, kind: 'error' }
+  }
+  return msg.finish === 'stop' ? { label: ui.value.done, kind: 'success' } : null
 }
 
 function renderMarkdown(text: string): string {
@@ -1429,6 +1546,10 @@ function getToolInfo(
 }
 
 function getToolStatusText(status: string): string {
+  if (locale.value.startsWith('zh')) {
+    const labels: Record<string, string> = { pending: '等待中', running: '执行中', completed: '已完成', error: '失败', aborted: '已取消' }
+    return labels[status] || status
+  }
   const statusMap: Record<string, string> = {
     pending: 'Pending',
     running: 'Running',
@@ -1484,11 +1605,12 @@ function formatTime(timestamp: number): string {
   const date = new Date(timestamp)
   const now = new Date()
   const diff = now.getTime() - date.getTime()
-  if (diff < 60000) return 'just now'
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
+  const chinese = locale.value.startsWith('zh')
+  if (diff < 60000) return chinese ? '刚刚' : 'just now'
+  if (diff < 3600000) return chinese ? `${Math.floor(diff / 60000)} 分钟前` : `${Math.floor(diff / 60000)}m ago`
   if (date.toDateString() === now.toDateString())
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    return date.toLocaleTimeString(locale.value, { hour: 'numeric', minute: '2-digit' })
+  return date.toLocaleDateString(locale.value, { month: 'short', day: 'numeric' })
 }
 
 function toggleTool(callID: string) {
@@ -1609,30 +1731,23 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
     class="oc-chat"
     :class="{ generating: isGenerating }"
   >
-    <div ref="messagesContainer" class="oc-messages">
-      <div v-if="props.connectionId" class="oc-connection-banner">
-        <div class="oc-connection-banner-main">
-          <span class="oc-connection-banner-name">{{ currentConnectionDisplay.name }}</span>
-          <span class="oc-connection-banner-host">
-            {{ currentConnectionDisplay.username }}@{{ currentConnectionDisplay.host }}:{{
-              currentConnectionDisplay.port
-            }}
-          </span>
-        </div>
-        <div class="oc-connection-banner-meta">
-          <span class="oc-connection-banner-label">当前主机</span>
-          <span v-if="currentConnectionDisplay.shortId" class="oc-connection-banner-id">
-            {{ currentConnectionDisplay.shortId }}
-          </span>
-        </div>
+    <div class="oc-context-strip">
+      <i class="bi bi-hdd-network" aria-hidden="true"></i>
+      <div class="oc-context-copy">
+        <span class="oc-context-label">{{ props.connectionId ? ui.context : ui.noConnection }}</span>
+        <span v-if="props.connectionId" class="oc-context-host" :title="`${currentConnectionDisplay.username}@${currentConnectionDisplay.host}:${currentConnectionDisplay.port}`">
+          {{ cachedConnection ? `${currentConnectionDisplay.username}@${currentConnectionDisplay.host}` : currentConnectionDisplay.name }}
+        </span>
       </div>
-
+    </div>
+    <div class="oc-conversation">
+    <div ref="messagesContainer" class="oc-messages" :class="{ 'is-empty': displayMessages.length === 0 }" @scroll.passive="handleMessagesScroll" tabindex="0" :aria-label="locale.startsWith('zh') ? '对话记录' : 'Conversation'">
       <div v-if="displayMessages.length === 0" class="oc-empty">
         <div class="oc-empty-icon">
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="64"
-            height="64"
+            width="28"
+            height="28"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -1640,37 +1755,41 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
             stroke-linecap="round"
             stroke-linejoin="round"
           >
-            <path d="M12 2a9 9 0 0 0-9 9c0 4.97 4.03 9 9 9a9 9 0 0 0 9-9c0-4.97-4.03-9-9-9z" />
-            <path d="M12 8v8" />
-            <path d="M12 8a2 2 0 1 0 4 0 2 2 0 1 0-4 0z" />
+            <path d="m12 3 2.8 6.2L21 12l-6.2 2.8L12 21l-2.8-6.2L3 12l6.2-2.8L12 3Z" />
           </svg>
         </div>
-        <div class="oc-empty-title">{{ $t('welcome.appTitle') }}</div>
-        <div class="oc-empty-text">{{ PLACEHOLDERS[placeholderIndex] }}</div>
-        <div class="oc-empty-hint">
-          <p>Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for new line</p>
+        <h2 class="oc-empty-title">{{ ui.emptyTitle }}</h2>
+        <p class="oc-empty-text">{{ ui.emptyText }}</p>
+        <div class="oc-suggestions">
+          <button v-for="prompt in quickPrompts" :key="prompt.title" type="button" class="oc-suggestion" @click="useQuickPrompt(prompt.prompt)">
+            <i :class="['bi', prompt.icon]" aria-hidden="true"></i>
+            <span>{{ prompt.title }}</span>
+            <i class="bi bi-plus" aria-hidden="true"></i>
+          </button>
         </div>
+        <p class="oc-suggestion-hint">{{ ui.promptHint }}</p>
+        <p v-if="!props.connectionId" class="oc-setup-hint">{{ ui.connectionHint }}</p>
       </div>
 
       <div v-else class="oc-message-list">
-        <div
-          v-if="
-            visibleCount <
-            messages.filter(m => m.info.role === 'user' || m.info.role === 'assistant').length
-          "
-          ref="loadMoreRef"
+        <button
+          v-if="earlierMessageCount > 0"
+          type="button"
           class="oc-load-more"
+          :disabled="isLoadingMore"
+          @click="loadEarlierMessages"
         >
           <span v-if="isLoadingMore" class="oc-loading-spinner"></span>
-          <span v-else>Load more messages</span>
-        </div>
+          <span v-else>{{ ui.older }} <span class="oc-earlier-count">{{ earlierMessageCount }}</span></span>
+        </button>
 
         <template v-for="msg in displayMessages" :key="msg.id">
           <div
             class="oc-turn"
             :class="{
               collapsed: isCollapsed(msg),
-              working: isGenerating && msg.role === 'assistant'
+              working: isGenerating && msg.id === activeAssistantId,
+              'oc-turn-user': msg.role === 'user'
             }"
             :data-msg-id="msg.id"
             :data-msg-role="msg.role"
@@ -1679,6 +1798,10 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
               <button
                 v-if="canCollapse(msg)"
                 class="oc-collapse-button"
+                type="button"
+                :aria-label="ui.details"
+                :aria-expanded="!isCollapsed(msg)"
+                :title="ui.details"
                 @click="toggleTurn(getTurnId(msg))"
               >
                 <svg
@@ -1695,44 +1818,16 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                 </svg>
               </button>
               <div class="oc-turn-title">
-                <span class="oc-turn-role">{{ msg.role === 'user' ? 'You' : 'Assistant' }}</span>
+                <span class="oc-turn-avatar" aria-hidden="true"><i :class="msg.role === 'user' ? 'bi bi-person' : 'bi bi-stars'"></i></span>
+                <span class="oc-turn-role">{{ msg.role === 'user' ? ui.user : ui.assistant }}</span>
                 <span class="oc-turn-time">{{ formatTime(msg.timestamp) }}</span>
                 <span v-if="msg.modelInfo" class="oc-model-badge">{{
-                  msg.modelInfo.modelID || 'MiniMax'
+                  msg.modelInfo.modelID
                 }}</span>
               </div>
-              <div v-if="msg.finish === 'stop'" class="oc-turn-badge oc-badge-success">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="10"
-                  height="10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="3"
-                >
-                  <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
-                Done
-              </div>
-              <div v-else-if="msg.finish === 'tool-calls'" class="oc-turn-badge oc-badge-info">
-                <span class="oc-badge-spinner"></span>
-                Thinking
-              </div>
-              <div v-else class="oc-turn-badge oc-badge-success">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="10"
-                  height="10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="3"
-                >
-                  <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
-                Done
-              </div>
+              <span v-if="messageStatus(msg)" class="oc-turn-badge" :class="`oc-badge-${messageStatus(msg)?.kind}`">
+                {{ messageStatus(msg)?.label }}
+              </span>
             </div>
 
             <div class="oc-turn-content">
@@ -1745,8 +1840,10 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                   ></div>
                   <button
                     class="oc-copy-button"
+                    type="button"
                     @click="copyToClipboard(msg.content, msg.id)"
-                    :title="copiedId === msg.id ? 'Copied!' : 'Copy'"
+                    :title="copiedId === msg.id ? ui.copied : ui.copy"
+                    :aria-label="copiedId === msg.id ? ui.copied : ui.copy"
                   >
                     <svg
                       v-if="copiedId !== msg.id"
@@ -1780,7 +1877,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
               <template v-else>
                 <template v-for="block in msg.blocks" :key="block.id">
                   <div v-if="block.type === 'analysis'" class="oc-timeline-block">
-                    <details v-if="block.compact" class="oc-analysis-block">
+                    <details v-if="block.compact && hasTools(msg)" class="oc-analysis-block">
                       <summary>分析过程</summary>
                       <div
                         class="oc-markdown oc-analysis-text"
@@ -1834,7 +1931,10 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                       </template>
 
                       <template v-else>
-                        <div class="oc-tool-trigger" @click="toggleTool(block.toolPart.callID)">
+                        <button type="button" class="oc-tool-trigger"
+                          :aria-expanded="expandedTools.has(block.toolPart.callID)"
+                          :aria-label="`${ui.details}: ${getToolInfo(block.toolPart.tool, block.toolPart.state.input).title}`"
+                          @click="toggleTool(block.toolPart.callID)">
                           <div class="oc-tool-icon">
                             <svg
                               v-if="
@@ -2049,7 +2149,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                           >
                             <polyline points="6 9 12 15 18 9"></polyline>
                           </svg>
-                        </div>
+                        </button>
                         <div
                           v-if="expandedTools.has(block.toolPart.callID)"
                           class="oc-tool-content"
@@ -2217,8 +2317,10 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                       }}</span>
                       <button
                         class="oc-copy-button"
+                        type="button"
                         @click="copyResponse(block.text)"
-                        :title="responseCopied ? 'Copied!' : 'Copy'"
+                        :title="responseCopied ? ui.copied : ui.copy"
+                        :aria-label="responseCopied ? ui.copied : ui.copy"
                       >
                         <svg
                           v-if="!responseCopied"
@@ -2256,33 +2358,19 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
         </template>
       </div>
     </div>
-
-    <div v-if="error" class="oc-error">
-      <span class="oc-error-icon">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="8" x2="12" y2="12"></line>
-          <line x1="12" y1="16" x2="12.01" y2="16"></line>
-        </svg>
-      </span>
-      <span>{{ normalizeUserErrorMessage(error.message || error) }}</span>
+    <button v-if="!followLatest && displayMessages.length > 0" class="oc-jump-latest" type="button" @click="scrollToBottom(true)">
+      <i class="bi bi-arrow-down" aria-hidden="true"></i>{{ ui.latest }}
+    </button>
     </div>
 
-    <div v-if="currentStatus" class="oc-session-status" :class="`is-${currentStage}`">
+    <div v-if="currentStatus || error" class="oc-session-status" :class="error ? 'is-error' : `is-${currentStage}`">
       <div class="oc-session-status-main">
+        <i v-if="error" class="bi bi-exclamation-circle" aria-hidden="true"></i>
         <span
-          v-if="isGenerating || currentStage === 'thinking' || currentStage === 'executing'"
+          v-else-if="isGenerating || currentStage === 'thinking' || currentStage === 'executing'"
           class="oc-status-dot"
         ></span>
-        <span class="oc-session-status-text">{{ currentStatus }}</span>
+        <span class="oc-session-status-text" :role="error ? 'alert' : 'status'" :aria-live="error ? 'assertive' : 'polite'">{{ error ? normalizeUserErrorMessage(error.message || error) : currentStatus }}</span>
         <span v-if="sessionDuration && isGenerating" class="oc-session-status-time">{{
           sessionDuration
         }}</span>
@@ -2291,6 +2379,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
           type="button"
           @click="toggleSessionStatusExpanded"
           :aria-expanded="sessionStatusExpanded"
+          :aria-label="sessionStatusExpanded ? '收起会话状态' : '展开会话状态'"
           :title="sessionStatusExpanded ? '收起会话状态' : '展开会话状态'"
         >
           <svg
@@ -2366,34 +2455,44 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
       </div>
     </div>
 
+    <div class="oc-composer-area">
+    <div v-if="!hasModel" class="oc-model-notice">
+      <span>{{ ui.modelHint }}</span>
+      <button type="button" class="oc-configure-model" @click="openModelSettings">{{ ui.configure }}<i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
+    </div>
     <div class="oc-input-wrapper">
       <div class="oc-input-container">
         <textarea
           ref="inputRef"
           v-model="inputMessage"
           class="oc-input"
-          :placeholder="`${PLACEHOLDERS[placeholderIndex]}...\nEnter to send · Shift+Enter for new line`"
+          :placeholder="isGenerating ? ui.draftPlaceholder : ui.placeholder"
+          :aria-label="ui.placeholder"
           @keydown="handleInputKeydown"
           rows="2"
         ></textarea>
       </div>
       <div class="oc-input-actions">
         <div class="oc-input-actions-left">
+          <span class="oc-composer-model" :class="{ 'is-unconfigured': !hasModel }" :title="modelLabel">
+            <i class="bi bi-cpu" aria-hidden="true"></i><span>{{ modelLabel }}</span>
+          </span>
           <div
             v-if="props.showServerEnvButton"
             ref="serverEnvMenuRef"
             class="oc-action-menu"
-            @mouseenter="openServerEnvMenu"
-            @mouseleave="closeServerEnvMenu"
+            @keydown.esc.stop.prevent="closeServerEnvMenu"
           >
             <button
               class="oc-action-button"
               type="button"
               :aria-expanded="serverEnvMenuOpen"
-              title="更多环境文档操作"
+              :title="ui.environment"
+              :aria-label="ui.environment"
+              @click="serverEnvMenuOpen = !serverEnvMenuOpen"
             >
               <i class="bi bi-three-dots"></i>
-              <span>更多</span>
+              <span>{{ ui.environment }}</span>
             </button>
 
             <div v-if="serverEnvMenuOpen" class="oc-action-menu-popover">
@@ -2413,25 +2512,35 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
           </div>
         </div>
         <div class="oc-input-actions-right">
+          <ReasoningSlider v-model="reasoningSelection" :capability="reasoningCapability" :model-name="modelLabel" :disabled="isGenerating || !hasModel" />
           <button
             v-if="!isGenerating"
             class="oc-send-button"
+            type="button"
             :disabled="!inputMessage.trim()"
+            :title="ui.send"
+            :aria-label="ui.send"
             @click="handleSendMessage"
           >
             <i class="bi bi-arrow-up"></i>
           </button>
           <button
             v-else
-            class="oc-send-button oc-stop-button is-stopping"
+            class="oc-send-button oc-stop-button"
+            type="button"
+            :class="{ 'is-stopping': isStopping }"
+            :title="isStopping ? ui.stopping : ui.stop"
+            :aria-label="isStopping ? ui.stopping : ui.stop"
             :disabled="isStopping"
             @click="handleStop"
           >
             <i :class="isStopping ? 'bi bi-hourglass-split' : 'bi bi-stop-fill'"></i>
-            <span v-if="isStopping">Stopping...</span>
+            <span>{{ isStopping ? ui.stopping : ui.stop }}</span>
           </button>
         </div>
       </div>
+    </div>
+    <div class="oc-composer-hint"><span><kbd>Enter</kbd> {{ ui.sendHint }}</span><span><kbd>Shift + Enter</kbd> {{ ui.newlineHint }}</span></div>
     </div>
   </div>
 </template>
@@ -3588,3 +3697,5 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   opacity: 0.5;
 }
 </style>
+
+<style src="./chat-workspace.css"></style>

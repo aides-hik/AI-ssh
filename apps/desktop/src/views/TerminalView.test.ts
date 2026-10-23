@@ -25,14 +25,18 @@ test('connecting status shows disabled visual feedback', async () => {
   assert.match(source, /opacity: 0\.6;/)
 })
 
-test('ai assistant collapses into a floating launcher and lets terminal expand fully', async () => {
+test('ai assistant hides without destroying its conversation and lets terminal expand fully', async () => {
   const source = await readFile(terminalViewPath, 'utf8')
 
   assert.doesNotMatch(source, /bi bi-robot/)
   assert.doesNotMatch(source, /title="AI助手"/)
   assert.match(source, /const isAIAssistantMinimized = ref\(false\)/)
-  assert.match(source, /v-if="!isAIAssistantMinimized"/)
-  assert.match(source, /v-else[\s\S]*class="ai-assistant-floating-toggle"/)
+  assert.match(source, /v-show="!isAIAssistantMinimized"/)
+  assert.doesNotMatch(source, /v-if="!isAIAssistantMinimized"/)
+  assert.match(source, /v-if="isAIAssistantMinimized"[\s\S]*class="ai-assistant-floating-toggle"/)
+  assert.match(source, /:aria-controls="aiPanelId"/)
+  assert.match(source, /:aria-expanded="!isAIAssistantMinimized"/)
+  assert.match(source, /`session-assistant-\$\{useId\(\)\}`/)
   assert.match(source, /class="ai-floating-toggle-label">AI 助手<\/span>/)
   assert.match(source, /@click="expandAIAssistant"/)
   assert.match(source, /class="terminal-container"/)

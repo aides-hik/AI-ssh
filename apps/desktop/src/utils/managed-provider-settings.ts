@@ -16,6 +16,7 @@ export function mergeProviderForSave(provider: AIProvider, latestProvider?: AIPr
         price: model.price,
         recommended: model.recommended,
         isCustom: model.isCustom,
+        reasoning: model.reasoning,
         enabled: model.enabled !== false
       }
     }

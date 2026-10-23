@@ -4,6 +4,7 @@
  */
 
 import type { AIModel } from '../types/ai-providers.types'
+import { reasoningMetadataFromAPI } from '../utils/model-reasoning'
 
 interface ModelFetchResult {
   success: boolean
@@ -35,8 +36,10 @@ export async function fetchOpenAIModels(
     // 转换为我们的 AIModel 格式
     const models: AIModel[] = data.data
       .filter((model: any) => {
-        // 只保留 GPT 和 O1 模型
-        return model.id.includes('gpt') || model.id.includes('o1') || model.id.includes('dall-e')
+        // 保留 GPT、o 系列推理模型和现有的图像模型。
+        return (
+          model.id.includes('gpt') || /^o[134](?:-|$)/.test(model.id) || model.id.includes('dall-e')
+        )
       })
       .map((model: any) => ({
         id: model.id,
@@ -174,8 +177,9 @@ export async function fetchDeepSeekModels(
         text: true,
         image: false,
         vision: false,
-        functionCall: model.id.includes('chat')
-      }
+        functionCall: model.id.includes('chat') || supportsReasoningTools(model.id)
+      },
+      reasoning: reasoningMetadataFromAPI(model, 'deepseek')
     }))
 
     return {
@@ -213,6 +217,7 @@ export async function fetchOpenAICompatibleModels(
 
     const data = await response.json()
 
+    const reasoningProtocol = getReasoningMetadataProtocol(providerId, endpoint)
     const models: AIModel[] = data.data.map((model: any) => {
       const modelId = model.id.toLowerCase()
 
@@ -271,6 +276,7 @@ export async function fetchOpenAICompatibleModels(
           modelId.includes('gpt') ||
           modelId.includes('claude') ||
           modelId.includes('function') ||
+          supportsReasoningTools(modelId) ||
           model.function_calling === true
       }
 
@@ -281,7 +287,10 @@ export async function fetchOpenAICompatibleModels(
         providerId,
         contextWindow,
         capabilities,
-        price
+        price,
+        reasoning: reasoningProtocol
+          ? reasoningMetadataFromAPI(model, reasoningProtocol)
+          : undefined
       }
     })
 
@@ -344,10 +353,13 @@ export async function fetchOpenRouterModels(
           vision: isMultimodal,
           functionCall:
             model.architecture?.instruct_type === 'function' ||
+            model.supported_parameters?.includes('tools') ||
             model.id.includes('gpt') ||
-            model.id.includes('claude')
+            model.id.includes('claude') ||
+            supportsReasoningTools(model.id)
         },
-        price
+        price,
+        reasoning: reasoningMetadataFromAPI(model, 'openrouter')
       }
     })
 
@@ -472,13 +484,45 @@ function getContextWindow(modelId: string): number {
 }
 
 // 辅助函数：根据模型 ID 获取能力
+function supportsReasoningTools(modelId: string): boolean {
+  const id = modelId.toLowerCase().replace(/^(?:openai|deepseek)\//, '')
+  return (
+    /^(?:o3(?:-mini)?|o4-mini)(?:-\d{4}-?\d{2}-?\d{2})?$/.test(id) ||
+    /^gpt-(?:5(?:\.[1-5])?(?:-(?:mini|nano|codex(?:-mini|-max)?))?|5\.(?:2|4|5)-pro|5\.6(?:-(?:sol|terra|luna))?|6(?:\.1)?-(?:astra|sol|luna))(?:-\d{4}-?\d{2}-?\d{2})?$/.test(
+      id
+    ) ||
+    /^(?:deepseek-flash|deepseek-v4-(?:pro|flash|flash-vision-exp))(?:-\d{4}-?\d{2}-?\d{2})?$/.test(
+      id
+    )
+  )
+}
+
+function getReasoningMetadataProtocol(
+  providerId: string,
+  endpoint: string
+): 'openrouter' | 'deepseek' | undefined {
+  if (providerId === 'openrouter' || providerId === 'deepseek') return providerId
+  try {
+    const host = new URL(endpoint).hostname.toLowerCase()
+    if (host === 'openrouter.ai') return 'openrouter'
+    if (host === 'api.deepseek.com') return 'deepseek'
+  } catch {
+    // A custom or invalid endpoint does not establish a metadata protocol.
+  }
+  return undefined
+}
+
 function getCapabilities(modelId: string): AIModel['capabilities'] {
   return {
     text: true,
     image: modelId.includes('dall-e'),
     vision:
       modelId.includes('vision') || modelId.includes('gpt-4o') || modelId.includes('gpt-4-turbo'),
-    functionCall: modelId.includes('gpt-4') || modelId.includes('gpt-3.5') || modelId.includes('o1')
+    functionCall:
+      modelId.includes('gpt-4') ||
+      modelId.includes('gpt-3.5') ||
+      modelId.includes('o1') ||
+      supportsReasoningTools(modelId)
   }
 }
 
