@@ -3,6 +3,7 @@
 import type { AIProvider, AIModel } from '../types/ai-providers'
 import type { MessageMetadata } from '../types/message-metadata'
 import { isRetiredManagedProvider } from '../utils/standalone-providers'
+import { APP_NAME } from '@ai-ssh/shared'
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
@@ -700,7 +701,7 @@ async function callOpenRouter(
       Authorization: `Bearer ${provider.apiKey}`,
       'Content-Type': 'application/json',
       // OpenRouter 特定请求头
-      'X-Title': 'AI SSH Assistant'
+      'X-Title': APP_NAME
     },
     body: JSON.stringify(body),
     signal: request.signal

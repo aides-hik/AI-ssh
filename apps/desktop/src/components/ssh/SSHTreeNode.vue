@@ -24,7 +24,7 @@
       <div v-if="node.type !== 'connection'" class="tree-node-arrow">
         <svg
           v-if="node.type === 'folder'"
-          :class="['chevron-icon', { expanded: isExpanded }]"
+          :class="['chevron-icon', { expanded: isExpanded || forceExpanded }]"
           width="16"
           height="16"
           viewBox="0 0 16 16"
@@ -130,7 +130,7 @@
     </div>
 
     <!-- 子节点 -->
-    <div v-if="node.type === 'folder' && isExpanded && node.children" class="tree-node-children">
+    <div v-if="node.type === 'folder' && (isExpanded || forceExpanded) && node.children" class="tree-node-children">
       <SSHTreeNode
         v-for="child in node.children"
         :key="child.id"
@@ -141,6 +141,7 @@
         :connecting-elapsed-seconds="connectingElapsedSeconds"
         :auto-edit-id="autoEditId"
         :edit-trigger="editTrigger"
+        :force-expanded="forceExpanded"
         @select="$emit('select', $event)"
         @update="$emit('update', $event)"
         @delete="$emit('delete', $event)"
@@ -182,6 +183,7 @@ export interface SSHTreeNodeData {
 
 interface Props {
   node: SSHTreeNodeData
+  forceExpanded?: boolean
   depth?: number
   selectedId?: string | null
   connectingNodeId?: string | null

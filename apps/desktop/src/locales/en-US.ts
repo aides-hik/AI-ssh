@@ -2,6 +2,8 @@
  * English Translation
  */
 
+import { APP_NAME } from '@ai-ssh/shared'
+
 export default {
   common: {
     // Common operations
@@ -166,7 +168,7 @@ export default {
 
   titlebar: {
     // App name and path
-    appWelcome: 'AI SSH Assistant - Welcome',
+    appWelcome: `${APP_NAME} - Welcome`,
 
     // Menu items
     menuFile: 'File',
@@ -478,7 +480,7 @@ export default {
     // ===== About =====
     aboutTitle: 'About',
     aboutDesc: 'Application information and version details',
-    appVersion: 'Version 1.0.0',
+    appVersion: 'Version {version}',
     appDescription:
       'An intelligent SSH management tool that combines AI technology to make remote server management easier and more efficient.',
     github: 'GitHub',
@@ -517,7 +519,7 @@ export default {
   },
 
   welcome: {
-    appTitle: 'AI SSH Assistant',
+    appTitle: APP_NAME,
     appDescription:
       'An intelligent SSH connection and management tool to help you manage remote servers more efficiently',
 

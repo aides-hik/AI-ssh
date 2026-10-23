@@ -283,5 +283,5 @@ document.documentElement.classList.add('light')
 ---
 
 **最后更新**: 2025-01-11
-**维护者**: AI SSH Assistant Team
+**维护者**: Prism Maintainers
 

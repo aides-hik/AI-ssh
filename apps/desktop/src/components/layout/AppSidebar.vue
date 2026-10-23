@@ -2,16 +2,32 @@
   <div class="vscode-sidebar-container h-full flex flex-col">
     <!-- 侧边栏标题 -->
     <div class="vscode-sidebar-header px-4 py-2 border-b border-vscode-border">
-      <h3 class="text-sm font-medium text-vscode-fg m-0">{{ sidebarTitle }}</h3>
+      <div class="sidebar-heading">
+        <i class="bi bi-hdd-network" aria-hidden="true"></i>
+        <h3 class="text-sm font-medium text-vscode-fg m-0">{{ sidebarTitle }}</h3>
+      </div>
+      <span class="sidebar-local-badge">本地</span>
     </div>
 
     <!-- 侧边栏内容 -->
     <div class="flex-1 overflow-y-auto scrollbar-thin">
       <!-- SSH 连接视图 -->
       <div v-if="activeView === 'ssh'" class="p-2">
+        <label class="sidebar-search">
+          <i class="bi bi-search" aria-hidden="true"></i>
+          <input v-model="search" type="search" placeholder="搜索连接" aria-label="搜索连接" />
+        </label>
         <div class="connection-list-actions mb-4">
-          <button class="vscode-button primary" @click="createRootFolder">
-            {{ $t('ssh.newFolder') }}
+          <button class="vscode-button primary" @click="openConnectionDialog()">
+            <i class="bi bi-plus-lg" aria-hidden="true"></i>新建连接
+          </button>
+          <button
+            class="vscode-button sidebar-folder-button"
+            :title="$t('ssh.newFolder')"
+            :aria-label="$t('ssh.newFolder')"
+            @click="createRootFolder"
+          >
+            <i class="bi bi-folder-plus" aria-hidden="true"></i>
           </button>
         </div>
 
@@ -19,9 +35,19 @@
           <div class="vscode-tree-title text-xs font-medium text-vscode-fg-muted mb-2">
             {{ $t('ssh.connectionList') }}
           </div>
+          <div v-if="sshLoading" class="sidebar-empty" role="status">正在读取连接…</div>
+          <div v-else-if="sshError" class="sidebar-empty" role="status">
+            <p>{{ sshError }}</p>
+            <button class="vscode-button" @click="loadSSHTree">重新加载</button>
+          </div>
+          <div v-else-if="filteredTree.length === 0" class="sidebar-empty">
+            <i class="bi bi-hdd-network" aria-hidden="true"></i>
+            <p>{{ search ? '没有找到匹配的连接' : '还没有连接' }}</p>
+            <span v-if="!search">添加服务器，开始远程工作。</span>
+          </div>
           <div class="ssh-tree-container">
             <SSHTreeNode
-              v-for="node in sshTreeData"
+              v-for="node in filteredTree"
               :key="node.id"
               :node="node"
               :selected-id="selectedNodeId"
@@ -29,6 +55,7 @@
               :connecting-elapsed-seconds="connectingElapsedSeconds"
               :auto-edit-id="autoEditNodeId"
               :edit-trigger="editTrigger"
+              :force-expanded="Boolean(search.trim())"
               @select="handleNodeSelect"
               @update="handleNodeUpdate"
               @delete="handleNodeDelete"
@@ -134,7 +161,25 @@ const openNewTab =
   inject<(id: string, name: string, icon: string, path: string) => void>('openNewTab')
 
 // ============= SSH 相关（✅ 直接使用 sshService） =============
-const sshTreeData = ref<any[]>([])
+const sshTreeData = ref<SSHTreeNodeData[]>([])
+const search = ref('')
+const filteredTree = computed(() => {
+  const term = search.value.trim().toLocaleLowerCase()
+  if (!term) return sshTreeData.value
+  const filterNodes = (nodes: SSHTreeNodeData[]): SSHTreeNodeData[] =>
+    nodes.flatMap(node => {
+      if (
+        `${node.name ?? ''} ${node.host ?? ''} ${node.username ?? ''}`
+          .toLocaleLowerCase()
+          .includes(term)
+      )
+        return [node]
+      const children = filterNodes(node.children ?? [])
+      return children.length ? [{ ...node, children }] : []
+    })
+  return filterNodes(sshTreeData.value)
+})
+const handleCreateConnection = () => openConnectionDialog(null)
 const selectedNodeId = ref<string | null>(null)
 const connectingNodeId = ref<string | null>(null)
 const connectingElapsedSeconds = ref(0)
@@ -159,6 +204,7 @@ const editTrigger = ref(0)
 onMounted(() => {
   loadSSHTree()
   window.addEventListener('ssh-connections-imported', loadSSHTree)
+  window.addEventListener('ssh-create-connection', handleCreateConnection)
 })
 
 watch(
@@ -182,6 +228,7 @@ const clearConnectionProgress = () => {
 onUnmounted(() => {
   clearConnectionProgress()
   window.removeEventListener('ssh-connections-imported', loadSSHTree)
+  window.removeEventListener('ssh-create-connection', handleCreateConnection)
 })
 
 const getSSHSettings = async () => {
@@ -611,10 +658,11 @@ const confirmInputDialog = () => {
 
 .connection-list-actions {
   display: flex;
+  gap: 8px;
 }
 
 .connection-list-actions .primary {
-  width: 100%;
+  flex: 1;
 }
 
 .vscode-button:hover {

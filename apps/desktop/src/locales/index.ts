@@ -19,6 +19,8 @@ const i18n = createI18n({
   globalInjection: true, // 全局注入 $t 函数
 })
 
+document.title = i18n.global.t('welcome.appTitle')
+
 /**
  * 获取默认语言
  */
@@ -50,6 +52,7 @@ export function setLocale(locale: Locale) {
   
   // 同步到 HTML lang 属性
   document.documentElement.lang = locale
+  document.title = i18n.global.t('welcome.appTitle')
 }
 
 /**

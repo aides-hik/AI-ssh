@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { APP_NAME_ZH } from '@ai-ssh/shared'
 
 // AI 服务接口
 interface AIService {
@@ -14,7 +15,7 @@ class MockAIService implements AIService {
     await this.delay(1000 + Math.random() * 2000)
     
     const responses = [
-      `收到您的消息："${message}"。我是 AI SSH 助手，很高兴为您服务！`,
+      `收到您的消息："${message}"。我是${APP_NAME_ZH}的 AI 助手，很高兴为您服务！`,
       `关于 "${message}"，我建议您可以尝试以下方法...`,
       `这是一个有趣的问题："${message}"。让我为您分析一下...`,
       `根据您的输入 "${message}"，我认为您可能需要...`,

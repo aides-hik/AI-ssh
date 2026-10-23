@@ -1,201 +1,148 @@
-/**
- * 主题管理服务
- * 负责应用程序主题的切换和持久化
- */
-
+/** Owns the saved appearance mode and the single resolved theme class. */
 export type ThemeMode = 'dark' | 'light' | 'dark-modern' | 'light-modern' | 'auto'
 
 const THEME_STORAGE_KEY = 'app-theme-mode'
 
-class ThemeService {
-  private currentTheme: ThemeMode = 'dark-modern'
+export class ThemeService {
+  private currentTheme: Exclude<ThemeMode, 'auto'> = 'dark-modern'
+  private mode: ThemeMode = 'auto'
+  private initialized = false
+  private transitionFrame = 0
 
-  /**
-   * 初始化主题服务
-   * 从 localStorage 加载保存的主题，或检测系统主题
-   */
   init(): void {
-
-    // 尝试从 localStorage 加载保存的主题
-    const savedTheme = this.loadTheme()
-
-    if (savedTheme) {
-      this.applyTheme(savedTheme)
-    } else {
-      // 如果没有保存的主题，检测系统主题
-      const systemTheme = this.detectSystemTheme()
-      this.applyTheme(systemTheme)
-    }
-
-    // 监听系统主题变化
+    if (this.initialized || typeof window === 'undefined' || typeof document === 'undefined') return
+    this.initialized = true
+    this.applyTheme(this.loadTheme() ?? this.loadLegacyTheme() ?? 'auto')
     this.watchSystemTheme()
   }
 
-  /**
-   * 应用指定主题
-   * @param theme 主题模式
-   */
   applyTheme(theme: ThemeMode): void {
-
-    const root = document.documentElement
-
-    // 移除所有主题类
-    root.classList.remove('dark', 'light', 'dark-modern', 'light-modern', 'auto')
-
-    // 处理 auto 模式
-    if (theme === 'auto') {
-      const systemTheme = this.detectSystemTheme()
-      root.classList.add(systemTheme)
-      this.currentTheme = systemTheme
-    } else {
-      // 应用指定主题
-      root.classList.add(theme)
-      this.currentTheme = theme
-    }
-
-    // 保存到 localStorage
+    if (!this.isValidTheme(theme)) return
+    this.mode = theme
+    this.currentTheme = theme === 'auto' ? this.detectSystemTheme() : theme
     this.saveTheme(theme)
-
-    // 触发自定义事件，通知其他组件主题已更改
-    window.dispatchEvent(new CustomEvent('theme-changed', { 
-      detail: { theme: this.currentTheme } 
-    }))
-
+    this.renderTheme()
   }
 
-  /**
-   * 切换主题（在深色和浅色之间）
-   */
+  private renderTheme(): void {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return
+    const root = document.documentElement
+    const themeClasses = ['dark', 'light', 'dark-modern', 'light-modern', 'auto']
+    if (themeClasses.some(name => root.classList.contains(name) !== (name === this.currentTheme))) {
+      root.dataset.themeSwitching = ''
+      // Commit the transition guard before changing any theme-dependent values.
+      void root.offsetWidth
+      root.classList.remove('dark', 'light', 'dark-modern', 'light-modern', 'auto')
+      root.classList.add(this.currentTheme)
+      if (this.transitionFrame) window.cancelAnimationFrame(this.transitionFrame)
+      this.transitionFrame = window.requestAnimationFrame(() => {
+        // Keep the guard through the first paint of the new palette.
+        this.transitionFrame = window.requestAnimationFrame(() => {
+          delete root.dataset.themeSwitching
+          this.transitionFrame = 0
+        })
+      })
+    }
+    root.dataset.themeMode = this.mode
+    root.style.setProperty('color-scheme', this.isDarkTheme() ? 'dark' : 'light')
+    window.dispatchEvent(
+      new CustomEvent('theme-changed', {
+        detail: { theme: this.currentTheme, mode: this.mode }
+      })
+    )
+  }
+
   toggleTheme(): void {
-    const newTheme = this.currentTheme.includes('dark') ? 'light-modern' : 'dark-modern'
-    this.applyTheme(newTheme)
+    this.applyTheme(this.isDarkTheme() ? 'light-modern' : 'dark-modern')
   }
 
-  /**
-   * 获取当前主题
-   */
-  getCurrentTheme(): ThemeMode {
+  /** Resolved appearance, retained for existing icon and terminal consumers. */
+  getCurrentTheme(): Exclude<ThemeMode, 'auto'> {
     return this.currentTheme
   }
 
-  /**
-   * 检测系统主题
-   */
-  private detectSystemTheme(): 'dark-modern' | 'light-modern' {
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'dark-modern'
-    }
-    return 'light-modern'
+  /** User preference; auto stays auto when the operating system changes. */
+  getMode(): ThemeMode {
+    return this.mode
   }
 
-  /**
-   * 监听系统主题变化
-   */
+  private detectSystemTheme(): 'dark-modern' | 'light-modern' {
+    return typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-color-scheme: dark)').matches
+      ? 'dark-modern'
+      : 'light-modern'
+  }
+
   private watchSystemTheme(): void {
-    if (!window.matchMedia) {
-      return
-    }
-
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-
-    // 使用 addEventListener 替代已废弃的 addListener
-    mediaQuery.addEventListener('change', (e) => {
-
-      // 只有在 auto 模式下才自动切换
-      const savedTheme = this.loadTheme()
-      if (savedTheme === 'auto') {
-        const newTheme = e.matches ? 'dark-modern' : 'light-modern'
-        this.applyTheme(newTheme)
-      }
+    if (!window.matchMedia) return
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    media.addEventListener('change', event => {
+      if (this.mode !== 'auto') return
+      this.currentTheme = event.matches ? 'dark-modern' : 'light-modern'
+      // Resolve the new palette without overwriting the saved auto preference.
+      this.renderTheme()
     })
   }
 
-  /**
-   * 从 localStorage 加载主题
-   */
   private loadTheme(): ThemeMode | null {
     try {
       const saved = localStorage.getItem(THEME_STORAGE_KEY)
-      if (saved && this.isValidTheme(saved)) {
-        return saved as ThemeMode
-      }
+      if (saved && this.isValidTheme(saved)) return saved
     } catch {
-      // Fall back to the system theme when storage cannot be read.
+      // The in-memory preference remains available when storage is blocked.
     }
     return null
   }
 
-  /**
-   * 保存主题到 localStorage
-   */
+  private loadLegacyTheme(): ThemeMode | null {
+    try {
+      const saved = localStorage.getItem('theme-settings')
+      const legacy: unknown = saved ? JSON.parse(saved) : null
+      if (
+        legacy &&
+        typeof legacy === 'object' &&
+        'mode' in legacy &&
+        typeof legacy.mode === 'string' &&
+        this.isValidTheme(legacy.mode)
+      )
+        return legacy.mode
+    } catch {
+      // A malformed legacy preference falls back to following the system.
+    }
+    return null
+  }
+
   private saveTheme(theme: ThemeMode): void {
     try {
       localStorage.setItem(THEME_STORAGE_KEY, theme)
     } catch {
-      // Keep the in-memory theme even if persistent storage is unavailable.
+      // Theme changes still work without persistent storage.
     }
   }
 
-  /**
-   * 验证主题值是否有效
-   */
-  private isValidTheme(theme: string): boolean {
+  private isValidTheme(theme: string): theme is ThemeMode {
     return ['dark', 'light', 'dark-modern', 'light-modern', 'auto'].includes(theme)
   }
 
-  /**
-   * 获取所有可用主题
-   */
   getAvailableThemes(): Array<{ value: ThemeMode; label: string; description: string }> {
     return [
-      { 
-        value: 'dark-modern', 
-        label: 'Dark Modern', 
-        description: 'VSCode 官方深色现代主题' 
-      },
-      { 
-        value: 'light-modern', 
-        label: 'Light Modern', 
-        description: 'VSCode 官方浅色现代主题' 
-      },
-      { 
-        value: 'dark', 
-        label: 'Dark (Legacy)', 
-        description: '传统深色主题（向后兼容）' 
-      },
-      { 
-        value: 'light', 
-        label: 'Light (Legacy)', 
-        description: '传统浅色主题（向后兼容）' 
-      },
-      { 
-        value: 'auto', 
-        label: 'Auto', 
-        description: '跟随系统主题自动切换' 
-      }
+      { value: 'dark-modern', label: 'Dark Modern', description: '深色工作空间' },
+      { value: 'light-modern', label: 'Light Modern', description: '浅色工作空间' },
+      { value: 'dark', label: 'Dark (Legacy)', description: '传统深色主题（向后兼容）' },
+      { value: 'light', label: 'Light (Legacy)', description: '传统浅色主题（向后兼容）' },
+      { value: 'auto', label: 'Auto', description: '跟随系统主题自动切换' }
     ]
   }
 
-  /**
-   * 检查当前是否为深色主题
-   */
   isDarkTheme(): boolean {
     return this.currentTheme.includes('dark')
   }
 
-  /**
-   * 检查当前是否为浅色主题
-   */
   isLightTheme(): boolean {
-    return this.currentTheme.includes('light')
+    return !this.isDarkTheme()
   }
 }
 
-// 导出单例
 export const themeService = new ThemeService()
 
-// 在应用启动时自动初始化
-if (typeof window !== 'undefined') {
-  themeService.init()
-}
-
+if (typeof window !== 'undefined') themeService.init()

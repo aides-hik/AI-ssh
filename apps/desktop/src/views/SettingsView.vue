@@ -1571,8 +1571,8 @@
             <div class="app-logo">
               <i class="bi bi-terminal-fill"></i>
             </div>
-            <h3 class="app-name">AI SSH Assistant</h3>
-            <p class="app-version">{{ $t('settings.appVersion') }}</p>
+            <h3 class="app-name">{{ $t('welcome.appTitle') }}</h3>
+            <p class="app-version">{{ $t('settings.appVersion', { version: currentAppVersion }) }}</p>
             <p class="app-description">
               {{ $t('settings.appDescription') }}
             </p>
@@ -1701,6 +1701,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { APP_VERSION } from '@ai-ssh/shared'
 
 import ProviderIcon from '../components/common/ProviderIcon.vue'
 
@@ -1761,7 +1762,7 @@ const activeSection = ref('appearance')
 const contentContainer = ref<HTMLElement | null>(null)
 const isScrolling = ref(false)
 const updater = useUpdateClient()
-const currentAppVersion = ref('')
+const currentAppVersion = ref(APP_VERSION)
 const updaterState = ref<any>({ enabled: false, status: 'idle' })
 let disposeUpdaterListener: (() => void) | null = null
 
@@ -1805,7 +1806,7 @@ const fontSize = ref<'small' | 'medium' | 'large'>('medium')
 const selectedColorScheme = ref<'blue' | 'green' | 'purple' | 'orange' | 'red'>('blue')
 
 // 新主题系统
-const selectedThemeMode = ref<ThemeMode>(themeService.getCurrentTheme())
+const selectedThemeMode = ref<ThemeMode>(themeService.getMode())
 const availableThemes = computed(() => themeService.getAvailableThemes())
 
 // SSH 设置
@@ -2249,7 +2250,7 @@ const loadSettings = async () => {
     if (settings) {
       // 外观设置
       if (settings.appearance) {
-        mode.value = settings.appearance.theme || 'auto'
+        // themeService owns the preference; legacy appearance must not overwrite it.
         fontSize.value = settings.appearance.fontSize || 'medium'
         selectedColorScheme.value = settings.appearance.colorScheme || 'blue'
       }
@@ -2853,7 +2854,13 @@ watch(
 )
 
 onMounted(async () => {
-  currentAppVersion.value = await window.electronAPI.getVersion()
+  if (window.electronAPI?.getVersion) {
+    try {
+      currentAppVersion.value = await window.electronAPI.getVersion()
+    } catch {
+      // Keep the packaged version fallback if IPC is temporarily unavailable.
+    }
+  }
   updaterState.value = await updater.initialize()
   if (window.electronAPI?.onUpdaterStateChange) {
     disposeUpdaterListener = window.electronAPI.onUpdaterStateChange(state => {
@@ -2872,7 +2879,7 @@ onMounted(async () => {
   // 监听主题变化
   const handleThemeChange = (event: Event) => {
     const customEvent = event as CustomEvent
-    selectedThemeMode.value = customEvent.detail.theme
+    selectedThemeMode.value = customEvent.detail.mode ?? customEvent.detail.theme
   }
   window.addEventListener('theme-changed', handleThemeChange)
 

@@ -70,17 +70,17 @@ jobs:
           echo "## 📦 下载说明" >> $GITHUB_OUTPUT
           echo "" >> $GITHUB_OUTPUT
           echo "### Windows" >> $GITHUB_OUTPUT
-          echo "- 下载 \`AI-SSH-Assistant-${VERSION_NUMBER}-setup-x64.exe\`" >> $GITHUB_OUTPUT
+          echo "- 下载 \`Prism-${VERSION_NUMBER}-setup-x64.exe\`" >> $GITHUB_OUTPUT
           echo "- 双击运行安装程序" >> $GITHUB_OUTPUT
           echo "" >> $GITHUB_OUTPUT
           echo "### macOS" >> $GITHUB_OUTPUT
-          echo "- **Intel 芯片**: 下载 \`ai-ssh-assistant-${VERSION_NUMBER}-macos-x64.dmg\`" >> $GITHUB_OUTPUT
-          echo "- **Apple Silicon**: 下载 \`ai-ssh-assistant-${VERSION_NUMBER}-macos-arm64.dmg\`" >> $GITHUB_OUTPUT
+          echo "- **Intel 芯片**: 下载 \`prism-${VERSION_NUMBER}-macos-x64.dmg\`" >> $GITHUB_OUTPUT
+          echo "- **Apple Silicon**: 下载 \`prism-${VERSION_NUMBER}-macos-arm64.dmg\`" >> $GITHUB_OUTPUT
           echo "- 首次运行需在\"系统偏好设置 → 安全性与隐私\"中允许" >> $GITHUB_OUTPUT
           echo "" >> $GITHUB_OUTPUT
           echo "### Linux" >> $GITHUB_OUTPUT
-          echo "- **AppImage**: \`chmod +x ai-ssh-assistant-${VERSION_NUMBER}-linux-x64.AppImage && ./ai-ssh-assistant-${VERSION_NUMBER}-linux-x64.AppImage\`" >> $GITHUB_OUTPUT
-          echo "- **Debian/Ubuntu**: \`sudo dpkg -i ai-ssh-assistant-${VERSION_NUMBER}-linux-x64.deb\`" >> $GITHUB_OUTPUT
+          echo "- **AppImage**: \`chmod +x prism-${VERSION_NUMBER}-linux-x64.AppImage && ./prism-${VERSION_NUMBER}-linux-x64.AppImage\`" >> $GITHUB_OUTPUT
+          echo "- **Debian/Ubuntu**: \`sudo dpkg -i prism-${VERSION_NUMBER}-linux-x64.deb\`" >> $GITHUB_OUTPUT
           echo "" >> $GITHUB_OUTPUT
           echo "## 🔧 系统要求" >> $GITHUB_OUTPUT
           echo "" >> $GITHUB_OUTPUT
@@ -95,7 +95,7 @@ jobs:
         uses: softprops/action-gh-release@v3.0.3
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
-          name: AI SSH Assistant ${{ steps.get_version.outputs.version }}
+          name: Prism ${{ steps.get_version.outputs.version }}
           body: ${{ steps.changelog.outputs.CHANGELOG }}
           draft: false
           prerelease: ${{ contains(steps.get_version.outputs.version, 'beta') || contains(steps.get_version.outputs.version, 'alpha') }}
@@ -213,12 +213,12 @@ jobs:
         with:
           tag_name: ${{ needs.create-release.outputs.version }}
           files: |
-            apps/desktop/release/**/ai-ssh-assistant-*-linux-*.AppImage
+            apps/desktop/release/**/prism-*-linux-*.AppImage
             apps/desktop/release/**/*.blockmap
-            apps/desktop/release/**/ai-ssh-assistant-*-linux-*.deb
-            apps/desktop/release/**/ai-ssh-assistant-*-macos-*.dmg
-            apps/desktop/release/**/ai-ssh-assistant-*-macos-*.zip
-            apps/desktop/release/**/AI-SSH-Assistant-*-setup-*.exe
+            apps/desktop/release/**/prism-*-linux-*.deb
+            apps/desktop/release/**/prism-*-macos-*.dmg
+            apps/desktop/release/**/prism-*-macos-*.zip
+            apps/desktop/release/**/Prism-*-setup-*.exe
             apps/desktop/release/update-manifest-*.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

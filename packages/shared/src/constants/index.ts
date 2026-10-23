@@ -1,7 +1,9 @@
 // 共享常量定义
 
-export const APP_NAME = 'AI SSH Assistant'
-export const APP_VERSION = '1.0.0'
+export const APP_NAME = 'Prism'
+export const APP_NAME_ZH = '棱镜'
+export const APP_DISPLAY_NAME = `${APP_NAME_ZH}（${APP_NAME}）`
+export const APP_VERSION = '1.9.0'
 
 export const DEFAULT_SSH_PORT = 22
 export const DEFAULT_PAGE_SIZE = 20

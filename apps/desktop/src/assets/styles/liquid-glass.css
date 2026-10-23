@@ -1,0 +1,600 @@
+/* Liquid Glass: optical chrome around a quiet, readable SSH workspace. */
+:root,
+:root.light,
+:root.light-modern {
+  color-scheme: light;
+  --vscode-bg: #f4f7fc;
+  --vscode-bg-light: #edf3fa;
+  --vscode-bg-lighter: #e3ecf8;
+  --vscode-bg-input: #ffffffc9;
+  --vscode-fg: #21334c;
+  --vscode-fg-muted: #586d88;
+  --vscode-foreground: #21334c;
+  --vscode-descriptionForeground: #586d88;
+  --vscode-border: #9eb7d43d;
+  --vscode-border-subtle: #9eb7d42e;
+  --vscode-editor-background: #f4f7fc;
+  --vscode-editor-foreground: #21334c;
+  --vscode-panel-background: #f4f7fc;
+  --vscode-sideBar-background: #edf3fa;
+  --vscode-input-background: #ffffffc9;
+  --vscode-input-foreground: #21334c;
+  --vscode-list-hoverBackground: #3979e710;
+  --vscode-list-activeSelectionBackground: #3979e71e;
+  --vscode-list-activeSelectionForeground: #214c8a;
+  --vscode-button-background: var(--vscode-accent);
+  --vscode-button-foreground: #fff;
+  --vscode-terminal-background: #122033;
+  --liquid-canvas: #e7eef7;
+  --liquid-panel: #f8fbff9e;
+  --liquid-panel-solid: #f4f7fc;
+  --liquid-rim: #ffffffb8;
+  --liquid-tint: #f4f9ff61;
+  --liquid-inner-light: #ffffffe0;
+  --liquid-inner-edge: #ffffff6b;
+  --liquid-reflection: #ffffff59;
+  --liquid-highlight: #ffffff6b;
+  --liquid-shadow: #273d5b3d;
+  --liquid-focus: var(--vscode-accent);
+  --liquid-selected: #ffffffba;
+  --liquid-window-tint: #f8fbff55;
+  --liquid-wallpaper-opacity: 0.74;
+}
+
+:root.dark,
+:root.dark-modern {
+  color-scheme: dark;
+  --vscode-bg: #142136;
+  --vscode-bg-light: #1b2b41;
+  --vscode-bg-lighter: #253950;
+  --vscode-bg-input: #0e1c30c9;
+  --vscode-fg: #e0eaf7;
+  --vscode-fg-muted: #a1b5cd;
+  --vscode-foreground: #e0eaf7;
+  --vscode-descriptionForeground: #a1b5cd;
+  --vscode-border: #a0bbdb30;
+  --vscode-border-subtle: #a0bbdb20;
+  --vscode-editor-background: #142136;
+  --vscode-editor-foreground: #e0eaf7;
+  --vscode-panel-background: #142136;
+  --vscode-sideBar-background: #1b2b41;
+  --vscode-input-background: #0e1c30c9;
+  --vscode-input-foreground: #e0eaf7;
+  --vscode-list-hoverBackground: #90baff15;
+  --vscode-list-activeSelectionBackground: #90baff24;
+  --vscode-list-activeSelectionForeground: #d2e4ff;
+  --vscode-button-foreground: #fff;
+  --liquid-canvas: #0c1728;
+  --liquid-panel: #15253bd6;
+  --liquid-panel-solid: #142136;
+  --liquid-rim: #c4dcff30;
+  --liquid-tint: #15273e8f;
+  --liquid-inner-light: #d1e5ff3b;
+  --liquid-inner-edge: #c5dfff13;
+  --liquid-reflection: #c2ddff16;
+  --liquid-highlight: #bad8ff24;
+  --liquid-shadow: #00081980;
+  --liquid-selected: #bddeff1f;
+  --liquid-window-tint: #101f3359;
+  --liquid-wallpaper-opacity: 0.18;
+}
+
+.liquid-app {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--liquid-canvas);
+  color: var(--vscode-fg);
+  font:
+    13px/1.5 'Segoe UI Variable',
+    'Segoe UI',
+    'Microsoft YaHei',
+    sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.liquid-wallpaper {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 0 15%, #f7fbff55, transparent 48%);
+}
+.liquid-wallpaper svg {
+  width: 100%;
+  height: 100%;
+  opacity: var(--liquid-wallpaper-opacity);
+}
+.liquid-app .vscode-titlebar {
+  flex: 0 0 46px;
+  height: 46px;
+  background: var(--liquid-window-tint);
+  border-bottom: 1px solid var(--vscode-border-subtle);
+}
+.liquid-app .vscode-window-control {
+  height: 46px;
+}
+.liquid-app .model-dropdown,
+.liquid-app .vscode-menu-dropdown {
+  background: var(--liquid-panel-solid);
+  border-radius: 14px;
+  box-shadow: 0 16px 40px -14px var(--liquid-shadow);
+  overflow: hidden;
+}
+.liquid-workbench {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+  margin: 14px 16px 0;
+}
+.liquid-sidebar {
+  flex-shrink: 0;
+  min-width: 0;
+  --liquid-content-display: flex;
+  box-shadow: 0 12px 32px -24px var(--liquid-shadow);
+}
+.liquid-sidebar > .liquid-surface__content {
+  width: 100%;
+  overflow: hidden;
+}
+.liquid-app .liquid-sidebar .vscode-sidebar-container,
+.liquid-app .liquid-sidebar .vscode-sidebar-header {
+  background: transparent;
+}
+.liquid-app .vscode-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 20px 18px 14px;
+  border: 0;
+}
+.sidebar-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.sidebar-heading > i {
+  color: var(--vscode-accent);
+  font-size: 17px;
+}
+.sidebar-local-badge {
+  padding: 2px 7px;
+  border: 1px solid var(--vscode-border);
+  border-radius: 6px;
+  font-size: 10px;
+  color: var(--vscode-fg-muted);
+}
+.liquid-sidebar .vscode-sidebar-container > .flex-1 > .p-2 {
+  padding: 0 12px 16px;
+}
+.sidebar-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  margin: 0 0 12px;
+  background: var(--vscode-bg-input);
+  border: 1px solid var(--vscode-border);
+  border-radius: 10px;
+}
+.sidebar-search > i {
+  color: var(--vscode-fg-muted);
+}
+.liquid-sidebar .sidebar-search input {
+  background: transparent;
+  border: 0;
+  padding: 8px 0;
+  height: 36px;
+  min-width: 0;
+  width: 100%;
+  outline: none;
+}
+.sidebar-search:focus-within {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 2px;
+}
+.liquid-sidebar .connection-list-actions {
+  gap: 7px;
+  margin-bottom: 22px;
+}
+.liquid-sidebar .vscode-button {
+  border-radius: 10px;
+  min-height: 34px;
+  font-size: 12px;
+  gap: 6px;
+}
+.liquid-sidebar .sidebar-folder-button {
+  width: 36px;
+  padding: 0;
+}
+.liquid-sidebar .vscode-tree-title {
+  padding: 0 6px;
+  margin-bottom: 12px;
+  letter-spacing: 0;
+}
+.sidebar-empty {
+  padding: 30px 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--vscode-fg-muted);
+}
+.sidebar-empty > i {
+  font-size: 24px;
+  opacity: 0.65;
+}
+.sidebar-empty p {
+  margin: 12px 0 4px;
+}
+.sidebar-empty span {
+  font-size: 11px;
+}
+.liquid-sidebar .tree-node-content {
+  border-radius: 9px;
+}
+.liquid-app .vscode-splitter-vertical {
+  position: relative;
+  flex: 0 0 12px;
+  cursor: col-resize;
+}
+.liquid-app .vscode-splitter-vertical::before {
+  content: '';
+  position: absolute;
+  width: 2px;
+  inset: 25px auto 25px 5px;
+  border-radius: 2px;
+  background: transparent;
+}
+.liquid-app .vscode-splitter-vertical:hover::before,
+.liquid-app .vscode-splitter-vertical:focus-visible::before {
+  background: var(--vscode-accent);
+}
+.liquid-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  gap: 10px;
+}
+.liquid-toolbar {
+  flex: 0 0 46px;
+  min-width: 0;
+  --liquid-content-display: flex;
+}
+.liquid-toolbar > .liquid-surface__content {
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+}
+.liquid-icon-button {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--vscode-fg-muted);
+  font-size: 15px;
+}
+.liquid-icon-button:hover {
+  background: var(--liquid-selected);
+  color: var(--vscode-fg);
+}
+.liquid-toolbar .vscode-tab-bar {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 5px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.liquid-toolbar .vscode-tab {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 100px;
+  max-width: 230px;
+  height: 34px;
+  border-radius: 10px;
+  color: var(--vscode-fg-muted);
+}
+.liquid-toolbar .vscode-tab.active {
+  background: var(--liquid-selected);
+  box-shadow:
+    0 1px 3px #1f3b5710,
+    inset 0 1px 0 var(--liquid-inner-light);
+  color: var(--vscode-fg);
+}
+.liquid-tab-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-radius: inherit;
+  color: inherit;
+  font: inherit;
+}
+.liquid-tab-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.liquid-toolbar .vscode-tab-close {
+  display: grid;
+  place-items: center;
+  width: 23px;
+  height: 23px;
+  margin-right: 5px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.6;
+}
+.liquid-toolbar .vscode-tab-close:hover {
+  background: var(--vscode-bg-lighter);
+  opacity: 1;
+}
+.liquid-content {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--liquid-rim);
+  border-radius: 20px;
+  background: var(--liquid-panel);
+  box-shadow: 0 14px 40px -32px var(--liquid-shadow);
+}
+.liquid-bottom {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 0 0 78px;
+  min-width: 0;
+}
+.liquid-dock {
+  height: 54px;
+  padding: 5px;
+  --liquid-content-display: flex;
+  box-shadow: 0 8px 22px -12px var(--liquid-shadow);
+}
+.liquid-dock > .liquid-surface__content {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.liquid-dock button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 85px;
+  height: 42px;
+  padding: 0 15px;
+  background: transparent;
+  border: 0;
+  border-radius: 22px;
+  color: var(--vscode-fg-muted);
+  font: inherit;
+  font-size: 12px;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out,
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.liquid-dock button i {
+  font-size: 17px;
+}
+.liquid-dock button.active {
+  background: var(--liquid-selected);
+  color: var(--vscode-accent);
+  box-shadow:
+    inset 0 1px 0 var(--liquid-inner-light),
+    0 2px 5px #273d5b0d;
+}
+.liquid-dock button:disabled {
+  opacity: 0.46;
+  cursor: default;
+}
+.liquid-dock-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--vscode-border);
+  margin: 0 5px;
+}
+.liquid-app .vscode-statusbar {
+  position: absolute;
+  right: 18px;
+  bottom: 14px;
+  height: 22px;
+  background: transparent;
+  border: 0;
+  color: var(--vscode-fg-muted);
+  font-size: 10px;
+  opacity: 0.8;
+}
+.sidebar-scrim {
+  display: none;
+}
+
+/* Keep terminal pixels opaque. Only its chrome takes on the glass palette. */
+.liquid-app .terminal-view {
+  background: transparent;
+}
+.liquid-app .terminal-view .terminal-header {
+  min-height: 44px;
+  padding: 10px 16px;
+  background: var(--liquid-panel);
+  border-bottom: 1px solid var(--vscode-border);
+}
+.liquid-app .terminal-main {
+  gap: 10px;
+  padding: 0 10px 10px;
+}
+.liquid-app .terminal-view .terminal-container {
+  background: var(--vscode-terminal-background);
+  border-radius: 12px;
+  padding: 10px 6px 4px 12px;
+  transition: none;
+}
+.liquid-app .terminal-view .ai-assistant-panel {
+  border: 1px solid var(--vscode-border);
+  border-radius: 12px;
+  background: var(--liquid-panel-solid);
+}
+.liquid-app .terminal-view .ai-panel-header {
+  min-height: 44px;
+}
+.liquid-app .terminal-view .ai-panel-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+.liquid-app .terminal-view .terminal-status-bar {
+  background: transparent;
+  border-top: 0;
+  padding: 0 16px 5px;
+  font-size: 11px;
+}
+.liquid-app .terminal-view .ai-assistant-floating-toggle {
+  background: var(--liquid-panel-solid);
+  color: var(--vscode-fg);
+  border: 1px solid var(--liquid-rim);
+  box-shadow: 0 8px 22px -10px var(--liquid-shadow);
+}
+.liquid-app .settings-view,
+.liquid-app .settings-view .settings-sidebar {
+  background: transparent;
+}
+.liquid-app .settings-view .settings-sidebar {
+  border-right-color: var(--vscode-border);
+}
+.liquid-app .settings-view .settings-content {
+  background: color-mix(in srgb, var(--liquid-panel-solid) 88%, transparent);
+}
+
+.liquid-app button {
+  touch-action: manipulation;
+}
+.liquid-app :is(button, [tabindex]):focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 2px;
+}
+html[data-theme-switching] *,
+html[data-theme-switching] *::before,
+html[data-theme-switching] *::after {
+  transition: none !important;
+}
+body.resizing,
+body.resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  .liquid-dock button:not(:disabled):hover {
+    background: var(--liquid-selected);
+    color: var(--vscode-fg);
+  }
+  .liquid-app[data-motion='on'] .liquid-dock button:not(:disabled):active {
+    transform: scale(0.96);
+    transition-duration: 0s;
+  }
+}
+@media (max-width: 1100px) {
+  .liquid-app .vscode-statusbar {
+    display: none;
+  }
+}
+@media (max-width: 800px) {
+  .liquid-workbench {
+    margin: 8px 8px 0;
+  }
+  .liquid-sidebar {
+    position: absolute;
+    z-index: 30;
+    inset: 0 auto 0 0;
+    max-width: calc(100% - 50px);
+    background: var(--liquid-panel-solid);
+    box-shadow: 8px 0 50px -12px var(--liquid-shadow);
+  }
+  .sidebar-scrim {
+    display: block;
+    position: absolute;
+    z-index: 29;
+    inset: 0;
+    background: #0c172847;
+    border: 0;
+    border-radius: 20px;
+  }
+  .liquid-app .vscode-splitter-vertical {
+    display: none;
+  }
+  .liquid-content {
+    border-radius: 16px;
+  }
+  .liquid-bottom {
+    flex-basis: 68px;
+  }
+  .liquid-app .vscode-titlebar > div:first-child > div:last-child {
+    display: none;
+  }
+  .liquid-app .vscode-titlebar > .flex-1 {
+    display: none;
+  }
+}
+@media (max-width: 480px) {
+  .liquid-dock button {
+    min-width: 58px;
+    padding: 0 10px;
+  }
+  .liquid-dock button span {
+    display: none;
+  }
+  .liquid-app .vscode-titlebar > div:first-child {
+    padding-left: 12px;
+  }
+  .liquid-app .vscode-titlebar > div:first-child span {
+    font-size: 11px;
+  }
+  .liquid-app .vscode-window-control {
+    width: 32px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .liquid-app .liquid-dock button {
+    transform: none !important;
+    transition:
+      background-color 100ms ease-out,
+      color 100ms ease-out;
+  }
+}
+html[data-transitions='off'] .liquid-app .liquid-dock button {
+  transition: none;
+}
+html[data-motion='off'] .connection-modal-enter-from .modal-container,
+html[data-motion='off'] .connection-modal-leave-to .modal-container,
+html[data-transitions='off'] .connection-modal-enter-from .modal-container,
+html[data-transitions='off'] .connection-modal-leave-to .modal-container {
+  transform: none;
+}
+html[data-transitions='off'] .connection-modal-enter-active,
+html[data-transitions='off'] .connection-modal-leave-active,
+html[data-transitions='off'] .connection-modal-enter-active .modal-container,
+html[data-transitions='off'] .connection-modal-leave-active .modal-container {
+  transition: none;
+}

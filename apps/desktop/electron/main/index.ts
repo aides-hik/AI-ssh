@@ -217,6 +217,7 @@ class Application {
         // 允许开发服务器、本地文件和API服务器
         const allowedOrigins = [
           'http://localhost:5173', // Vite开发服务器
+          'http://127.0.0.1:5173', // 浏览器预览与 Vite IPv4 地址
           getApiOriginByMode(true), // 生产 API 服务器
           'http://localhost:3000', // 本地 API 服务器
           getApiOriginByMode(false), // 本地 API 服务器 (IPv4)

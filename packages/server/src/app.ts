@@ -4,6 +4,7 @@ import jwt from '@fastify/jwt'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
 import rateLimit from '@fastify/rate-limit'
+import { APP_NAME, APP_VERSION } from '@ai-ssh/shared'
 
 import { config } from './config/app.config.js'
 import { logger } from './utils/safe-logger.js'
@@ -75,9 +76,9 @@ export async function buildApp(): Promise<FastifyInstance> {
       openapi: {
         openapi: '3.0.0',
         info: {
-          title: 'AI SSH Assistant API',
-          description: 'AI-powered SSH remote server management assistant API',
-          version: '1.0.0'
+          title: `${APP_NAME} API`,
+          description: 'AI-powered SSH workspace API',
+          version: APP_VERSION
         },
         servers: [
           {

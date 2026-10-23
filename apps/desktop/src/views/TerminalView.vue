@@ -308,6 +308,9 @@ const connectionInfoForDoc = computed(() => {
 
 // Refs
 const terminalContainer = ref<HTMLElement | null>(null)
+let terminalResizeObserver: ResizeObserver | null = null
+let terminalResizeFrame = 0
+let lastRemoteDimensions: { id: string; cols: number; rows: number } | null = null
 const terminal = ref<Terminal | null>(null)
 const fitAddon = ref<FitAddon | null>(null)
 const webLinksAddon = ref<WebLinksAddon | null>(null)
@@ -409,9 +412,9 @@ const initTerminal = () => {
     fontFamily: 'Consolas, "Courier New", monospace',
     convertEol: false, // 禁用自动换行符转换，避免重复换行
     theme: {
-      background: '#1e1e1e',
-      foreground: '#cccccc',
-      cursor: '#ffffff',
+      background: '#122033',
+      foreground: '#dae6f7',
+      cursor: '#8fbaff',
       black: '#000000',
       red: '#cd3131',
       green: '#0dbc79',
@@ -476,6 +479,15 @@ const initTerminal = () => {
 
   // 监听窗口大小变化
   window.addEventListener('resize', handleResize)
+  terminalResizeObserver?.disconnect()
+  terminalResizeObserver = new ResizeObserver(() => {
+    if (terminalResizeFrame) return
+    terminalResizeFrame = requestAnimationFrame(() => {
+      terminalResizeFrame = 0
+      if (terminalContainer.value?.getClientRects().length) handleResize()
+    })
+  })
+  terminalResizeObserver.observe(terminalContainer.value)
 
   // 设置自动补全监听器
   setupAutocompleteListener()
@@ -491,8 +503,15 @@ const handleResize = () => {
     if (connId && window.electronAPI && connectionStatus.value === 'connected') {
       const dims = fitAddon.value.proposeDimensions()
       if (dims && dims.cols && dims.rows) {
-        // 调用 SSH 服务调整远程终端尺寸
+        if (
+          lastRemoteDimensions?.id === connId &&
+          lastRemoteDimensions.cols === dims.cols &&
+          lastRemoteDimensions.rows === dims.rows
+        ) return
+        const requested = { id: connId, cols: dims.cols, rows: dims.rows }
+        lastRemoteDimensions = requested
         window.electronAPI.ssh.resize(connId, dims.cols, dims.rows).catch(err => {
+          if (lastRemoteDimensions === requested) lastRemoteDimensions = null
           console.warn('Failed to resize SSH terminal:', err)
         })
       }
@@ -852,6 +871,7 @@ const connectToSSH = async () => {
   cleanupListeners()
 
   connectionStatus.value = 'connecting'
+  lastRemoteDimensions = null
 
   try {
     // 监听 SSH 输出
@@ -865,6 +885,7 @@ const connectToSSH = async () => {
       statusListener.value = window.electronAPI.onConnectionStatusChange(async ({ id, status }) => {
         if (id === connId) {
           if (status === 'connected') {
+            lastRemoteDimensions = null
             clearAutoReconnectTimer()
             autoReconnectAttempts.value = 0
             suppressAutoReconnect.value = false
@@ -1394,7 +1415,7 @@ onActivated(() => {
   if (terminal.value && fitAddon.value) {
     nextTick(() => {
       try {
-        fitAddon.value?.fit()
+        handleResize()
         // 激活时聚焦到终端
         terminal.value?.focus()
       } catch (err) {
@@ -1415,6 +1436,10 @@ onBeforeUnmount(() => {
 
   // 移除窗口大小监听器
   window.removeEventListener('resize', handleResize)
+  terminalResizeObserver?.disconnect()
+  terminalResizeObserver = null
+  if (terminalResizeFrame) cancelAnimationFrame(terminalResizeFrame)
+  terminalResizeFrame = 0
 
   // 移除全局键盘事件监听
   document.removeEventListener('keydown', handleGlobalKeyDown, true)

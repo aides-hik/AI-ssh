@@ -4,7 +4,7 @@
       <!-- 应用logo和标题 -->
       <div class="text-center mb-8">
         <h1 class="text-3xl font-bold  dark:text-white mb-2">
-          AI SSH 助手
+          {{ $t('welcome.appTitle') }}
         </h1>
         <p class=" ">
           智能的 SSH 连接和管理工具
@@ -21,7 +21,7 @@
         <h2 class="text-xl font-semibold mb-4  dark:text-white">关于应用</h2>
         <div class="space-y-3  ">
           <p>
-            AI SSH 助手是一款现代化的 SSH 连接管理工具，集成了 AI 智能助手功能，
+            {{ $t('welcome.appTitle') }}是一款现代化的 SSH 连接管理工具，集成了 AI 智能助手功能，
             帮助您更高效地管理远程服务器连接和操作。
           </p>
           <p>

@@ -1608,16 +1608,6 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   <div
     class="oc-chat"
     :class="{ generating: isGenerating }"
-    style="
-      --background-base: #1f1f1f;
-      --text-base: #cccccc;
-      --surface-base: #2d2d2d;
-      --text-weak: #9d9d9d;
-      --surface-base-hover: #383838;
-      --text-interactive-base: #4daafc;
-      --text-success-base: #2ea043;
-      --text-critical-base: #f85149;
-    "
   >
     <div ref="messagesContainer" class="oc-messages">
       <div v-if="props.connectionId" class="oc-connection-banner">
@@ -1655,7 +1645,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
             <path d="M12 8a2 2 0 1 0 4 0 2 2 0 1 0-4 0z" />
           </svg>
         </div>
-        <div class="oc-empty-title">AI SSH Assistant</div>
+        <div class="oc-empty-title">{{ $t('welcome.appTitle') }}</div>
         <div class="oc-empty-text">{{ PLACEHOLDERS[placeholderIndex] }}</div>
         <div class="oc-empty-hint">
           <p>Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for new line</p>
@@ -2450,6 +2440,25 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 @import 'highlight.js/styles/github-dark.css';
 
 .oc-chat {
+  --background-base: var(--liquid-panel-solid, var(--vscode-bg));
+  --background-weak: var(--vscode-bg-light);
+  --text-base: var(--vscode-fg);
+  --text-strong: var(--vscode-fg);
+  --text-weak: var(--vscode-fg-muted);
+  --surface-base: var(--vscode-bg-light);
+  --surface-base-hover: var(--vscode-bg-lighter);
+  --surface-inset-base: var(--vscode-bg-input);
+  --surface-raised-base: var(--vscode-bg-light);
+  --surface-interactive-weak: color-mix(in srgb, var(--vscode-accent) 12%, transparent);
+  --text-interactive-base: var(--vscode-accent);
+  --text-success-base: var(--vscode-success);
+  --surface-success-strong: var(--vscode-success);
+  --surface-success-weak: color-mix(in srgb, var(--vscode-success) 12%, transparent);
+  --text-critical-base: var(--vscode-error);
+  --surface-critical-base: var(--vscode-error);
+  --text-on-critical-base: #fff;
+  --font-family-sans: 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --font-family-mono: 'Cascadia Code', Consolas, monospace;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -2556,6 +2565,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 }
 
 .oc-empty-hint kbd {
+  color: var(--text-base);
   background: var(--surface-inset-base);
   padding: 2px 6px;
   border-radius: 4px;
@@ -3384,9 +3394,9 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   display: block;
   background: transparent;
   border: none;
-  color: #ffffff;
-  -webkit-text-fill-color: #ffffff;
-  caret-color: #ffffff;
+  color: var(--text-base);
+  -webkit-text-fill-color: var(--text-base);
+  caret-color: var(--text-interactive-base);
   opacity: 1;
   padding: 0;
   resize: none;
@@ -3501,16 +3511,17 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   outline: none;
   background: transparent;
   background-color: transparent;
-  color: #ffffff;
-  -webkit-text-fill-color: #ffffff;
+  color: var(--text-base);
+  -webkit-text-fill-color: var(--text-base);
 }
 .oc-input::placeholder {
   color: var(--text-weak);
-  opacity: 0.7;
+  -webkit-text-fill-color: var(--text-weak);
+  opacity: 1;
   transition: opacity 0.2s;
 }
 .oc-input:focus::placeholder {
-  opacity: 0.5;
+  opacity: 1;
 }
 .oc-send-button {
   width: 28px;
@@ -3527,8 +3538,8 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   flex-shrink: 0;
 }
 .oc-send-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
+  background: var(--surface-base-hover);
+  color: var(--text-base);
 }
 .oc-send-button:disabled {
   opacity: 0.4;

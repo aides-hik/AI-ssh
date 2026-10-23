@@ -1,5 +1,5 @@
 appId: local.ai-ssh-assistant.desktop
-productName: AI SSH Assistant
+productName: Prism
 publish: null
 compression: maximum
 directories:
@@ -57,10 +57,10 @@ win:
     - target: nsis
       arch:
         - x64
-  executableName: AI SSH Assistant
-  artifactName: AI-SSH-Assistant-${version}-setup-${arch}.${ext}
+  executableName: Prism
+  artifactName: Prism-${version}-setup-${arch}.${ext}
 nsis:
-  artifactName: AI-SSH-Assistant-${version}-setup-${arch}.${ext}
+  artifactName: Prism-${version}-setup-${arch}.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
@@ -73,15 +73,15 @@ mac:
     - zip
   category: public.app-category.developer-tools
   # 统一文件名格式（去除空格）
-  artifactName: ai-ssh-assistant-${version}-macos-${arch}.${ext}
+  artifactName: prism-${version}-macos-${arch}.${ext}
 dmg:
-  artifactName: ai-ssh-assistant-${version}-macos-${arch}.${ext}
+  artifactName: prism-${version}-macos-${arch}.${ext}
 linux:
   maintainer: Local Maintainers
   target:
     - AppImage
     - deb
   category: Development
-  artifactName: ai-ssh-assistant-${version}-linux-${arch}.${ext}
+  artifactName: prism-${version}-linux-${arch}.${ext}
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/

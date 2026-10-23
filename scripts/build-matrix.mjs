@@ -2,10 +2,10 @@ import { appendFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
 const targets = [
-  { key: 'windows', platform: 'Windows', os: 'windows-latest', build_script: 'build:win', target_arch: 'x64', artifacts: 'apps/desktop/release/*/AI-SSH-Assistant-*-setup-*.exe' },
-  { key: 'macos', platform: 'macOS x64', os: 'macos-latest', build_script: 'build:mac:x64', target_arch: 'x64', artifacts: 'apps/desktop/release/*/ai-ssh-assistant-*-macos-x64.dmg\napps/desktop/release/*/ai-ssh-assistant-*-macos-x64.zip' },
-  { key: 'macos', platform: 'macOS arm64', os: 'macos-latest', build_script: 'build:mac:arm64', target_arch: 'arm64', artifacts: 'apps/desktop/release/*/ai-ssh-assistant-*-macos-arm64.dmg\napps/desktop/release/*/ai-ssh-assistant-*-macos-arm64.zip' },
-  { key: 'linux', platform: 'Linux', os: 'ubuntu-latest', build_script: 'build:linux', target_arch: 'x64', artifacts: 'apps/desktop/release/*/ai-ssh-assistant-*-linux-*.AppImage\napps/desktop/release/*/ai-ssh-assistant-*-linux-*.deb' }
+  { key: 'windows', platform: 'Windows', os: 'windows-latest', build_script: 'build:win', target_arch: 'x64', artifacts: 'apps/desktop/release/*/Prism-*-setup-*.exe' },
+  { key: 'macos', platform: 'macOS x64', os: 'macos-latest', build_script: 'build:mac:x64', target_arch: 'x64', artifacts: 'apps/desktop/release/*/prism-*-macos-x64.dmg\napps/desktop/release/*/prism-*-macos-x64.zip' },
+  { key: 'macos', platform: 'macOS arm64', os: 'macos-latest', build_script: 'build:mac:arm64', target_arch: 'arm64', artifacts: 'apps/desktop/release/*/prism-*-macos-arm64.dmg\napps/desktop/release/*/prism-*-macos-arm64.zip' },
+  { key: 'linux', platform: 'Linux', os: 'ubuntu-latest', build_script: 'build:linux', target_arch: 'x64', artifacts: 'apps/desktop/release/*/prism-*-linux-*.AppImage\napps/desktop/release/*/prism-*-linux-*.deb' }
 ]
 
 export function createBuildMatrix(platforms = 'windows') {

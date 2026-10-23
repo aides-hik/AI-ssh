@@ -2,6 +2,8 @@
  * 简体中文翻译
  */
 
+import { APP_DISPLAY_NAME } from '@ai-ssh/shared'
+
 export default {
   common: {
     // 通用操作
@@ -143,7 +145,7 @@ export default {
 
   titlebar: {
     // App name and path
-    appWelcome: 'AI SSH Assistant - 欢迎',
+    appWelcome: `${APP_DISPLAY_NAME} - 欢迎`,
 
     // Menu items
     menuFile: '文件',
@@ -480,7 +482,7 @@ export default {
     // ===== 关于 =====
     aboutTitle: '关于',
     aboutDesc: '应用程序信息和版本详情',
-    appVersion: '版本 1.0.0',
+    appVersion: '版本 {version}',
     appDescription: '一款智能的 SSH 管理工具，结合 AI 技术，让远程服务器管理更加简单高效。',
     github: 'GitHub',
     feedback: '反馈',
@@ -518,7 +520,7 @@ export default {
   },
 
   welcome: {
-    appTitle: 'AI SSH Assistant',
+    appTitle: APP_DISPLAY_NAME,
     appDescription: '智能的 SSH 连接和管理工具，帮助您更高效地管理远程服务器',
 
     // Features

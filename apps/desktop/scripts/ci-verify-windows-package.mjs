@@ -20,7 +20,7 @@ const releaseRoot = path.join(desktopRoot, 'release', packageJson.version)
 const sandbox = path.join(path.resolve(process.env.RUNNER_TEMP), 'aissh-package-validation')
 const resultsDirectory = path.join(sandbox, 'results')
 const installationDirectory = path.join(sandbox, 'installed')
-const executableName = 'AI SSH Assistant.exe'
+const executableName = 'Prism.exe'
 const runtimeProbe = path.join(scriptDirectory, 'ci-check-packaged-runtime.cjs')
 await mkdir(resultsDirectory, { recursive: true })
 
@@ -163,6 +163,8 @@ async function verifyApplicationLaunch(executable, name, phase, profile) {
           throw new Error('Settings did not survive the application restart');
         }
         return { userData: await api.getPath('userData'), version: await api.getVersion(),
+          documentTitle: document.title,
+          appBrand: document.querySelector('[data-testid="app-brand"]')?.textContent?.trim(),
           settings: await api.settings.get('local-user'), connections: await api.ssh.getConnections() };
       })()`,
       awaitPromise: true,
@@ -171,11 +173,12 @@ async function verifyApplicationLaunch(executable, name, phase, profile) {
     assert.ok(!evaluation.exceptionDetails, JSON.stringify(evaluation.exceptionDetails))
     const state = evaluation.result.value
     assert.equal(state.version, packageJson.version)
+    assert.match(state.documentTitle, /Prism/, 'Window title does not show the Prism brand')
+    assert.match(state.appBrand, /Prism/, 'Title bar does not show the Prism brand')
     assert.ok(Array.isArray(state.connections))
     assert.ok(state.settings?.appearance)
     assert.equal(state.settings.__ciPackageMarker, `${name}-settings-persisted`, 'Settings IPC did not persist the marker')
-    const relativeProfile = path.relative(profile, state.userData)
-    assert.ok(!relativeProfile.startsWith('..') && !path.isAbsolute(relativeProfile), 'Application used an unisolated profile')
+    assert.equal(path.resolve(state.userData), path.resolve(profile), 'Application changed the requested data directory')
     assert.deepEqual(debuggerClient.exceptions, [], 'Renderer raised an unhandled exception')
     await log(`${logPrefix}-ui.json`, JSON.stringify({ success: true, pid: child.pid, phase, ...state }, null, 2))
     const screenshot = await debuggerClient.send('Page.captureScreenshot', { format: 'png' })
@@ -198,6 +201,10 @@ async function verifyApplicationLaunch(executable, name, phase, profile) {
 
 async function verifyApplication(executable, name) {
   const packageRoot = path.join(path.dirname(executable), 'resources', 'app')
+  const shippedPackage = JSON.parse(await readFile(path.join(packageRoot, 'package.json'), 'utf8'))
+  // Keep Electron's runtime name stable so existing default userData paths remain valid.
+  assert.equal(shippedPackage.name, '@ai-ssh/desktop', 'Application package identity changed')
+  assert.equal(shippedPackage.productName, undefined, 'Display branding must not override Electron runtime name')
   const runtimeResult = path.join(resultsDirectory, `${name}-runtime.json`)
   await run(executable, [runtimeProbe, packageRoot, runtimeResult], `${name}-runtime`, { ...process.env, ELECTRON_RUN_AS_NODE: '1' })
   const runtime = JSON.parse(await readFile(runtimeResult, 'utf8'))
@@ -210,7 +217,7 @@ async function verifyApplication(executable, name) {
 
 let installationAttempted = false
 try {
-  const installer = path.join(releaseRoot, `AI-SSH-Assistant-${packageJson.version}-setup-x64.exe`)
+  const installer = path.join(releaseRoot, `Prism-${packageJson.version}-setup-x64.exe`)
   assert.ok((await stat(installer)).size > 1024 * 1024, 'Installer is absent or unexpectedly small')
   const header = await readFile(installer)
   assert.equal(header.subarray(0, 2).toString(), 'MZ', 'Installer is not a Windows executable')

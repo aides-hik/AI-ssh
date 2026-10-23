@@ -111,7 +111,6 @@ jobs:
           ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
           ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
           TARGET_ARCH: ${{ matrix.target_arch }}
-          VITE_APP_VERSION: manual-${{ github.sha }}
 
       - name: 🧪 Verify Windows package, installation and removal
         if: runner.os == 'Windows'

@@ -1,5 +1,5 @@
 <template>
-  <div class="vscode-titlebar flex items-center text-vscode-fg select-none" style="height: 37px">
+  <div class="vscode-titlebar flex items-center text-vscode-fg select-none">
     <!-- 左侧：应用菜单和标题 -->
     <div class="flex items-center space-x-4 pl-4">
       <!-- 应用图标和名称 -->
@@ -16,7 +16,7 @@
           />
           <path d="M3 6l2 1.5L3 9v1l3-2V7L3 5v1zm4 3h3v1H7V9z" />
         </svg>
-        <span class="text-sm font-medium">AI SSH Assistant</span>
+        <span class="text-sm font-medium" data-testid="app-brand">{{ $t('welcome.appTitle') }}</span>
       </div>
 
       <!-- 菜单栏 -->
@@ -111,10 +111,7 @@
               >
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2 flex-1">
-                    <i
-                      class="bi bi-cpu text-vscode-accent shrink-0"
-                      style="font-size: 16px"
-                    ></i>
+                    <i class="bi bi-cpu text-vscode-accent shrink-0" style="font-size: 16px"></i>
                     <div class="flex flex-col gap-0.5 flex-1 min-w-0">
                       <span class="text-sm font-medium text-vscode-fg truncate">{{
                         model.name
@@ -516,11 +513,13 @@ const executeMenuAction = async (action: string) => {
         const result = await sshService.importConnections()
         if (!result.canceled) {
           window.dispatchEvent(new CustomEvent('ssh-connections-imported'))
-          $alert($t('ssh.importResult', {
-            imported: result.imported || 0,
-            skipped: result.skipped || 0,
-            invalid: result.invalid || 0
-          }))
+          $alert(
+            $t('ssh.importResult', {
+              imported: result.imported || 0,
+              skipped: result.skipped || 0,
+              invalid: result.invalid || 0
+            })
+          )
         }
       } catch (error: any) {
         $alert(error.message || $t('ssh.importFailed'))
@@ -564,7 +563,6 @@ const executeMenuAction = async (action: string) => {
 
       showShortcutsModal()
       break
-
   }
 }
 
@@ -686,7 +684,7 @@ document.addEventListener('click', handleClickOutside)
 
 <style scoped>
 .vscode-titlebar {
-  background-color: var(--vscode-bg-light) !important;
+  background-color: var(--vscode-bg-light);
   border-bottom: 1px solid var(--vscode-border);
   -webkit-app-region: drag;
   position: relative;

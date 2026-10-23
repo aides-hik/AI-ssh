@@ -1,7 +1,7 @@
 {
   "name": "ai-ssh-assistant",
-  "version": "1.8.32",
-  "description": "AI-powered SSH remote server management assistant",
+  "version": "1.9.0",
+  "description": "Prism — AI-powered SSH workspace",
   "private": true,
   "workspaces": [
     "apps/*",
@@ -11,6 +11,7 @@
     "dev": "pnpm build:database && concurrently \"pnpm dev:server\" \"pnpm dev:desktop\"",
     "devall": "pnpm build:database && pnpm build:shared && pnpm dev:desktop",
     "dev:desktop": "pnpm --filter @ai-ssh/desktop dev",
+    "preview:design": "pnpm --filter @ai-ssh/desktop dev:design",
     "dev:server": "pnpm --filter @ai-ssh/server dev:debug",
     "build:database": "pnpm --filter @ai-ssh/database build",
     "build": "pnpm build:shared && pnpm build:database && pnpm build:server",

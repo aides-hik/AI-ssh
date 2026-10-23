@@ -4,15 +4,18 @@
  */
 
 import { ref, computed, watch } from 'vue'
+import { themeService, type ThemeMode as ServiceThemeMode } from '../services/theme.service'
 
 type ThemeMode = 'light' | 'dark' | 'auto'
 type ColorScheme = 'blue' | 'green' | 'purple' | 'orange' | 'red'
 
 // 全局状态（单例模式）
-const mode = ref<ThemeMode>('auto')
+const normalizeMode = (value: ServiceThemeMode): ThemeMode =>
+  value === 'auto' ? 'auto' : value.includes('dark') ? 'dark' : 'light'
+const mode = ref<ThemeMode>(normalizeMode(themeService.getMode()))
 const colorScheme = ref<ColorScheme>('blue')
 const fontSize = ref<'small' | 'medium' | 'large'>('medium')
-const isDark = ref(false)
+const isDark = ref(themeService.isDarkTheme())
 const animations = ref(true)
 const transitions = ref(true)
 const isInitialized = ref(false)
@@ -32,10 +35,10 @@ export function useTheme() {
     // 根据颜色方案设置主色调
     switch (colorScheme.value) {
       case 'blue':
-        vars['--primary-color'] = '#3b82f6'
-        vars['--primary-hover'] = '#2563eb'
-        vars['--vscode-accent'] = '#007acc'
-        vars['--vscode-accent-hover'] = '#005a9e'
+        vars['--primary-color'] = '#3979e7'
+        vars['--primary-hover'] = '#2864c9'
+        vars['--vscode-accent'] = '#3979e7'
+        vars['--vscode-accent-hover'] = '#2864c9'
         break
       case 'green':
         vars['--primary-color'] = '#10b981'
@@ -90,9 +93,11 @@ export function useTheme() {
       const savedTheme = localStorage.getItem('theme-settings')
       if (savedTheme) {
         const settings = JSON.parse(savedTheme)
-        mode.value = settings.mode || 'auto'
-        colorScheme.value = settings.colorScheme || 'blue'
-        fontSize.value = settings.fontSize || 'medium'
+        if (['blue', 'green', 'purple', 'orange', 'red'].includes(settings.colorScheme)) {
+          colorScheme.value = settings.colorScheme
+        }
+        if (['small', 'medium', 'large'].includes(settings.fontSize))
+          fontSize.value = settings.fontSize
         animations.value = settings.animations !== false
         transitions.value = settings.transitions !== false
       }
@@ -117,36 +122,10 @@ export function useTheme() {
     }
   }
 
-  // 检测系统主题
-  const detectSystemTheme = () => {
-    if (typeof window !== 'undefined') {
-      isDark.value = window.matchMedia('(prefers-color-scheme: dark)').matches
-    }
-  }
-
-  // 监听系统主题变化
-  const watchSystemTheme = () => {
-    if (typeof window !== 'undefined') {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-      mediaQuery.addEventListener('change', (e) => {
-        isDark.value = e.matches
-        if (mode.value === 'auto') {
-          applyTheme()
-        }
-      })
-    }
-  }
-
-  // 应用主题
+  // Apply appearance options; themeService alone owns light/dark classes.
   const applyTheme = () => {
     if (typeof document === 'undefined') return
-
-    const theme = currentTheme.value
     const root = document.documentElement
-
-    // 设置主题类
-    root.classList.remove('light', 'dark')
-    root.classList.add(theme)
 
     // 设置 CSS 变量
     Object.entries(cssVariables.value).forEach(([key, value]) => {
@@ -156,11 +135,8 @@ export function useTheme() {
     // 设置动画和过渡
     root.style.setProperty('--animation-duration', animations.value ? '0.3s' : '0s')
     root.style.setProperty('--transition-duration', transitions.value ? '0.2s' : '0s')
-
-    // 通知其他组件主题已更改
-    document.dispatchEvent(new CustomEvent('theme-changed', {
-      detail: { theme, colorScheme: colorScheme.value }
-    }))
+    root.dataset.motion = animations.value ? 'on' : 'off'
+    root.dataset.transitions = transitions.value ? 'on' : 'off'
   }
 
   // 初始化主题
@@ -168,15 +144,34 @@ export function useTheme() {
     if (isInitialized.value) return
 
     loadThemeSettings()
-    detectSystemTheme()
-    applyTheme()
-    watchSystemTheme()
-
-    // 监听主题变化并保存设置
-    watch([mode, colorScheme, fontSize, animations, transitions], () => {
-      applyTheme()
+    themeService.init()
+    const syncTheme = () => {
+      mode.value = normalizeMode(themeService.getMode())
+      isDark.value = themeService.isDarkTheme()
       saveThemeSettings()
-    })
+    }
+    syncTheme()
+    applyTheme()
+    window.addEventListener('theme-changed', syncTheme)
+    // Compare normalized preferences so a service event never loops back into it.
+    watch(
+      mode,
+      value => {
+        if (value !== normalizeMode(themeService.getMode())) {
+          themeService.applyTheme(value === 'auto' ? 'auto' : `${value}-modern`)
+        }
+        saveThemeSettings()
+      },
+      { flush: 'sync' }
+    )
+    watch(
+      [colorScheme, fontSize, animations, transitions],
+      () => {
+        applyTheme()
+        saveThemeSettings()
+      },
+      { flush: 'sync' }
+    )
 
     isInitialized.value = true
   }
@@ -226,7 +221,7 @@ export function useTheme() {
 
   // 获取可用的颜色方案
   const getAvailableColorSchemes = (): { value: ColorScheme; label: string; color: string }[] => [
-    { value: 'blue', label: '蓝色', color: '#3b82f6' },
+    { value: 'blue', label: '蓝色', color: '#3979e7' },
     { value: 'green', label: '绿色', color: '#10b981' },
     { value: 'purple', label: '紫色', color: '#8b5cf6' },
     { value: 'orange', label: '橙色', color: '#f59e0b' },
@@ -259,4 +254,3 @@ export function useTheme() {
     applyTheme
   }
 }
-

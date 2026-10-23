@@ -1,80 +1,162 @@
 <template>
-  <div class="vscode-app h-screen flex flex-col bg-vscode-bg text-vscode-fg select-none">
-    <!-- 标题栏 -->
-    <AppTitleBar
-      v-if="!isFullscreen"
-      class="vscode-titlebar"
-      @open-settings="openSettings"
-    />
+  <div class="vscode-app liquid-app" :data-motion="theme.animations.value ? 'on' : 'off'">
+    <div class="liquid-wallpaper" aria-hidden="true">
+      <svg viewBox="0 0 1400 800" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="app-flow-blue" x1="0" x2="1" y1="0" y2="1">
+            <stop stop-color="#d3e0f4" />
+            <stop offset=".48" stop-color="#649be8" />
+            <stop offset="1" stop-color="#dcf7f5" />
+          </linearGradient>
+          <linearGradient id="app-flow-pink" x1="0" x2="1">
+            <stop stop-color="#bdd2f0" />
+            <stop offset="1" stop-color="#f2dae7" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M-140 710C125 810 168 370 478 445S882 971 1588 499"
+          fill="none"
+          stroke="url(#app-flow-blue)"
+          stroke-width="160"
+        />
+        <path
+          d="M-120 585C128 691 170 293 474 370S884 890 1580 419"
+          fill="none"
+          stroke="#fff"
+          stroke-opacity=".68"
+          stroke-width="3"
+        />
+        <path
+          d="M522-230C1155-162 617 226 1009 268S1390 66 1635 176"
+          fill="none"
+          stroke="url(#app-flow-pink)"
+          stroke-width="145"
+        />
+        <path
+          d="M553-165C1152-90 667 174 1007 205S1386 9 1616 113"
+          fill="none"
+          stroke="#fff"
+          stroke-opacity=".75"
+          stroke-width="2"
+        />
+        <path
+          d="M-55 743C222 834 211 410 490 494S916 1010 1512 601"
+          fill="none"
+          stroke="#effaff"
+          stroke-opacity=".7"
+          stroke-width="2"
+        />
+      </svg>
+    </div>
 
-    <!-- 主内容区 -->
-    <div class="flex flex-1 overflow-hidden">
-      <!-- 活动栏 -->
-      <div
-        class="vscode-activitybar w-12 bg-vscode-bg-light border-r border-vscode-border flex flex-col"
-      >
-        <div class="flex-1 py-2">
-          <div
-            v-for="item in activityBarItems"
-            :key="item.id"
-            @click="setActiveView(item.id)"
-            :class="['vscode-activity-item', { active: activeView === item.id }]"
-            :title="item.tooltip"
-          >
-            <i :class="item.icon"></i>
-          </div>
-        </div>
-        <div class="py-2">
-          <div
-            class="vscode-activity-item"
-            @click="openSettings"
-            :title="$t('activityBar.settings')"
-          >
-            <i class="bi bi-gear"></i>
-          </div>
-        </div>
-      </div>
+    <AppTitleBar v-if="!isFullscreen" @open-settings="openSettings" />
 
-      <!-- 侧边栏 -->
-      <div
+    <div class="liquid-workbench">
+      <button
         v-if="showSidebar"
-        class="vscode-sidebar bg-vscode-bg-light border-r border-vscode-border shrink-0"
+        class="sidebar-scrim"
+        aria-label="收起连接列表"
+        @click="showSidebar = false"
+      ></button>
+      <LiquidSurface
+        v-show="showSidebar"
+        as="aside"
+        id="connection-sidebar"
+        class="vscode-sidebar liquid-sidebar"
         :style="{ width: sidebarWidth + 'px' }"
+        :radius="22"
+        :strength="32"
+        :blur="7"
+        :interactive="false"
+        :motion="theme.animations.value"
+        aria-label="SSH 连接"
       >
         <AppSidebar :active-view="activeView" />
-      </div>
-
-      <!-- 左侧拖拽分割条 -->
+      </LiquidSurface>
       <div
         v-if="showSidebar"
         class="vscode-splitter vscode-splitter-vertical"
+        role="separator"
+        aria-label="调整连接列表宽度"
+        aria-orientation="vertical"
+        :aria-valuenow="sidebarWidth"
+        :aria-valuemin="200"
+        :aria-valuemax="600"
+        tabindex="0"
+        @keydown.left.prevent="sidebarWidth = Math.max(200, sidebarWidth - 20)"
+        @keydown.right.prevent="sidebarWidth = Math.min(600, sidebarWidth + 20)"
         @mousedown="startLeftResize"
       ></div>
 
-      <!-- 编辑器区域 -->
-      <div class="flex-1 flex flex-col overflow-hidden min-w-0">
-        <!-- 标签栏 -->
-        <div
-          class="vscode-tab-bar bg-vscode-bg-light border-b border-vscode-border flex"
-          style="height: 37px"
+      <div class="liquid-editor">
+        <LiquidSurface
+          class="liquid-toolbar"
+          :radius="18"
+          :blur="5"
+          :strength="24"
+          :interactive="false"
         >
-          <div
-            v-for="tab in openTabs"
-            :key="tab.id"
-            @click="setActiveTab(tab.id)"
-            @mousedown.middle="closeTab(tab.id)"
-            :class="['vscode-tab', { active: activeTab === tab.id }]"
+          <button
+            class="sidebar-toggle liquid-icon-button"
+            :aria-expanded="showSidebar"
+            aria-controls="connection-sidebar"
+            :title="showSidebar ? '收起连接列表 (Ctrl+B)' : '展开连接列表 (Ctrl+B)'"
+            aria-label="切换连接列表"
+            @click="showSidebar = !showSidebar"
           >
-            <i :class="tab.icon" class="mr-1"></i>
-            <span>{{ tab.name }}</span>
-            <button @click.stop="closeTab(tab.id)" class="vscode-tab-close">
-              <i class="bi bi-x"></i>
-            </button>
+            <i class="bi bi-layout-sidebar" aria-hidden="true"></i>
+          </button>
+          <div
+            class="vscode-tab-bar"
+            role="tablist"
+            aria-label="打开的页面"
+            @keydown="handleTabKeydown"
+          >
+            <div
+              v-for="tab in openTabs"
+              :key="tab.id"
+              class="vscode-tab"
+              :class="{ active: activeTab === tab.id }"
+              @mousedown.middle.prevent="closeTab(tab.id)"
+            >
+              <button
+                class="liquid-tab-trigger"
+                role="tab"
+                :id="`workspace-tab-${tab.id}`"
+                aria-controls="workspace-content"
+                :tabindex="activeTab === tab.id ? 0 : -1"
+                :aria-selected="activeTab === tab.id"
+                @click="setActiveTab(tab.id)"
+              >
+                <i :class="tab.icon" aria-hidden="true"></i>
+                <span>{{ tab.name }}</span>
+              </button>
+              <button
+                v-if="openTabs.length > 1"
+                class="vscode-tab-close"
+                :aria-label="'关闭 ' + tab.name"
+                @click="closeTab(tab.id)"
+              >
+                <i class="bi bi-x" aria-hidden="true"></i>
+              </button>
+            </div>
           </div>
-        </div>
+          <button
+            class="liquid-icon-button liquid-add-connection"
+            title="新建连接"
+            aria-label="新建连接"
+            @click="createConnection"
+          >
+            <i class="bi bi-plus-lg" aria-hidden="true"></i>
+          </button>
+        </LiquidSurface>
 
-        <!-- 主内容 -->
-        <main class="flex-1 overflow-hidden bg-vscode-bg">
+        <main
+          id="workspace-content"
+          class="liquid-content"
+          role="tabpanel"
+          :aria-labelledby="`workspace-tab-${activeTab}`"
+        >
           <router-view v-slot="{ Component, route }">
             <keep-alive>
               <component :is="Component" :key="getRouteKey(route)" />
@@ -84,21 +166,69 @@
       </div>
     </div>
 
-    <!-- 状态栏 -->
-    <AppStatusBar v-if="!isFullscreen" class="vscode-statusbar" />
-
-    <!-- 全局模态框 -->
+    <footer class="liquid-bottom">
+      <LiquidSurface
+        as="nav"
+        class="liquid-dock"
+        :radius="28"
+        :blur="4"
+        :strength="44"
+        :motion="theme.animations.value"
+        aria-label="主导航"
+      >
+        <button
+          data-destination="home"
+          aria-label="工作台"
+          :class="{ active: route.path === '/ssh' }"
+          :aria-current="route.path === '/ssh' ? 'page' : undefined"
+          @click="openNewTab('ssh', $t('ssh.sshConnection'), 'bi bi-hdd-network', '/ssh')"
+        >
+          <i class="bi bi-grid-1x2" aria-hidden="true"></i><span>工作台</span>
+        </button>
+        <button
+          data-destination="terminal"
+          aria-label="终端"
+          :class="{ active: route.path === '/terminal' }"
+          :aria-current="route.path === '/terminal' ? 'page' : undefined"
+          :disabled="!sessionTab"
+          :title="sessionTab ? '终端' : '连接服务器后使用终端'"
+          @click="openSessionView('terminal')"
+        >
+          <i class="bi bi-terminal" aria-hidden="true"></i><span>终端</span>
+        </button>
+        <button
+          data-destination="files"
+          aria-label="文件管理"
+          :class="{ active: route.path === '/file-manager' }"
+          :aria-current="route.path === '/file-manager' ? 'page' : undefined"
+          :disabled="!sessionTab"
+          :title="sessionTab ? '文件管理' : '连接服务器后管理文件'"
+          @click="openSessionView('file-manager')"
+        >
+          <i class="bi bi-folder2" aria-hidden="true"></i><span>文件</span>
+        </button>
+        <span class="liquid-dock-divider" aria-hidden="true"></span>
+        <button
+          data-destination="settings"
+          :aria-label="$t('common.settings')"
+          :class="{ active: route.path === '/settings' }"
+          :aria-current="route.path === '/settings' ? 'page' : undefined"
+          @click="openSettings"
+        >
+          <i class="bi bi-sliders2" aria-hidden="true"></i><span>{{ $t('common.settings') }}</span>
+        </button>
+      </LiquidSurface>
+      <AppStatusBar v-if="!isFullscreen" />
+    </footer>
     <GlobalModals />
-
-    <!-- 通知组件 -->
     <NotificationContainer />
-
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, provide, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, provide, computed, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import type { RouteLocationNormalizedLoaded } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useApp } from '@/composables/useApp'
 import { useTheme } from '@/composables/useTheme'
@@ -108,6 +238,7 @@ import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppStatusBar from '@/components/layout/AppStatusBar.vue'
 import GlobalModals from '@/components/common/GlobalModals.vue'
 import NotificationContainer from '@/components/common/NotificationContainer.vue'
+import LiquidSurface from '@/components/common/LiquidSurface.vue'
 import { clearRetiredAccountSession } from '@/utils/standalone-providers'
 
 clearRetiredAccountSession()
@@ -124,6 +255,7 @@ const isFullscreen = ref(false)
 const showSidebar = ref(true)
 const activeView = ref('ssh')
 const activeTab = ref('ssh')
+const lastSessionTabId = ref('')
 
 // 打开的标签列表（本地状态）
 const openTabsList = ref<Array<{ id: string; name: string; icon: string; path: string }>>([
@@ -131,18 +263,13 @@ const openTabsList = ref<Array<{ id: string; name: string; icon: string; path: s
 ])
 
 // 面板尺寸
-const sidebarWidth = ref(256) // 默认256px
+const sidebarWidth = ref(248) // 默认256px
 
 // 拖拽状态
 const isResizing = ref(false)
 const resizeType = ref<'left' | null>(null)
 const startX = ref(0)
 const startWidth = ref(0)
-
-// 活动栏项目
-const activityBarItems = computed(() => [
-  { id: 'ssh', icon: 'bi bi-hdd-network', tooltip: $t('activityBar.ssh') }
-])
 
 // 打开的标签 - 更新 name 为国际化的
 const openTabs = computed(() =>
@@ -189,6 +316,25 @@ const setActiveTab = (tabId: string) => {
   }
 }
 
+const handleTabKeydown = (event: KeyboardEvent) => {
+  if (!(event.target instanceof HTMLElement) || event.target.getAttribute('role') !== 'tab') return
+  const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End']
+  if (!keys.includes(event.key)) return
+  event.preventDefault()
+  const tabs = Array.from(
+    (event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('[role="tab"]')
+  )
+  const index = tabs.indexOf(event.target as HTMLButtonElement)
+  const next =
+    event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? tabs.length - 1
+        : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length
+  tabs[next]?.focus()
+  tabs[next]?.click()
+}
+
 const closeTab = (tabId: string) => {
   const index = openTabsList.value.findIndex(t => t.id === tabId)
   if (index === -1) {
@@ -229,9 +375,8 @@ const openNewTab = (id: string, name: string, icon: string, path: string) => {
     activeTab.value = id
 
     // 如果路径不同，强制跳转路由（确保 query 参数生效）
-    if (existingTab.path !== path) {
-      router.push(path)
-    }
+    existingTab.path = path
+    router.push(path)
     return
   }
 
@@ -244,10 +389,61 @@ const openNewTab = (id: string, name: string, icon: string, path: string) => {
   router.push(path)
 }
 
-const openSettings = () => {
+const openSettings = (section?: string | Event) => {
   // 打开设置页面 - 在新标签中打开
 
-  openNewTab('settings', $t('common.settings'), 'bi bi-gear', '/settings')
+  const path =
+    typeof section === 'string' ? `/settings?section=${encodeURIComponent(section)}` : '/settings'
+  openNewTab('settings', $t('common.settings'), 'bi bi-gear', path)
+}
+
+const createConnection = async () => {
+  showSidebar.value = true
+  await nextTick()
+  window.dispatchEvent(new CustomEvent('ssh-create-connection'))
+}
+
+// Reuse the current SSH session when moving between terminal and files.
+const sessionTab = computed(() => {
+  const sessions = openTabsList.value.filter(
+    tab =>
+      /^\/(terminal|file-manager)\?/.test(tab.path) &&
+      new URLSearchParams(tab.path.split('?')[1]).has('connectionId')
+  )
+  return (
+    sessions.find(tab => tab.id === activeTab.value) ??
+    sessions.find(tab => tab.id === lastSessionTabId.value) ??
+    sessions.at(-1)
+  )
+})
+
+watch(
+  activeTab,
+  id => {
+    const tab = openTabsList.value.find(item => item.id === id)
+    if (
+      tab &&
+      /^\/(terminal|file-manager)\?/.test(tab.path) &&
+      new URLSearchParams(tab.path.split('?')[1]).has('connectionId')
+    )
+      lastSessionTabId.value = id
+  },
+  { flush: 'sync' }
+)
+
+const openSessionView = (view: 'terminal' | 'file-manager') => {
+  const session = sessionTab.value
+  if (!session) return
+  const query = new URLSearchParams(session.path.split('?')[1])
+  const id = query.get('connectionId')
+  const name = query.get('name') || 'SSH'
+  const fileManager = view === 'file-manager'
+  openNewTab(
+    `${view}-${id}`,
+    fileManager ? `${name} - 文件管理` : name,
+    fileManager ? 'bi bi-folder2' : 'bi bi-terminal',
+    `/${view}?${query}`
+  )
 }
 
 const isSameTabRoute = (tabPath: string, currentFullPath: string) => {
@@ -269,17 +465,31 @@ const isSameTabRoute = (tabPath: string, currentFullPath: string) => {
 watch(
   () => route.fullPath,
   () => {
+    if (route.path === '/') return
     const routeTabEntry = openTabsList.value.find(tab => isSameTabRoute(tab.path, route.fullPath))
     if (!routeTabEntry) {
+      const id = route.query.connectionId
+        ? `${route.path.slice(1)}-${route.query.connectionId}`
+        : route.path.slice(1) || 'ssh'
+      openTabsList.value.push({
+        id,
+        name: String(route.query.name || route.meta.title || 'SSH'),
+        icon: `bi ${String(route.meta.icon || 'bi-window')}`,
+        path: route.fullPath
+      })
+      activeTab.value = id
       return
     }
+
+    activeTab.value = routeTabEntry.id
 
     if (routeTabEntry.path === route.fullPath) {
       return
     }
 
     routeTabEntry.path = route.fullPath
-  }
+  },
+  { immediate: true }
 )
 
 watch(
@@ -310,9 +520,10 @@ watch(
 // 提供打开新标签和关闭标签的方法给子组件
 provide('openNewTab', openNewTab)
 provide('closeTab', closeTab)
+provide('openSettings', openSettings)
 
 // 为路由生成唯一的缓存键
-const getRouteKey = (route: any) => {
+const getRouteKey = (route: RouteLocationNormalizedLoaded) => {
   // 对于终端路由，使用 connectionId 作为唯一键
   if (route.path.startsWith('/terminal') && route.query.connectionId) {
     return `terminal-${route.query.connectionId}`
@@ -420,6 +631,7 @@ onMounted(async () => {
   document.addEventListener('keydown', handleKeydown)
   window.addEventListener('resize', handleResize)
   window.addEventListener('switch-view', handleSwitchView as EventListener)
+  window.addEventListener('navigate-to-settings', openSettings)
 
   // 监听全屏状态变化
   if (window.electronAPI?.onFullscreenChange) {
@@ -427,227 +639,14 @@ onMounted(async () => {
       isFullscreen.value = fullscreen
     })
   }
-
 })
 
 onUnmounted(async () => {
   // 清理事件监听器
+  stopResize()
   document.removeEventListener('keydown', handleKeydown)
   window.removeEventListener('resize', handleResize)
   window.removeEventListener('switch-view', handleSwitchView as EventListener)
+  window.removeEventListener('navigate-to-settings', openSettings)
 })
 </script>
-
-<style scoped>
-.vscode-app {
-  font-family:
-    'Segoe UI',
-    system-ui,
-    -apple-system,
-    sans-serif;
-  font-size: 13px;
-}
-
-/* 活动栏样式 */
-.vscode-activitybar {
-  background: var(--vscode-bg-light);
-}
-
-.vscode-activity-item {
-  width: 3rem;
-  height: 3rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--vscode-fg-muted);
-  transition: color 0.15s ease;
-  position: relative;
-}
-
-.vscode-activity-item:hover {
-  color: var(--vscode-fg);
-}
-
-.vscode-activity-item.active {
-  color: var(--vscode-accent);
-}
-
-.vscode-activity-item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 2px;
-  height: 16px;
-  background: var(--vscode-accent);
-}
-
-.vscode-activity-item i {
-  font-size: 16px;
-}
-
-/* 标签栏样式 */
-.vscode-tab-bar {
-  background: var(--vscode-bg-light);
-}
-
-.vscode-tab {
-  padding: 0 0.75rem;
-  display: flex;
-  align-items: center;
-  font-size: 0.875rem;
-  color: var(--vscode-fg-muted);
-  cursor: pointer;
-  border-top: 2px solid transparent;
-  border-right: 1px solid var(--vscode-border);
-  position: relative;
-  min-width: 120px;
-  max-width: 200px;
-  height: 37px;
-  transition: color 0.15s ease;
-}
-
-.vscode-tab:hover {
-  color: var(--vscode-fg);
-}
-
-.vscode-tab.active {
-  color: var(--vscode-fg);
-  border-top-color: var(--vscode-accent);
-  background: var(--vscode-bg);
-}
-
-.vscode-tab:not(.active):hover {
-  background: var(--vscode-bg-lighter);
-}
-
-.vscode-tab span {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  margin-right: 0.5rem;
-}
-
-.vscode-tab-close {
-  width: 1rem;
-  height: 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.25rem;
-  color: var(--vscode-fg-muted);
-  opacity: 0;
-  transition:
-    opacity 0.15s ease,
-    color 0.15s ease,
-    background-color 0.15s ease;
-}
-
-.vscode-tab-close:hover {
-  color: var(--vscode-fg);
-  background-color: var(--vscode-bg-lighter);
-}
-
-.vscode-tab:hover .vscode-tab-close {
-  opacity: 1;
-}
-
-.vscode-tab-close i {
-  font-size: 10px;
-}
-
-/* 侧边栏样式 */
-.vscode-sidebar {
-  background: var(--vscode-bg-light);
-}
-
-/* 状态栏样式 */
-.vscode-statusbar {
-  background: var(--vscode-accent);
-  height: 22px;
-}
-
-/* 标题栏样式 */
-.vscode-titlebar {
-  background: var(--vscode-bg-light);
-  height: 30px;
-  -webkit-app-region: drag;
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .vscode-sidebar {
-    position: absolute;
-    left: 48px;
-    top: 0;
-    bottom: 0;
-    z-index: 100;
-    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
-  }
-}
-
-/* 自定义滚动条 */
-:deep(.scrollbar-thin) {
-  scrollbar-width: thin;
-  scrollbar-color: var(--vscode-bg-lighter) var(--vscode-bg);
-}
-
-:deep(.scrollbar-thin::-webkit-scrollbar) {
-  width: 8px;
-  height: 8px;
-}
-
-:deep(.scrollbar-thin::-webkit-scrollbar-track) {
-  background: var(--vscode-bg);
-}
-
-:deep(.scrollbar-thin::-webkit-scrollbar-thumb) {
-  background: var(--vscode-bg-lighter);
-  border-radius: 0;
-}
-
-:deep(.scrollbar-thin::-webkit-scrollbar-thumb:hover) {
-  background: var(--vscode-border);
-}
-
-/* 拖拽分割条样式 */
-.vscode-splitter {
-  background: var(--vscode-bg-light);
-  position: relative;
-  z-index: 10;
-}
-
-.vscode-splitter-vertical {
-  width: 4px;
-  cursor: col-resize;
-  transition: background-color 0.15s ease;
-}
-
-.vscode-splitter-vertical:hover {
-  background-color: var(--vscode-accent);
-}
-
-.vscode-splitter-vertical::before {
-  content: '';
-  position: absolute;
-  left: -2px;
-  right: -2px;
-  top: 0;
-  bottom: 0;
-  background: transparent;
-}
-
-/* 拖拽时的全局样式 */
-body.resizing {
-  cursor: col-resize !important;
-  user-select: none !important;
-}
-
-body.resizing * {
-  cursor: col-resize !important;
-  user-select: none !important;
-}
-</style>

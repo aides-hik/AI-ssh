@@ -1,379 +1,606 @@
+<script setup lang="ts">
+import { inject, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import LiquidSurface from '@/components/common/LiquidSurface.vue'
+import { useApp } from '@/composables/useApp'
+import { useTheme } from '@/composables/useTheme'
+import { sshService } from '@/services/ssh.service'
+
+const { t } = useI18n()
+const app = useApp()
+const theme = useTheme()
+const openSettings = inject<(section?: string) => void>('openSettings', () => app.openSettings())
+const importing = ref(false)
+const importMessage = ref('')
+const importError = ref(false)
+
+function createConnection() {
+  window.dispatchEvent(new CustomEvent('ssh-create-connection'))
+}
+
+async function importConnections() {
+  if (importing.value) return
+  importMessage.value = ''
+  importError.value = false
+  if (!window.electronAPI) {
+    importMessage.value = '请在桌面应用中选择并导入连接配置文件。'
+    return
+  }
+  importing.value = true
+  try {
+    const result = await sshService.importConnections()
+    if (!result.canceled) {
+      window.dispatchEvent(new CustomEvent('ssh-connections-imported'))
+      importMessage.value = t('ssh.importResult', {
+        imported: result.imported || 0,
+        skipped: result.skipped || 0,
+        invalid: result.invalid || 0
+      })
+    }
+  } catch (error: unknown) {
+    importError.value = true
+    importMessage.value = error instanceof Error ? error.message : t('ssh.importFailed')
+  } finally {
+    importing.value = false
+  }
+}
+</script>
+
 <template>
   <div class="welcome-page">
     <div class="welcome-shell">
-      <main class="welcome-main">
-        <header class="welcome-header">
-          <h1 class="welcome-title">AI SSH</h1>
-          <p class="welcome-subtitle">
-            集成 AI Agent 的终端，兼具传统 SSH 连接与高效文件管理功能。
-          </p>
-        </header>
+      <header class="welcome-heading">
+        <div>
+          <div class="welcome-location">
+            工作空间 <i class="bi bi-chevron-right" aria-hidden="true" /> 开始
+          </div>
+          <h1>SSH 工作台</h1>
+          <p>连接服务器，打开你的下一处工作空间。</p>
+        </div>
+        <LiquidSurface
+          as="button"
+          type="button"
+          class="welcome-settings"
+          :radius="22"
+          :strength="32"
+          :blur="2"
+          :motion="theme.animations.value"
+          aria-label="打开应用设置"
+          @click="openSettings()"
+          ><i class="bi bi-sliders2" aria-hidden="true" /><span>设置</span></LiquidSurface
+        >
+      </header>
 
-        <section class="overview-grid">
-          <div class="subscription-card">
-            <div class="subscription-card__header">
+      <div class="welcome-layout">
+        <section class="welcome-session" aria-labelledby="welcome-session-title">
+          <div class="welcome-session-bar">
+            <span><i class="bi bi-terminal" aria-hidden="true" />终端</span
+            ><span>尚未打开会话</span>
+          </div>
+          <div class="welcome-session-empty">
+            <div class="welcome-connection-art" aria-hidden="true">
+              <svg viewBox="0 0 176 94" fill="none">
+                <path
+                  d="M16 62H53C66 62 63 33 76 33H115C128 33 123 62 137 62H160"
+                  stroke="currentColor"
+                  stroke-opacity=".2"
+                />
+                <path
+                  d="M16 71H51C73 71 64 23 82 23H112C135 23 120 71 143 71H160"
+                  stroke="currentColor"
+                  stroke-opacity=".1"
+                />
+                <circle cx="16" cy="62" r="3" fill="currentColor" fill-opacity=".24" />
+                <circle cx="160" cy="62" r="3" fill="currentColor" fill-opacity=".24" /></svg
+              ><span><i class="bi bi-hdd-network" /></span>
+            </div>
+            <h2 id="welcome-session-title">从一次连接开始</h2>
+            <p>从左侧选择已保存的连接，<br />或添加一台新的服务器。</p>
+            <div class="welcome-session-actions">
+              <button
+                type="button"
+                class="welcome-create"
+                data-welcome-action="create-connection"
+                @click="createConnection"
+              >
+                <i class="bi bi-plus-lg" aria-hidden="true" />新建连接
+              </button>
+              <button
+                type="button"
+                class="welcome-import"
+                data-welcome-action="import-connections"
+                :disabled="importing"
+                :aria-busy="importing"
+                @click="importConnections"
+              >
+                <i class="bi bi-box-arrow-in-down" aria-hidden="true" />{{
+                  importing ? '正在导入…' : '导入配置'
+                }}
+              </button>
+            </div>
+            <p
+              v-if="importMessage"
+              class="welcome-import-message"
+              :class="{ 'has-error': importError }"
+              role="status"
+            >
+              {{ importMessage }}
+            </p>
+          </div>
+          <div class="welcome-session-foot">
+            <span><i class="bi bi-key" aria-hidden="true" />密码 / 私钥 / SSH Agent</span
+            ><span>SSH + SFTP</span>
+          </div>
+        </section>
+
+        <aside class="welcome-guidance" aria-label="工作台使用说明">
+          <section class="welcome-workflow">
+            <h2>一处连接，继续工作</h2>
+            <div class="welcome-workflow-item">
+              <span><i class="bi bi-terminal" aria-hidden="true" /></span>
               <div>
-                <span class="subscription-card__badge">核心能力</span>
-                <h2 class="subscription-card__title">独立运行的 SSH 与 AI 工具</h2>
-                <p class="subscription-card__text">无需账号，直接连接服务器；AI 功能使用您配置的模型服务。</p>
+                <h3>远程终端</h3>
+                <p>连接后打开终端，多标签保留不同的工作现场。</p>
               </div>
             </div>
-
-            <div class="subscription-card__body">
-              <div class="feature-item">
-                <div class="feature-item__icon"><i class="bi bi-terminal"></i></div>
-                <h3 class="feature-item__title">SSH 终端</h3>
-                <p class="feature-item__text">毫秒级响应的远程连接，支持多标签与自定义主题。</p>
-              </div>
-
-              <div class="feature-item">
-                <div class="feature-item__icon"><i class="bi bi-cpu"></i></div>
-                <h3 class="feature-item__title">AI Agent</h3>
-                <p class="feature-item__text">内置智能助手，自动补全命令并解释报错原因。</p>
-              </div>
-
-              <div class="feature-item">
-                <div class="feature-item__icon"><i class="bi bi-folder2-open"></i></div>
-                <h3 class="feature-item__title">文件管理</h3>
-                <p class="feature-item__text">直观的 SFTP 管理界面，支持拖拽上传与在线编辑。</p>
+            <div class="welcome-workflow-item">
+              <span><i class="bi bi-folder2-open" aria-hidden="true" /></span>
+              <div>
+                <h3>文件管理</h3>
+                <p>在连接的右键菜单中打开文件管理，浏览和传输远程文件。</p>
               </div>
             </div>
-          </div>
+          </section>
+          <section class="welcome-ai">
+            <span class="welcome-ai-icon"><i class="bi bi-stars" aria-hidden="true" /></span>
+            <h2>让 AI 帮你想下一步</h2>
+            <p>添加自己的模型服务，在终端中询问命令、解释输出。</p>
+            <button
+              type="button"
+              data-welcome-action="configure-ai"
+              @click="openSettings('ai-providers')"
+            >
+              配置模型服务<i class="bi bi-arrow-up-right" aria-hidden="true" />
+            </button>
+          </section>
+        </aside>
+      </div>
 
-          <aside class="trial-card">
-            <i class="bi bi-stars trial-card__accent text-3xl"></i>
-            <h3 class="trial-card__title">配置自己的 AI</h3>
-            <p class="trial-card__text">在设置中添加模型服务的地址和密钥，或连接本地 Ollama，然后在标题栏选择模型。</p>
-          </aside>
-        </section>
-
-        <section class="highlights-section">
-          <h3 class="highlights-section__title">功能亮点</h3>
-          <div class="highlights-grid">
-            <article class="highlight-card">
-              <div class="highlight-card__header">
-                <i class="bi bi-robot highlight-card__accent"></i>
-                <div class="highlight-card__title">AI 命令辅助</div>
-              </div>
-              <p class="highlight-card__text">
-                输入自然语言，自动生成复杂的 Shell 指令。支持实时纠错与性能优化建议。
-              </p>
-            </article>
-
-            <article class="highlight-card">
-              <div class="highlight-card__header">
-                <i class="bi bi-keyboard highlight-card__accent"></i>
-                <div class="highlight-card__title">极致终端体验</div>
-              </div>
-              <p class="highlight-card__text">
-                基于 Xterm.js 构建，支持 256 色、TrueColor 以及超大数据量无感滚动流。
-              </p>
-            </article>
-
-            <article class="highlight-card">
-              <div class="highlight-card__header">
-                <i class="bi bi-shield-check highlight-card__accent"></i>
-                <div class="highlight-card__title">本地安全同步</div>
-              </div>
-              <p class="highlight-card__text">
-                加密存储您的 SSH 配置、私钥与 AI
-                设置，所有敏感信息仅存储在本地，不上传云端，确保极致安全。
-              </p>
-            </article>
-          </div>
-        </section>
-      </main>
+      <footer class="welcome-footer">
+        <i class="bi bi-laptop" aria-hidden="true" /><span>本地工作空间</span
+        ><span class="welcome-footer-divider" />连接配置保存在此设备
+      </footer>
     </div>
   </div>
 </template>
 
 <style scoped>
 .welcome-page {
-  font-family: 'Microsoft Yahei', 'PingFang SC', sans-serif;
   height: 100%;
-  overflow-y: auto;
-  background: var(--vscode-bg);
+  min-width: 0;
+  overflow: auto;
+  container-type: inline-size;
   color: var(--vscode-fg);
+  font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
 }
-
 .welcome-shell {
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  width: min(1060px, 100%);
   min-height: 100%;
-  padding: 3rem 1rem;
+  margin: 0 auto;
+  padding: 42px 38px 24px;
+  display: flex;
+  flex-direction: column;
 }
-
-.welcome-main {
-  width: 100%;
-  max-width: 72rem;
+.welcome-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 31px;
 }
-
-.welcome-header {
-  margin-bottom: 2.5rem;
+.welcome-location {
+  color: var(--vscode-fg-muted);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 9px;
 }
-
-.welcome-title,
-.subscription-card__title,
-.trial-card__title,
-.highlights-section__title,
-.feature-item__title,
-.highlight-card__title {
+.welcome-location > i {
+  font-size: 8px;
+  opacity: 0.7;
+}
+.welcome-heading h1 {
+  margin: 0;
   color: var(--vscode-fg);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.7px;
 }
-
-.welcome-title {
-  font-size: 2.25rem;
-  line-height: 1.1;
-  font-weight: 800;
-  margin: 0 0 0.75rem;
-}
-
-.welcome-subtitle,
-.subscription-card__text,
-.subscription-card__label,
-.feature-item__text,
-.trial-card__text,
-.highlight-card__text {
+.welcome-heading p {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
   color: var(--vscode-fg-muted);
 }
-
-.welcome-subtitle {
-  max-width: 42rem;
-  font-size: 1.125rem;
-  line-height: 1.7;
-  margin: 0;
+.welcome-settings {
+  --liquid-tint: color-mix(in srgb, var(--vscode-bg-light) 28%, transparent);
+  --liquid-rim: color-mix(in srgb, var(--vscode-border) 40%, #ffffff66);
+  color: var(--vscode-fg-muted);
+  padding: 11px 15px;
+  flex: 0 0 auto;
 }
-
-.subscription-card,
-.trial-card,
-.highlight-card {
-  background: var(--vscode-bg-light);
-  border: 1px solid var(--vscode-border);
-  border-radius: 0.75rem;
+.welcome-settings :deep(.liquid-surface__content) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
 }
-
-.overview-grid {
+.welcome-settings i {
+  font-size: 14px;
+}
+.welcome-layout {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1fr) 213px;
+  gap: 29px;
+  align-items: start;
 }
-
-.subscription-card {
+.welcome-session {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  color: #b3c6e0;
+  background: #101b2e;
+  border: 1px solid #233752;
+  border-radius: 21px;
+  box-shadow:
+    0 12px 29px #16345d1c,
+    inset 0 1px #ffffff08;
   overflow: hidden;
 }
-
-.subscription-card__header {
+.welcome-session-bar {
   display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  justify-content: space-between;
-  padding: 2rem;
-  border-bottom: 1px solid var(--vscode-border-subtle);
-}
-
-.subscription-card__badge,
-.trial-card__pill {
-  display: inline-flex;
   align-items: center;
-  padding: 0.15rem 0.65rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--vscode-accent);
-  background: color-mix(in srgb, var(--vscode-accent) 12%, transparent);
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 20px;
+  border-bottom: 1px solid #2b405944;
+  font-size: 11px;
+  line-height: 1.4;
+  background: #142138;
 }
-
-.subscription-card__title {
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 700;
+.welcome-session-bar > span:first-child {
+  display: flex;
+  align-items: center;
+  gap: 9px;
 }
-
-.subscription-card__title--small {
-  font-size: 1.125rem;
+.welcome-session-bar > span:first-child > i {
+  color: #83a0c5;
+  font-size: 13px;
 }
-
-.subscription-card__text,
-.subscription-card__label {
-  margin: 0.25rem 0 0;
+.welcome-session-bar > span:last-child {
+  color: #7f96b5;
+  font-size: 10px;
 }
-
-.subscription-card__meta {
+.welcome-session-empty {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  padding: 27px 18px 50px;
+  min-height: 345px;
+  text-align: center;
 }
-
-.subscription-card__body {
+.welcome-connection-art {
+  position: relative;
+  width: 176px;
+  height: 94px;
+  margin: 0 0 18px;
+  color: #a7ceff;
+  flex: 0 0 auto;
+}
+.welcome-connection-art > svg {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  inset: 0;
+}
+.welcome-connection-art > span {
+  position: absolute;
+  top: 19px;
+  left: 62px;
+  width: 52px;
+  height: 52px;
   display: grid;
-  gap: 2rem;
-  padding: 2rem;
-  background: color-mix(in srgb, var(--vscode-bg) 70%, var(--vscode-bg-light) 30%);
+  place-items: center;
+  color: #8faecc;
+  font-size: 23px;
+  border: 1px solid #4d6a8b50;
+  border-radius: 16px;
+  background: linear-gradient(150deg, #243a5647, #17253a);
+  box-shadow:
+    0 5px 14px #080f1e26,
+    inset 0 1px #ffffff08;
 }
-
-.feature-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+.welcome-session h2 {
+  margin: 0;
+  color: #d1dff0;
+  font-size: 21px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: -0.3px;
 }
-
-.feature-icon-box {
-  width: 2.5rem;
-  height: 2.5rem;
+.welcome-session-empty > p {
+  color: #8a9fb9;
+  font-size: 11px;
+  line-height: 1.9;
+  margin: 10px 0 24px;
+}
+.welcome-session-actions {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--vscode-accent) 12%, transparent);
-  color: var(--vscode-accent);
+  flex-wrap: wrap;
+  gap: 10px;
 }
-
-.feature-item__title,
-.highlight-card__title,
-.trial-card__title,
-.highlights-section__title {
+.welcome-session-actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 17px;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  border-radius: 11px;
+  cursor: pointer;
+  touch-action: manipulation;
+  min-height: 38px;
+}
+.welcome-create {
+  color: #f7fbff;
+  background: #3979d8;
+  border: 1px solid #4989e7;
+  box-shadow: inset 0 1px #ffffff20;
+}
+.welcome-import {
+  color: #9fb9d8;
+  background: #1c2c43;
+  border: 1px solid #344a65;
+}
+.welcome-session-actions button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.welcome-session-empty > .welcome-import-message {
+  margin: 20px 0 0;
+  max-width: 340px;
+  color: #a7c5e5;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.welcome-session-empty > .welcome-import-message.has-error {
+  color: #edb5b8;
+}
+.welcome-session-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid #2b405944;
+  padding: 10px 20px;
+  color: #7892b1;
+  font-size: 9px;
+}
+.welcome-session-foot > span:first-child {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.welcome-guidance {
+  padding-top: 8px;
+  min-width: 0;
+}
+.welcome-guidance h2 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vscode-fg);
   margin: 0;
-  font-weight: 700;
+  line-height: 1.6;
 }
-
-.feature-item__text,
-.highlight-card__text,
-.trial-card__text {
+.welcome-workflow {
+  padding: 0 0 27px;
+  border-bottom: 1px solid var(--vscode-border-subtle, var(--vscode-border));
+}
+.welcome-workflow-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-top: 24px;
+}
+.welcome-workflow-item > span {
+  width: 23px;
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--vscode-accent) 65%, var(--vscode-fg-muted));
+  font-size: 17px;
+  line-height: 1.4;
+}
+.welcome-workflow-item h3 {
+  font-size: 11px;
+  font-weight: 600;
   margin: 0;
   line-height: 1.7;
-}
-
-.trial-card {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 2rem;
-  padding: 2rem;
-}
-
-.trial-card__progress-wrap {
-  position: relative;
-  padding-top: 0.25rem;
-}
-
-.trial-card__progress-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.5rem;
-}
-
-.trial-card__accent,
-.highlight-card__accent {
-  color: var(--vscode-accent);
-}
-
-.trial-card__track {
-  overflow: hidden;
-  height: 0.5rem;
-  display: flex;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--vscode-accent) 12%, transparent);
-}
-
-.trial-card__bar {
-  background: var(--vscode-accent);
-}
-
-.trial-card__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid var(--vscode-border-subtle);
-}
-
-.trial-card__value {
   color: var(--vscode-fg);
 }
-
-.trial-card__button {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  border: none;
-  border-radius: 0.5rem;
-  background: var(--vscode-accent);
-  color: var(--vscode-button-foreground);
-  font-weight: 600;
-  cursor: pointer;
+.welcome-guidance p {
+  color: var(--vscode-fg-muted);
+  font-size: 11px;
+  line-height: 1.9;
+  margin: 5px 0 0;
 }
-
-.trial-card__button:hover {
-  background: var(--vscode-accent-hover);
+.welcome-ai {
+  padding-top: 24px;
 }
-
-.highlights-section {
-  grid-column: 1 / -1;
-  margin-top: 2rem;
+.welcome-ai-icon {
+  font-size: 20px;
+  display: inline-flex;
+  color: color-mix(in srgb, var(--vscode-accent) 70%, var(--vscode-fg-muted));
+  margin-bottom: 11px;
 }
-
-.highlights-section__title {
-  margin-bottom: 1.5rem;
-  font-size: 1.125rem;
+.welcome-ai p {
+  margin-top: 8px;
 }
-
-.highlights-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.5rem;
-}
-
-.highlight-card {
-  padding: 1.5rem;
-  transition: border-color 0.2s ease;
-}
-
-.highlight-card:hover {
-  border-color: var(--vscode-accent);
-}
-
-.highlight-card__header {
+.welcome-ai button {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-}
-
-.text-primary {
+  gap: 15px;
   color: var(--vscode-accent);
+  font-size: 11px;
+  padding: 0;
+  margin-top: 16px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  min-height: 27px;
+  touch-action: manipulation;
 }
-
-.bg-primary {
-  background-color: var(--vscode-accent);
+.welcome-ai button i {
+  font-size: 10px;
 }
-
-.border-primary {
-  border-color: var(--vscode-accent);
+.welcome-footer {
+  color: var(--vscode-fg-muted);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  font-size: 10px;
+  margin-top: auto;
+  padding: 29px 0 0;
+  opacity: 0.85;
+  line-height: 1.7;
 }
-
-@media (min-width: 768px) {
-  .overview-grid {
-    grid-template-columns: 2fr 1fr;
+.welcome-footer > i {
+  font-size: 13px;
+  margin-right: 1px;
+}
+.welcome-footer-divider {
+  width: 1px;
+  height: 10px;
+  background: var(--vscode-border);
+  margin: 0 3px;
+}
+.welcome-page button:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 4px;
+}
+.welcome-session button:focus-visible {
+  outline-color: #8ebdff;
+}
+@media (hover: hover) and (pointer: fine) {
+  .welcome-settings:hover {
+    color: var(--vscode-accent);
   }
-
-  .subscription-card__header {
-    flex-direction: row;
-    align-items: center;
+  .welcome-create:hover {
+    background: #4385e8;
   }
-
-  .subscription-card__meta {
-    align-items: flex-end;
+  .welcome-import:not(:disabled):hover {
+    background: #283c57;
+    color: #cee0f5;
   }
-
-  .subscription-card__body {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .welcome-ai button:hover {
+    text-decoration: underline;
+    text-underline-offset: 4px;
   }
-
-  .highlights-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@container (max-width: 850px) {
+  .welcome-shell {
+    padding: 30px 27px 22px;
+  }
+  .welcome-layout {
+    grid-template-columns: minmax(0, 1fr) 188px;
+    gap: 23px;
+  }
+  .welcome-session h2 {
+    font-size: 19px;
+  }
+  .welcome-session-actions {
+    gap: 8px;
+  }
+  .welcome-session-actions button {
+    padding: 9px 12px;
+  }
+}
+@container (max-width: 670px) {
+  .welcome-shell {
+    padding: 26px 22px 22px;
+  }
+  .welcome-heading {
+    margin-bottom: 24px;
+  }
+  .welcome-heading h1 {
+    font-size: 27px;
+  }
+  .welcome-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+  .welcome-session-empty {
+    padding-bottom: 32px;
+    min-height: 315px;
+  }
+  .welcome-guidance {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 25px;
+    padding-top: 0;
+  }
+  .welcome-workflow {
+    padding: 0;
+    border-bottom: 0;
+  }
+  .welcome-ai {
+    padding-top: 0;
+  }
+  .welcome-workflow-item {
+    margin-top: 16px;
+  }
+}
+@container (max-width: 390px) {
+  .welcome-shell {
+    padding: 23px 16px;
+  }
+  .welcome-heading {
+    gap: 12px;
+  }
+  .welcome-heading h1 {
+    font-size: 24px;
+  }
+  .welcome-heading p {
+    font-size: 11px;
+  }
+  .welcome-settings {
+    padding: 10px;
+  }
+  .welcome-settings :deep(.liquid-surface__content) > span {
+    display: none;
+  }
+  .welcome-session-bar {
+    padding-inline: 15px;
+  }
+  .welcome-session h2 {
+    font-size: 18px;
+  }
+  .welcome-session-foot {
+    padding-inline: 15px;
+  }
+  .welcome-guidance {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 23px;
+  }
+  .welcome-ai {
+    border-top: 1px solid var(--vscode-border);
+    padding-top: 21px;
   }
 }
 </style>

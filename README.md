@@ -1,4 +1,6 @@
-# AI SSH Assistant
+# 棱镜（Prism）
+
+产品中文名为「棱镜」，英文名为 **Prism**。应用内会根据所选语言显示对应名称；仓库地址与内部 workspace 包名保持现有命名。
 
 一个把 SSH 终端、远程文件管理和 AI 助手放在同一窗口中的桌面应用，基于 Electron、Vue 3 和 TypeScript 开发。
 
