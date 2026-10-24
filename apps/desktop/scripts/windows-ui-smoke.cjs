@@ -287,14 +287,39 @@ async function rendererProbe(options) {
   // The sidebar stays mounted while hidden so dialogs and connection data survive.
   const sidebarToggle = document.querySelector('.sidebar-toggle')
   const sidebar = document.querySelector('.vscode-sidebar')
-  check(sidebarToggle && sidebar, 'Sidebar controls missing')
+  const sidebarRegion = document.querySelector('.liquid-sidebar-region')
+  const sidebarSearch = sidebar?.querySelector('input[type="search"]')
+  check(sidebarToggle && sidebar && sidebarRegion && sidebarSearch, 'Sidebar controls missing')
+  const expandedSidebarWidth = sidebarRegion.getBoundingClientRect().width
+  check(expandedSidebarWidth > 200 && sidebarRegion.dataset.open === 'true' && !sidebarRegion.inert,
+    'Sidebar must start expanded and interactive')
+  sidebarSearch.focus()
+  check(document.activeElement === sidebarSearch, 'Expanded sidebar search could not receive focus')
   sidebarToggle.click()
-  await waitFor(() => getComputedStyle(sidebar).display === 'none', 'Sidebar did not hide')
+  await waitFor(() => sidebarRegion.dataset.open === 'false' && sidebarRegion.inert &&
+    sidebarRegion.getAttribute('aria-hidden') === 'true' && sidebarRegion.getBoundingClientRect().width <= 1,
+  'Sidebar did not finish collapsing')
   check(sidebarToggle.getAttribute('aria-expanded') === 'false', 'Sidebar collapsed state is inaccessible')
+  check(getComputedStyle(sidebarRegion).pointerEvents === 'none', 'Collapsed sidebar must block pointer interaction')
+  check(sidebar.isConnected && sidebarRegion.contains(sidebar), 'Collapsed sidebar must preserve its mounted content')
+  check(document.activeElement === sidebarToggle, 'Collapsing sidebar did not return focus to its toggle')
+  sidebarSearch.focus()
+  check(document.activeElement === sidebarToggle, 'Collapsed inert sidebar accepted keyboard focus')
   sidebarToggle.click()
-  await waitFor(() => getComputedStyle(sidebar).display !== 'none', 'Sidebar did not reopen')
+  await waitFor(() => sidebarRegion.dataset.open === 'true' && !sidebarRegion.inert &&
+    sidebarRegion.getAttribute('aria-hidden') !== 'true' &&
+    Math.abs(sidebarRegion.getBoundingClientRect().width - expandedSidebarWidth) <= 1,
+  'Sidebar did not finish reopening')
   check(sidebarToggle.getAttribute('aria-expanded') === 'true', 'Sidebar expanded state is inaccessible')
+  sidebarSearch.focus()
+  check(document.activeElement === sidebarSearch, 'Reopened sidebar search could not receive focus')
+  const searchRect = sidebarSearch.getBoundingClientRect()
+  const searchHit = document.elementFromPoint((searchRect.left + searchRect.right) / 2,
+    (searchRect.top + searchRect.bottom) / 2)
+  check(searchHit === sidebarSearch || sidebarSearch.contains(searchHit),
+    'Reopened sidebar search cannot receive pointer input')
   result.sidebarToggle = true
+  result.sidebarAccessibility = true
 
   document.querySelector('[data-destination="home"]').click()
   await waitFor(() => router.currentRoute.value.path === '/ssh' && document.querySelector('.welcome-page'),

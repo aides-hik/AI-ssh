@@ -49,10 +49,19 @@ async function launch() {
 const browserProbe = String.raw`
 import { LLMSession } from './src/services/llm.ts'
 import { testProviderConnection } from './src/services/ai-test.service.ts'
+import type { AIModel, AIProvider } from './src/types/ai-providers'
 import { z } from 'zod'
 const check = (condition, message) => { if (!condition) throw new Error(message) }
 export async function run(endpoint) {
-  const provider = { id: 'openai', endpoint, apiKey: 'windows-validation-local' }
+  const provider: AIProvider = {
+    id: 'openai', name: 'Local validation', description: 'Loopback model fixture',
+    icon: '', website: '', endpoint, apiKey: 'windows-validation-local',
+    enabled: true, isDefault: false, models: []
+  }
+  const model = (id: string): AIModel => ({
+    id, name: id, providerId: provider.id, contextWindow: 8192,
+    capabilities: { text: true, image: false, functionCall: true, vision: false }
+  })
   const tool = {
     id: 'probe',
     init: async () => ({
@@ -64,7 +73,7 @@ export async function run(endpoint) {
   const connection = await testProviderConnection(provider, 'windows-fixture')
   check(connection.success, 'Model connection test failed')
   const chunks = []
-  for await (const chunk of new LLMSession(provider, { id: 'windows-fixture' }, [tool], 'fixture').stream([
+  for await (const chunk of new LLMSession(provider, model('windows-fixture'), [tool], 'fixture').stream([
     { role: 'user', content: 'Windows 中文流式测试' }
   ])) chunks.push(chunk)
   check(chunks.filter(item => item.type === 'text').map(item => item.content).join('') === '你好，Windows ✅', 'UTF-8 streaming was corrupted')
@@ -74,7 +83,7 @@ export async function run(endpoint) {
 
   let rejected = false
   try {
-    for await (const _chunk of new LLMSession(provider, { id: 'unauthorized' }, [], 'fixture').stream([])) {}
+    for await (const _chunk of new LLMSession(provider, model('unauthorized'), [], 'fixture').stream([])) {}
   } catch (error) { rejected = /HTTP 401/.test(String(error)) }
   check(rejected, 'HTTP authentication failure was not surfaced')
 
@@ -82,7 +91,7 @@ export async function run(endpoint) {
   let abortObserved = false
   let receivedBeforeAbort = false
   try {
-    const session = new LLMSession(provider, { id: 'cancel' }, [], 'fixture', undefined, undefined, controller.signal)
+    const session = new LLMSession(provider, model('cancel'), [], 'fixture', undefined, undefined, controller.signal)
     for await (const chunk of session.stream([])) {
       if (chunk.type === 'text') {
         receivedBeforeAbort = true
