@@ -1,10 +1,10 @@
 <template>
   <teleport to="body">
     <Transition name="connection-modal">
-      <div v-if="modelValue" class="modal-overlay">
+      <div v-if="modelValue" class="modal-overlay prism-dialog-overlay">
         <LiquidSurface
           class="modal-container"
-          :radius="26"
+          :radius="24"
           :strength="30"
           :blur="10"
           :interactive="false"
@@ -40,7 +40,16 @@
             </div>
 
             <div class="modal-body">
-              <form @submit.prevent="handleSubmit">
+              <form
+                ref="connectionForm"
+                novalidate
+                @submit.prevent="handleSubmit"
+                @invalid.capture.prevent
+                @input="revalidateInput"
+                @compositionstart="isComposing = true"
+                @compositionend="isComposing = false"
+                @keydown.capture="guardCompositionSubmit"
+              >
                 <!-- 连接名称 -->
                 <div class="form-group">
                   <label :for="`${dialogId}-name`" class="form-label"
@@ -54,7 +63,19 @@
                     class="form-input-full"
                     placeholder="我的服务器"
                     required
+                    :aria-invalid="!!fieldErrors[`${dialogId}-name`]"
+                    :aria-describedby="
+                      fieldErrors[`${dialogId}-name`] ? `${dialogId}-name-error` : undefined
+                    "
                   />
+                  <p
+                    v-if="fieldErrors[`${dialogId}-name`]"
+                    :id="`${dialogId}-name-error`"
+                    class="prism-field-error"
+                    role="alert"
+                  >
+                    {{ fieldErrors[`${dialogId}-name`] }}
+                  </p>
                 </div>
 
                 <!-- 主机和端口 -->
@@ -70,7 +91,19 @@
                       class="w-full"
                       placeholder="192.168.1.100"
                       required
+                      :aria-invalid="!!fieldErrors[`${dialogId}-host`]"
+                      :aria-describedby="
+                        fieldErrors[`${dialogId}-host`] ? `${dialogId}-host-error` : undefined
+                      "
                     />
+                    <p
+                      v-if="fieldErrors[`${dialogId}-host`]"
+                      :id="`${dialogId}-host-error`"
+                      class="prism-field-error"
+                      role="alert"
+                    >
+                      {{ fieldErrors[`${dialogId}-host`] }}
+                    </p>
                   </div>
                   <div class="form-group port-field">
                     <label :for="`${dialogId}-port`" class="form-label">端口</label>
@@ -80,7 +113,19 @@
                       type="number"
                       class="w-full"
                       placeholder="22"
+                      :aria-invalid="!!fieldErrors[`${dialogId}-port`]"
+                      :aria-describedby="
+                        fieldErrors[`${dialogId}-port`] ? `${dialogId}-port-error` : undefined
+                      "
                     />
+                    <p
+                      v-if="fieldErrors[`${dialogId}-port`]"
+                      :id="`${dialogId}-port-error`"
+                      class="prism-field-error"
+                      role="alert"
+                    >
+                      {{ fieldErrors[`${dialogId}-port`] }}
+                    </p>
                   </div>
                 </div>
 
@@ -97,7 +142,19 @@
                     placeholder="root"
                     autocomplete="username"
                     required
+                    :aria-invalid="!!fieldErrors[`${dialogId}-username`]"
+                    :aria-describedby="
+                      fieldErrors[`${dialogId}-username`] ? `${dialogId}-username-error` : undefined
+                    "
                   />
+                  <p
+                    v-if="fieldErrors[`${dialogId}-username`]"
+                    :id="`${dialogId}-username-error`"
+                    class="prism-field-error"
+                    role="alert"
+                  >
+                    {{ fieldErrors[`${dialogId}-username`] }}
+                  </p>
                 </div>
 
                 <!-- 认证方式 -->
@@ -187,6 +244,7 @@
 import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 import LiquidSurface from '@/components/common/LiquidSurface.vue'
 import { sshService } from '@/services/ssh.service'
+import { useInlineValidation } from '@/composables/useInlineValidation'
 
 interface SSHConnectionFormData {
   name: string
@@ -220,6 +278,14 @@ const successMessage = ref<string | null>(null)
 const dialogId = `ssh-connection-${useId()}`
 const dialogContent = ref<HTMLElement>()
 const nameInput = ref<HTMLInputElement>()
+const connectionForm = ref<HTMLFormElement>()
+const isComposing = ref(false)
+const { errors: fieldErrors, validateForm, revalidateInput, clearErrors } = useInlineValidation()
+const guardCompositionSubmit = (event: KeyboardEvent) => {
+  if (event.key === 'Enter' && (isComposing.value || event.isComposing || event.keyCode === 229)) {
+    event.preventDefault()
+  }
+}
 let previousFocus: HTMLElement | null = null
 let focusEpoch = 0
 
@@ -237,6 +303,7 @@ const formData = ref<SSHConnectionFormData>({
 
 // 重置表单（需要先定义，因为 watch 中会用到）
 const resetForm = () => {
+  clearErrors()
   formData.value = {
     name: '',
     host: '',
@@ -287,6 +354,8 @@ const handleClose = () => {
   emit('update:modelValue', false)
   error.value = null
   successMessage.value = null
+  clearErrors()
+  isComposing.value = false
 }
 
 function focusableControls(): HTMLElement[] {
@@ -368,6 +437,7 @@ function normalizeCredential(value: unknown): string {
 }
 
 const handleSubmit = async () => {
+  if (loading.value || isComposing.value || !validateForm(connectionForm.value)) return
   error.value = null
   loading.value = true
 
@@ -437,7 +507,6 @@ const handleTest = async () => {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgb(5 14 31 / 30%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -449,8 +518,9 @@ const handleTest = async () => {
   --liquid-tint: var(--liquid-dialog-tint, color-mix(in srgb, var(--vscode-bg) 80%, transparent));
   width: min(100%, 520px);
   max-height: min(90dvh, 820px);
-  color: var(--vscode-fg);
-  box-shadow: 0 28px 100px -32px rgb(0 12 36 / 55%);
+  color: var(--prism-text);
+  font-family: var(--prism-font);
+  box-shadow: var(--prism-shadow);
 }
 
 .modal-container :deep(.liquid-surface__content) {
@@ -488,7 +558,7 @@ const handleTest = async () => {
   width: 44px;
   height: 44px;
   border: 1px solid color-mix(in srgb, var(--vscode-accent) 24%, transparent);
-  border-radius: 14px;
+  border-radius: var(--prism-radius-row);
   background: color-mix(in srgb, var(--vscode-accent) 12%, transparent);
   color: var(--vscode-accent);
   font-size: 21px;
@@ -519,7 +589,7 @@ const handleTest = async () => {
   background: transparent;
   color: var(--vscode-fg-muted);
   cursor: pointer;
-  border-radius: 50%;
+  border-radius: var(--prism-radius-small);
   transition:
     color 120ms ease-out,
     background-color 120ms ease-out;
@@ -583,9 +653,9 @@ const handleTest = async () => {
   min-height: 42px;
   height: auto;
   padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--vscode-input-border) 80%, transparent);
-  border-radius: 11px;
-  background: color-mix(in srgb, var(--vscode-input-background) 72%, transparent);
+  border: 1px solid var(--prism-border);
+  border-radius: var(--prism-radius-control);
+  background: var(--prism-control);
   color: var(--vscode-input-foreground);
   font: inherit;
   font-size: 13px;
@@ -606,13 +676,17 @@ const handleTest = async () => {
   border-color: transparent;
 }
 
-.modal-body select option {
-  background: var(--vscode-input-background);
-  color: var(--vscode-input-foreground);
+.modal-body input:disabled,
+.modal-body select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .required {
-  color: var(--vscode-error);
+  color: var(--prism-danger);
+}
+.modal-body input[aria-invalid='true'] {
+  border-color: var(--prism-danger);
 }
 
 .error-message {
@@ -620,10 +694,11 @@ const handleTest = async () => {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: rgba(var(--vscode-error-rgb, 244, 67, 54), 0.1);
-  border: 1px solid var(--vscode-error);
-  border-radius: 11px;
-  color: var(--vscode-error);
+  overflow-wrap: anywhere;
+  background: var(--prism-danger-bg);
+  border: 1px solid color-mix(in srgb, var(--prism-danger) 30%, transparent);
+  border-radius: var(--prism-radius-control);
+  color: var(--prism-danger);
   font-size: 13px;
   margin-bottom: 16px;
 }
@@ -633,10 +708,11 @@ const handleTest = async () => {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: rgba(var(--vscode-success-rgb, 22, 163, 74), 0.1);
-  border: 1px solid var(--vscode-success, #16a34a);
-  border-radius: 11px;
-  color: var(--vscode-success, #16a34a);
+  overflow-wrap: anywhere;
+  background: var(--prism-success-bg);
+  border: 1px solid color-mix(in srgb, var(--prism-success) 30%, transparent);
+  border-radius: var(--prism-radius-control);
+  color: var(--prism-success);
   font-size: 13px;
   margin-bottom: 16px;
 }
@@ -657,7 +733,7 @@ const handleTest = async () => {
   min-height: 38px;
   padding: 9px 16px;
   font-size: 13px;
-  border-radius: 11px;
+  border-radius: var(--prism-radius-control);
   cursor: pointer;
   transition:
     background-color 120ms ease-out,
@@ -704,14 +780,15 @@ const handleTest = async () => {
 }
 
 .btn-test {
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
-  border-color: var(--vscode-button-background);
+  background: var(--prism-control);
+  color: var(--prism-text);
+  border-color: var(--prism-border);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .btn-test:hover:not(:disabled) {
-    background: var(--vscode-button-hoverBackground);
+    background: var(--vscode-list-hoverBackground);
+    border-color: color-mix(in srgb, var(--vscode-accent) 40%, var(--prism-border));
   }
 }
 
@@ -758,6 +835,16 @@ const handleTest = async () => {
   .connection-modal-leave-to .modal-container {
     transform: none;
   }
+}
+
+html[data-motion='off'] .connection-modal-enter-active,
+html[data-motion='off'] .connection-modal-leave-active,
+html[data-motion='off'] .modal-container,
+html[data-transitions='off'] .connection-modal-enter-active,
+html[data-transitions='off'] .connection-modal-leave-active,
+html[data-transitions='off'] .modal-container {
+  transition: none !important;
+  transform: none !important;
 }
 
 @media (max-width: 540px) {

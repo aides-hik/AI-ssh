@@ -5,6 +5,7 @@ import {
   fetchOpenAICompatibleModels,
   fetchOpenAIModels,
   fetchOpenRouterModels
+  , fetchAnthropicModels, fetchGoogleModels, fetchModelsForProvider, fetchOllamaModels
 } from './model-fetcher.service.ts'
 
 function mockModels(context: TestContext, models: unknown[]) {
@@ -147,4 +148,80 @@ test('model discovery surfaces HTTP failures without interpreting a response bod
   context.mock.method(globalThis, 'fetch', async () => new Response(null, { status: 401 }))
   const result = await fetchOpenRouterModels('test-key')
   assert.deepEqual(result, { success: false, error: 'HTTP error! status: 401' })
+})
+
+test('discovery trusts explicit tool and modality declarations over model-name guesses', async context => {
+  mockModels(context, [
+    { id: 'claude-imaginary', supported_parameters: [], architecture: { input_modalities: ['text'], output_modalities: ['text'] }, top_provider: { max_completion_tokens: 5000 }, context_length: 1000000 },
+    { id: 'my-custom-vision-name', max_tokens: 99999 },
+    { id: 'free-model', pricing: { prompt: '0', completion: '0' }, function_calling: true },
+    { id: 123 }, null
+  ])
+  const fetched = await fetchOpenRouterModels('test-key', 'https://fixture.invalid/v1///')
+  assert.equal(fetched.success, true)
+  assert.equal(fetched.models?.length, 3)
+  assert.deepEqual(fetched.models?.[0].capabilities, { text: true, image: false, vision: false, functionCall: false })
+  assert.deepEqual(fetched.models?.[0].parameters, { maxOutputTokens: 5000, temperature: false, topP: false, apiStyle: 'chat-completions', maxTokensParameter: 'max_tokens' })
+  assert.equal(fetched.models?.[1].contextWindow, 0)
+  assert.equal(fetched.models?.[1].capabilities.vision, false)
+  assert.deepEqual(fetched.models?.[2].price, { input: 0, output: 0 })
+})
+
+test('Anthropic discovery authenticates, follows cursors, and retains live model limits and effort metadata', async context => {
+  const calls: Array<{ url: string; init?: RequestInit }> = []
+  context.mock.method(globalThis, 'fetch', async (url: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(url), init })
+    const payload = calls.length === 1 ? {
+      data: [{ id: 'claude-fixture', display_name: 'Current Claude', max_input_tokens: 1000000, max_tokens: 64000, capabilities: { effort: { high: { supported: true }, low: { supported: true } }, image_input: { supported: true } } }], has_more: true, last_id: 'one/two'
+    } : { data: [{ id: 'claude-retired', lifecycle: 'retired' }], has_more: false }
+    return Response.json(payload)
+  })
+  const fetched = await fetchAnthropicModels('fixture-key', 'https://fixture.invalid/v1/')
+  assert.equal(fetched.success, true)
+  assert.equal(fetched.models?.length, 1)
+  assert.equal(fetched.models?.[0].contextWindow, 1000000)
+  assert.equal(fetched.models?.[0].parameters?.maxOutputTokens, 64000)
+  assert.deepEqual(fetched.models?.[0].reasoning, { protocol: 'anthropic', supportedEfforts: ['low', 'high'], mandatory: true, thinkingMode: 'adaptive' })
+  assert.equal(calls[1].url, 'https://fixture.invalid/v1/models?limit=100&after_id=one%2Ftwo')
+  assert.equal((calls[0].init?.headers as Record<string, string>)['x-api-key'], 'fixture-key')
+})
+
+test('Google discovery follows page tokens, retains output limits, and does not duplicate API version or leak key in URL', async context => {
+  const calls: string[] = []
+  context.mock.method(globalThis, 'fetch', async (url: RequestInfo | URL, init?: RequestInit) => {
+    calls.push(String(url))
+    assert.equal((init?.headers as Record<string, string>)['x-goog-api-key'], 'fixture-key')
+    return Response.json(calls.length === 1 ? {
+      models: [{ name: 'models/gemini-3.8-flash', supportedGenerationMethods: ['generateContent'], inputTokenLimit: 1000000, outputTokenLimit: 32000 }], nextPageToken: 'next/one'
+    } : { models: [{ name: 'models/embedding', supportedGenerationMethods: ['embedContent'] }] })
+  })
+  const fetched = await fetchGoogleModels('fixture-key', 'https://generativelanguage.googleapis.com/v1beta/openai/')
+  assert.equal(fetched.success, true)
+  assert.equal(fetched.models?.length, 1)
+  assert.equal(fetched.models?.[0].parameters?.maxOutputTokens, 32000)
+  assert.equal(calls[1], 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000&pageToken=next%2Fone')
+  assert(calls.every(url => !url.includes('fixture-key')))
+})
+
+test('Ollama and custom compatibility providers can discover models without fixed vendor IDs', async context => {
+  const calls: string[] = []
+  context.mock.method(globalThis, 'fetch', async (url: RequestInfo | URL) => {
+    calls.push(String(url))
+    return Response.json(String(url).endsWith('/api/tags') ? { models: [{ name: 'own:latest' }] } : String(url).endsWith('/api/show') ? { capabilities: ['completion', 'tools', 'vision'], model_info: { 'general.architecture': 'fixture', 'fixture.context_length': 131072 } } : { data: [{ id: 'own-model' }] })
+  })
+  const ollama = await fetchOllamaModels('http://127.0.0.1:11434/v1/')
+  assert.equal(ollama.models?.[0].id, 'own:latest')
+  assert.equal(ollama.models?.[0].capabilities.functionCall, true)
+  assert.equal(ollama.models?.[0].capabilities.vision, true)
+  assert.equal(ollama.models?.[0].contextWindow, 131072)
+  const custom = await fetchModelsForProvider('custom-123', 'fixture-key', 'https://fixture.invalid/v1/')
+  assert.equal(custom.models?.[0].providerId, 'custom-123')
+  assert.deepEqual(calls, ['http://127.0.0.1:11434/api/tags', 'http://127.0.0.1:11434/api/show', 'https://fixture.invalid/v1/models'])
+})
+
+test('malformed and looping API payloads are surfaced as failures instead of a fabricated list', async context => {
+  context.mock.method(globalThis, 'fetch', async () => Response.json({ data: 'invalid' }))
+  assert.equal((await fetchOpenAIModels('fixture-key')).success, false)
+  context.mock.method(globalThis, 'fetch', async () => Response.json({ data: [{ id: 'claude-fixture' }], has_more: true, last_id: 'same' }))
+  assert.equal((await fetchAnthropicModels('fixture-key')).success, false)
 })

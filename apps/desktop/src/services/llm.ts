@@ -2,7 +2,9 @@
 import type { AIProvider, AIModel } from '../types/ai-providers'
 import { zodToOpenAIParameters } from './zod-schema'
 import { isRetiredManagedProvider } from '../utils/standalone-providers'
-import { buildReasoningRequest, type ReasoningSelection } from '../utils/model-reasoning'
+import type { ReasoningSelection } from '../utils/model-reasoning'
+import { buildModelParameterBody, getModelAPIStyle, normalizeAIEndpoint } from '../utils/model-capabilities'
+import { parseAnthropicTerminalStream, toAnthropicMessages } from './anthropic-terminal'
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
@@ -79,7 +81,7 @@ export class LLMSession {
     private onProgress?: (msg: string) => void,
     private serverEnvDocId?: string,
     private signal?: AbortSignal,
-    private reasoning: ReasoningSelection = 'default'
+    private reasoning: ReasoningSelection = model.requestConfig?.reasoning ?? 'default'
   ) {
     this.provider = provider
     this.model = model
@@ -88,7 +90,7 @@ export class LLMSession {
 
   async *stream(messages: ChatMessage[]): AsyncGenerator<StreamChunk, void, unknown> {
     const toolDefinitions = await Promise.all(
-      this.tools.map(async tool => {
+      (this.model.capabilities.functionCall ? this.tools : []).map(async tool => {
         const info = await tool.init()
         const parameters = info.parameters
 
@@ -107,15 +109,19 @@ export class LLMSession {
       throw new Error('原托管模型已移除，请在设置中配置自己的模型服务')
     }
 
-    const reasoningRequest = buildReasoningRequest(this.provider, this.model, this.reasoning)
-    const responses = reasoningRequest.protocol === 'responses'
-    const apiBase = this.provider.endpoint.replace(/\/+$/, '')
+    const style = getModelAPIStyle(this.provider, this.model)
+    const anthropic = style === 'anthropic'
+    const responses = style === 'responses'
+    let apiBase = normalizeAIEndpoint(this.provider.endpoint)
+    if (style === 'ollama') apiBase = `${apiBase.replace(/\/v1$/, '')}/v1`
     let endpoint = `${apiBase}/${responses ? 'responses' : 'chat/completions'}`
+    if (anthropic) endpoint = `${apiBase.replace(/\/messages$/, '')}/messages`
     let requestModelId = this.model.id
-    if (!responses) {
+    if (!responses && !anthropic) {
       try {
         const googleEndpoint = new URL(apiBase)
         if (googleEndpoint.hostname === 'generativelanguage.googleapis.com') {
+          if (googleEndpoint.pathname === '/') googleEndpoint.pathname = '/v1beta/openai'
           if (/^\/v1(?:beta)?$/.test(googleEndpoint.pathname)) googleEndpoint.pathname += '/openai'
           googleEndpoint.pathname += '/chat/completions'
           endpoint = googleEndpoint.toString()
@@ -128,7 +134,12 @@ export class LLMSession {
 
     const body: Record<string, unknown> = {
       model: requestModelId,
-      ...(responses
+      ...(anthropic ? {
+        ...toAnthropicMessages(messages),
+        tools: toolDefinitions.length ? toolDefinitions.map(tool => ({
+          name: tool.function.name, description: tool.function.description, input_schema: tool.function.parameters
+        })) : undefined
+      } : responses
         ? {
             input: this.toResponsesInput(messages),
             store: false,
@@ -141,16 +152,22 @@ export class LLMSession {
             messages: this.toModelMessages(messages),
             tools: toolDefinitions.length > 0 ? toolDefinitions : undefined
           }),
-      ...(!reasoningRequest.omitTemperature ? { temperature: 0.3 } : {}),
       stream: true,
-      tool_choice: toolDefinitions.length > 0 ? 'auto' : undefined,
-      ...reasoningRequest.body
+      tool_choice: toolDefinitions.length > 0 ? anthropic ? { type: 'auto' } : 'auto' : undefined,
+      ...buildModelParameterBody(this.provider, this.model, {
+        reasoningSelection: this.reasoning,
+        apiStyle: anthropic ? 'anthropic' : responses ? 'responses' : 'chat-completions'
+      })
     }
 
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${this.provider.apiKey}`,
+        ...(anthropic ? {
+          'x-api-key': this.provider.apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        } : this.provider.apiKey ? { Authorization: `Bearer ${this.provider.apiKey}` } : {}),
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(body),
@@ -163,7 +180,8 @@ export class LLMSession {
     }
 
     if (!response.body) throw new Error('Response body is not readable')
-    if (responses) yield* this.parseResponsesStream(response.body, this.signal)
+    if (anthropic) yield* parseAnthropicTerminalStream(readServerEvents(response.body, this.signal))
+    else if (responses) yield* this.parseResponsesStream(response.body, this.signal)
     else yield* this.parseStream(response.body, this.signal)
   }
 
@@ -389,7 +407,7 @@ export function createLLMSession(
   onProgress?: (msg: string) => void,
   serverEnvDocId?: string,
   signal?: AbortSignal,
-  reasoning: ReasoningSelection = 'default'
+  reasoning: ReasoningSelection = model.requestConfig?.reasoning ?? 'default'
 ): LLMSession {
   return new LLMSession(provider, model, tools, connectionId, onProgress, serverEnvDocId, signal, reasoning)
 }

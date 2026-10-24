@@ -4,6 +4,8 @@ import type { AIProvider, AIModel } from '../types/ai-providers'
 import type { MessageMetadata } from '../types/message-metadata'
 import { isRetiredManagedProvider } from '../utils/standalone-providers'
 import { APP_NAME } from '@ai-ssh/shared'
+import { buildModelParameterBody, getModelAPIStyle, getModelCapabilities, getRuntimeProviderId, normalizeAIEndpoint, normalizeGoogleAPIBase } from '../utils/model-capabilities'
+import type { ReasoningSelection } from '../utils/model-reasoning'
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
@@ -21,6 +23,7 @@ export interface ChatCompletionRequest {
   signal?: AbortSignal
   tools?: object[]
   toolChoice?: string | object
+  reasoningSelection?: ReasoningSelection
 }
 
 /**
@@ -110,8 +113,11 @@ export interface StreamChunk {
   metadata?: MessageMetadata | null // 添加 metadata 支持
 }
 
-function getRuntimeProviderId(provider: AIProvider): string {
-  return provider.config?.runtimeProviderId || provider.id
+export class ModelResponseIncompleteError extends Error {
+  constructor(public readonly reason: string) {
+    super(`模型响应未完成：${reason}`)
+    this.name = 'ModelResponseIncompleteError'
+  }
 }
 
 /**
@@ -142,16 +148,14 @@ async function callOpenAI(
   request: ChatCompletionRequest,
   onChunk?: (chunk: StreamChunk) => void
 ): Promise<ChatCompletionResponse> {
-  const endpoint = `${provider.endpoint}/chat/completions`
+  let base = normalizeAIEndpoint(provider.endpoint)
+  if (getRuntimeProviderId(provider) === 'google' && !/\/openai$/.test(base)) base += '/openai'
+  const endpoint = `${base}/chat/completions`
 
   const body: any = {
     model: model.id,
     messages: request.messages,
-    temperature: request.temperature ?? 0.7,
-    max_tokens: request.maxTokens,
-    top_p: request.topP,
-    frequency_penalty: request.frequencyPenalty,
-    presence_penalty: request.presencePenalty,
+    ...buildModelParameterBody(provider, model, { ...request, apiStyle: 'chat-completions' }),
     stream: request.stream ?? false
   }
 
@@ -165,7 +169,8 @@ async function callOpenAI(
     method: 'POST',
     headers: {
       Authorization: `Bearer ${provider.apiKey}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...(getRuntimeProviderId(provider) === 'openrouter' ? { 'X-Title': APP_NAME } : {})
     },
     body: JSON.stringify(body),
     signal: request.signal
@@ -197,6 +202,76 @@ async function callOpenAI(
     },
     metadata: cost !== undefined ? { cost } : undefined,
     finishReason: data.choices[0]?.finish_reason
+  }
+}
+
+/** Responses-only models cannot be sent to the legacy Chat Completions endpoint. */
+async function callResponses(
+  provider: AIProvider,
+  model: AIModel,
+  request: ChatCompletionRequest,
+  onChunk?: (chunk: StreamChunk) => void
+): Promise<ChatCompletionResponse> {
+  const body: Record<string, unknown> = {
+    model: model.id,
+    input: request.messages,
+    store: false,
+    stream: request.stream ?? false,
+    ...buildModelParameterBody(provider, model, { ...request, apiStyle: 'responses' })
+  }
+  if (request.tools?.length) {
+    body.tools = request.tools.map(tool => {
+      const entry = tool as { function?: Record<string, unknown> }
+      return entry.function ? { type: 'function', ...entry.function } : tool
+    })
+    body.tool_choice = request.toolChoice || 'auto'
+  }
+  const response = await fetch(`${normalizeAIEndpoint(provider.endpoint)}/responses`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body), signal: request.signal
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.error?.message || `HTTP ${response.status}: ${response.statusText}`)
+  }
+  let content = ''
+  let data: any
+  if (request.stream && onChunk) {
+    for await (const line of readStreamLines(response)) {
+      if (!line.startsWith('data:')) continue
+      const raw = line.slice(5).trim()
+      if (!raw || raw === '[DONE]') continue
+      const event = JSON.parse(raw)
+      if (event.type === 'error' || event.type === 'response.failed') throw new Error(event.error?.message || event.response?.error?.message || '模型响应失败')
+      if (event.type === 'response.output_text.delta') {
+        content += event.delta || ''
+        onChunk({ content: event.delta || '', done: false })
+      }
+      if (event.type === 'response.completed' || event.type === 'response.incomplete') {
+        data = event.response
+        if (event.type === 'response.incomplete') throw new ModelResponseIncompleteError(data?.incomplete_details?.reason || 'unknown')
+        onChunk({ content: '', done: true })
+        break
+      }
+    }
+    if (!data) throw new Error('模型响应在完成前中断')
+  } else {
+    data = await response.json()
+    if (data.error || data.status === 'failed') throw new Error(data.error?.message || '模型响应失败')
+    if (data.status === 'incomplete') throw new ModelResponseIncompleteError(data.incomplete_details?.reason || 'unknown')
+    content = (data.output || []).filter((item: { type: string }) => item.type === 'message')
+      .flatMap((item: { content?: Array<{ type: string; text?: string }> }) => item.content || [])
+      .filter((part: { type: string }) => part.type === 'output_text')
+      .map((part: { text: string }) => part.text).join('')
+  }
+  const inputTokens = data.usage?.input_tokens || 0
+  const outputTokens = data.usage?.output_tokens || 0
+  return {
+    content, model: data.model || model.id,
+    usage: { promptTokens: inputTokens, completionTokens: outputTokens, totalTokens: data.usage?.total_tokens || inputTokens + outputTokens },
+    metadata: { cost: calculateCost(inputTokens, outputTokens, model.price), outputReasoningTokens: data.usage?.output_tokens_details?.reasoning_tokens },
+    finishReason: 'stop'
   }
 }
 
@@ -333,10 +408,10 @@ async function callAnthropic(
   request: ChatCompletionRequest,
   onChunk?: (chunk: StreamChunk) => void
 ): Promise<ChatCompletionResponse> {
-  const endpoint = `${provider.endpoint}/messages`
+  const endpoint = `${normalizeAIEndpoint(provider.endpoint)}/messages`
 
   // 分离系统消息和用户消息
-  const systemMessage = request.messages.find(m => m.role === 'system')
+  const systemMessage = request.messages.filter(m => m.role === 'system').map(m => m.content).join('\n\n')
   const messages = request.messages.filter(m => m.role !== 'system')
 
   const body: any = {
@@ -345,16 +420,19 @@ async function callAnthropic(
       role: m.role === 'assistant' ? 'assistant' : 'user',
       content: m.content
     })),
-    system: systemMessage?.content,
-    max_tokens: request.maxTokens || 4096,
-    temperature: request.temperature ?? 0.7,
-    top_p: request.topP,
+    system: systemMessage || undefined,
+    ...buildModelParameterBody(provider, model, { ...request, apiStyle: 'anthropic' }),
     stream: request.stream ?? false
   }
 
   // Anthropic 使用 tools 参数 (格式略有不同)
   if (request.tools && request.tools.length > 0) {
-    body.tools = request.tools
+    body.tools = request.tools.map(tool => {
+      const entry = tool as { function?: { name: string; description?: string; parameters?: object } }
+      return entry.function ? { name: entry.function.name, description: entry.function.description, input_schema: entry.function.parameters || { type: 'object', properties: {} } } : tool
+    })
+    const choice = request.toolChoice
+    body.tool_choice = choice === 'none' ? { type: 'none' } : choice === 'required' ? { type: 'any' } : choice && typeof choice === 'object' ? choice : { type: 'auto' }
   }
 
   const response = await fetch(endpoint, {
@@ -385,7 +463,7 @@ async function callAnthropic(
   const cost = calculateCost(inputTokens, outputTokens, model.price)
 
   return {
-    content: data.content[0]?.text || '',
+    content: (data.content || []).filter((block: { type: string }) => block.type === 'text').map((block: { text: string }) => block.text).join(''),
     model: data.model,
     usage: {
       promptTokens: inputTokens,
@@ -451,9 +529,8 @@ async function callGoogle(
 ): Promise<ChatCompletionResponse> {
   // 确保模型路径包含 "models/" 前缀
   const modelPath = model.id.startsWith('models/') ? model.id : `models/${model.id}`
-  const endpoint = request.stream
-    ? `${provider.endpoint}/${modelPath}:streamGenerateContent?key=${provider.apiKey}`
-    : `${provider.endpoint}/${modelPath}:generateContent?key=${provider.apiKey}`
+  const base = normalizeGoogleAPIBase(provider.endpoint)
+  const endpoint = `${base}/${modelPath}:${request.stream ? 'streamGenerateContent' : 'generateContent'}`
 
   // 转换消息格式
   const contents = request.messages
@@ -467,11 +544,7 @@ async function callGoogle(
 
   const body: any = {
     contents,
-    generationConfig: {
-      temperature: request.temperature ?? 0.7,
-      maxOutputTokens: request.maxTokens,
-      topP: request.topP
-    }
+    ...buildModelParameterBody(provider, model, { ...request, apiStyle: 'gemini' })
   }
 
   if (systemInstruction) {
@@ -479,11 +552,19 @@ async function callGoogle(
       parts: [{ text: systemInstruction.content }]
     }
   }
+  if (request.tools?.length) {
+    body.tools = [{ functionDeclarations: request.tools.map(tool => {
+      const entry = tool as { function?: { name: string; description?: string; parameters?: object } }
+      return entry.function || tool
+    }) }]
+    body.toolConfig = { functionCallingConfig: { mode: request.toolChoice === 'none' ? 'NONE' : request.toolChoice === 'required' ? 'ANY' : 'AUTO' } }
+  }
 
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'x-goog-api-key': provider.apiKey
     },
     body: JSON.stringify(body),
     signal: request.signal
@@ -503,7 +584,7 @@ async function callGoogle(
   // 非流式响应
   const data = await response.json()
   const candidate = data.candidates?.[0]
-  const content = candidate?.content?.parts?.[0]?.text || ''
+  const content = (candidate?.content?.parts || []).filter((part: { thought?: boolean; text?: string }) => !part.thought && typeof part.text === 'string').map((part: { text: string }) => part.text).join('')
 
   return {
     content,
@@ -684,57 +765,7 @@ async function callOpenRouter(
   request: ChatCompletionRequest,
   onChunk?: (chunk: StreamChunk) => void
 ): Promise<ChatCompletionResponse> {
-  const endpoint = `${provider.endpoint}/chat/completions`
-
-  const body = {
-    model: model.id,
-    messages: request.messages,
-    temperature: request.temperature ?? 0.7,
-    max_tokens: request.maxTokens,
-    top_p: request.topP,
-    stream: request.stream ?? false
-  }
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${provider.apiKey}`,
-      'Content-Type': 'application/json',
-      // OpenRouter 特定请求头
-      'X-Title': APP_NAME
-    },
-    body: JSON.stringify(body),
-    signal: request.signal
-  })
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}))
-
-    throw new Error(error.error?.message || `HTTP ${response.status}: ${response.statusText}`)
-  }
-
-  // 流式响应
-  if (request.stream && onChunk) {
-    return await handleOpenAIStream(response, onChunk, model)
-  }
-
-  // 非流式响应
-  const data = await response.json()
-  const inputTokens = data.usage?.prompt_tokens || 0
-  const outputTokens = data.usage?.completion_tokens || 0
-  const cost = calculateCost(inputTokens, outputTokens, model.price)
-
-  return {
-    content: data.choices[0]?.message?.content || '',
-    model: data.model,
-    usage: {
-      promptTokens: inputTokens,
-      completionTokens: outputTokens,
-      totalTokens: data.usage?.total_tokens || 0
-    },
-    metadata: cost !== undefined ? { cost } : undefined,
-    finishReason: data.choices[0]?.finish_reason
-  }
+  return callOpenAI(provider, model, request, onChunk)
 }
 
 /**
@@ -758,7 +789,7 @@ async function callOllama(
   request: ChatCompletionRequest,
   onChunk?: (chunk: StreamChunk) => void
 ): Promise<ChatCompletionResponse> {
-  const endpoint = `${provider.endpoint}/api/chat`
+  const endpoint = `${normalizeAIEndpoint(provider.endpoint)}/api/chat`
 
   const body = {
     model: model.id,
@@ -767,17 +798,15 @@ async function callOllama(
       content: m.content
     })),
     stream: request.stream ?? false,
-    options: {
-      temperature: request.temperature ?? 0.7,
-      num_predict: request.maxTokens,
-      top_p: request.topP
-    }
+    ...buildModelParameterBody(provider, model, { ...request, apiStyle: 'ollama' }),
+    ...(request.tools?.length ? { tools: request.tools } : {})
   }
 
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...(provider.apiKey ? { Authorization: `Bearer ${provider.apiKey}` } : {})
     },
     body: JSON.stringify(body),
     signal: request.signal
@@ -857,30 +886,25 @@ export async function chatCompletion(
   if (isRetiredManagedProvider(provider)) {
     throw new Error('原托管模型已移除，请在设置中配置自己的模型服务')
   }
-  switch (getRuntimeProviderId(provider)) {
-    case 'openai':
-      return await callOpenAI(provider, model, request, onChunk)
-
+  if (request.tools?.length && !getModelCapabilities(provider, model).supportsTools) {
+    throw new Error('当前模型未声明支持工具调用，请选择支持工具的模型或更新模型能力')
+  }
+  const style = getModelAPIStyle(provider, model)
+  if (style === 'responses') return callResponses(provider, model, request, onChunk)
+  switch (style) {
     case 'anthropic':
       return await callAnthropic(provider, model, request, onChunk)
 
-    case 'google':
+    case 'gemini':
       return await callGoogle(provider, model, request, onChunk)
 
     case 'ollama':
       return await callOllama(provider, model, request, onChunk)
 
-    // OpenRouter 聚合平台（支持多个模型）
-    case 'openrouter':
-      return await callOpenRouter(provider, model, request, onChunk)
-
-    // 其他使用 OpenAI 兼容接口的服务商
-    case 'qwen':
-    case 'deepseek':
-    case 'moonshot':
-    case 'minimax':
     default:
-      return await callGenericOpenAI(provider, model, request, onChunk)
+      return getRuntimeProviderId(provider) === 'openrouter'
+        ? callOpenRouter(provider, model, request, onChunk)
+        : callGenericOpenAI(provider, model, request, onChunk)
   }
 }
 

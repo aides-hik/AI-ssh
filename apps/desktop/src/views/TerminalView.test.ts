@@ -10,10 +10,10 @@ const terminalViewPath = join(currentDir, 'TerminalView.vue')
 test('ai assistant supports floating launcher semantics instead of close semantics', async () => {
   const source = await readFile(terminalViewPath, 'utf8')
 
-  assert.match(source, /title="收起AI助手"/)
-  assert.match(source, /title="展开AI助手"/)
+  assert.match(source, /data-prism-tooltip="收起AI助手"/)
+  assert.match(source, /data-prism-tooltip="展开AI助手"/)
   assert.match(source, /expandAIAssistant/)
-  assert.doesNotMatch(source, /title="关闭AI助手"/)
+  assert.doesNotMatch(source, /(?:title|data-prism-tooltip)="关闭AI助手"/)
   assert.doesNotMatch(source, /bi bi-x/)
 })
 
@@ -29,7 +29,7 @@ test('ai assistant hides without destroying its conversation and lets terminal e
   const source = await readFile(terminalViewPath, 'utf8')
 
   assert.doesNotMatch(source, /bi bi-robot/)
-  assert.doesNotMatch(source, /title="AI助手"/)
+  assert.doesNotMatch(source, /(?:title|data-prism-tooltip)="AI助手"/)
   assert.match(source, /const isAIAssistantMinimized = ref\(false\)/)
   assert.match(source, /v-show="!isAIAssistantMinimized"/)
   assert.doesNotMatch(source, /v-if="!isAIAssistantMinimized"/)
@@ -45,16 +45,16 @@ test('ai assistant hides without destroying its conversation and lets terminal e
   assert.doesNotMatch(source, /collapsed: isAIAssistantMinimized/)
 })
 
-test('floating ai launcher uses a high-contrast style on dark terminal background', async () => {
+test('floating ai launcher uses shared theme surfaces with explicit foreground and rim', async () => {
   const source = await readFile(terminalViewPath, 'utf8')
 
   assert.match(source, /\.ai-assistant-floating-toggle \{/)
   assert.match(
     source,
-    /background: linear-gradient\(135deg, rgba\(255, 255, 255, 0\.96\) 0%, rgba\(230, 236, 244, 0\.92\) 100%\);/
+    /\.ai-assistant-floating-toggle\s*\{[^}]*background:\s*var\(--prism-surface\);/
   )
-  assert.match(source, /color: #111827;/)
-  assert.match(source, /border: 1px solid rgba\(255, 255, 255, 0\.72\);/)
+  assert.match(source, /\.ai-assistant-floating-toggle\s*\{[^}]*color:\s*var\(--prism-text\);/)
+  assert.match(source, /\.ai-assistant-floating-toggle\s*\{[^}]*border:\s*1px solid var\(--liquid-rim\);/)
   assert.match(source, /font-weight: 600;/)
 })
 

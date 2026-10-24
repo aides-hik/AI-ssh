@@ -1,5 +1,5 @@
 <template>
-  <section id="section-about" class="setting-section">
+  <section id="section-about" class="setting-section prism-settings-section">
     <h2 class="section-title">
       <i class="bi bi-info-circle"></i>
       {{ $t('settings.aboutTitle') }}

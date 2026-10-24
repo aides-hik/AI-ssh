@@ -232,8 +232,8 @@ onBeforeUnmount(() => {
   /* Do not add opacity/filter/isolation here: those cut off the scene backdrop. */
 }
 
-:global(:root.light) .liquid-surface,
-:global(:root.light-modern) .liquid-surface {
+html.light .liquid-surface,
+html.light-modern .liquid-surface {
   --liquid-default-tint: rgb(244 249 255 / 38%);
   --liquid-default-rim: rgb(255 255 255 / 72%);
   --liquid-default-inner-light: rgb(255 255 255 / 88%);

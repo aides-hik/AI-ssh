@@ -7,13 +7,20 @@
 
     <!-- 中央消息区域 -->
     <div class="flex-1 px-4">
-      <span v-if="currentMessage" class="text-center block">{{ currentMessage }}</span>
+      <span
+        v-if="currentMessage"
+        class="statusbar-message text-center block"
+        role="status"
+        aria-live="polite"
+        >{{ currentMessage }}</span
+      >
     </div>
 
     <!-- 右侧信息 -->
     <div class="flex items-center">
       <!-- 系统资源 -->
-      <div
+      <button
+        type="button"
         v-if="cpuUsage !== null || memoryUsage !== null"
         class="statusbar-item"
         @click="showSystemInfo"
@@ -22,17 +29,23 @@
         <span v-if="memoryUsage !== null" :class="{ 'ml-2': cpuUsage !== null }"
           >内存: {{ memoryUsage }}MB</span
         >
-      </div>
+      </button>
       <span v-else class="statusbar-context">本地工作空间</span>
 
       <!-- 通知图标 -->
-      <div v-if="hasNotifications" class="statusbar-item" @click="showNotifications">
+      <button
+        type="button"
+        v-if="hasNotifications"
+        class="statusbar-item"
+        aria-label="查看通知"
+        @click="showNotifications"
+      >
         <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 16 16">
           <path
             d="M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2zM8 1.918l-.797.161A4.002 4.002 0 0 0 4 6c0 .628-.134 2.197-.459 3.742-.16.767-.376 1.566-.663 2.258h10.244c-.287-.692-.502-1.49-.663-2.258C12.134 8.197 12 6.628 12 6a4.002 4.002 0 0 0-3.203-3.92L8 1.917zM14.22 12c.223.447.481.801.78 1H1c.299-.199.557-.553.78-1C2.68 10.2 3 6.88 3 6c0-2.42 1.72-4.44 4.005-4.901a1 1 0 1 1 1.99 0A5.002 5.002 0 0 1 13 6c0 .88.32 4.2 1.22 6z"
           />
         </svg>
-      </div>
+      </button>
     </div>
   </footer>
 </template>
@@ -214,96 +227,71 @@ defineExpose({
 
 <style scoped>
 .vscode-statusbar {
-  font-family: 'Segoe UI', 'Consolas', monospace;
-  font-size: 12px;
+  flex-shrink: 0;
+  min-width: 0;
+  min-height: 28px;
+  border-top: 1px solid var(--prism-border);
+  background: transparent;
+  color: var(--prism-muted);
+  font-family: var(--prism-font);
+  font-size: 11px;
   user-select: none;
-  border-top: 1px solid var(--vscode-border);
-  background-color: var(--vscode-bg-light) !important;
-  color: var(--vscode-fg);
 }
-
+.vscode-statusbar > .flex-1 {
+  min-width: 0;
+}
+.statusbar-message {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .statusbar-item {
-  padding: 0.25rem 0.5rem;
-  cursor: pointer;
-  transition: background-color 120ms ease-out;
   display: flex;
   align-items: center;
-  min-height: 22px;
-  border-right: 1px solid transparent;
+  min-height: 24px;
+  margin: 2px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: var(--prism-radius-small);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color 120ms var(--prism-ease),
+    color 120ms var(--prism-ease);
 }
-
-.statusbar-context {
-  padding: 0 8px;
-  color: var(--vscode-fg-muted);
+.statusbar-item:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: -1px;
 }
-
-.statusbar-item:hover {
-  background-color: var(--vscode-bg-lighter);
-}
-
 .statusbar-item:active {
-  background-color: var(--vscode-bg-lighter);
+  opacity: 0.75;
 }
-
-/* 状态指示器动画 */
-.w-2.h-2 {
-  transition: all 0.3s ease;
+.statusbar-context {
+  padding: 0 10px;
+  color: var(--prism-muted);
+  white-space: nowrap;
 }
-
-/* 连接状态特殊样式 */
-.animate-pulse {
-  animation: vscode-pulse 1.5s infinite;
-}
-
-@keyframes vscode-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
-}
-
-/* SVG 图标样式 */
 .statusbar-item svg {
   flex-shrink: 0;
 }
-
-/* 错误和警告颜色 */
-.text-red-400 {
-  color: var(--vscode-error);
-}
-
-.text-yellow-400 {
-  color: var(--vscode-warning);
-}
-
-.text-green-400 {
-  color: var(--vscode-success);
-}
-
-/* 暗色文本 */
-.text-vscode-statusbar-text-dim {
-  color: var(--vscode-fg);
-  opacity: 0.7;
-}
-
-/* 响应式调整 */
-@media (max-width: 1200px) {
-  .statusbar-item {
-    padding-left: 0.25rem;
-    padding-right: 0.25rem;
-  }
-
-  .statusbar-item span {
-    font-size: 11px;
+@media (hover: hover) and (pointer: fine) {
+  .statusbar-item:hover {
+    background: var(--vscode-list-hoverBackground);
+    color: var(--prism-text);
   }
 }
-
 @media (max-width: 800px) {
-  .statusbar-item:not(.statusbar-item:first-child):not(.statusbar-item:last-child) {
-    display: none;
+  .statusbar-item {
+    padding-inline: 5px;
+    font-size: 10px;
+  }
+  .vscode-statusbar > .flex-1 {
+    padding-inline: 6px;
   }
 }
 </style>

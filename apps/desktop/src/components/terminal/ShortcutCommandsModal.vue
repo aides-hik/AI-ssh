@@ -1,13 +1,13 @@
 <template>
   <Teleport to="body">
     <div v-if="visible" class="modal-wrapper">
-      <div class="modal-content">
+      <div class="modal-content" role="dialog" aria-modal="true" aria-label="快捷命令">
       <div class="modal-header">
         <h3 class="modal-title">
           <i class="bi bi-lightning-charge"></i>
           快捷命令
         </h3>
-        <button class="btn-close" @click="handleClose">
+        <button class="btn-close" @click="handleClose" aria-label="关闭快捷命令">
           <i class="bi bi-x"></i>
         </button>
       </div>
@@ -34,7 +34,7 @@
             <button
               :class="['sort-btn', { active: sortBy === 'frequency' }]"
               @click="sortBy = 'frequency'"
-              title="按使用频率排序"
+              data-prism-tooltip="按使用频率排序"
             >
               <i class="bi bi-sort-numeric-down"></i>
               使用频率
@@ -42,7 +42,7 @@
             <button
               :class="['sort-btn', { active: sortBy === 'time' }]"
               @click="sortBy = 'time'"
-              title="按创建时间排序"
+              data-prism-tooltip="按创建时间排序"
             >
               <i class="bi bi-clock-history"></i>
               创建时间
@@ -98,14 +98,14 @@
               <button
                 class="action-btn btn-edit"
                 @click.stop="handleEdit(command)"
-                title="编辑"
+                data-prism-tooltip="编辑" aria-label="编辑"
               >
                 <i class="bi bi-pencil"></i>
               </button>
               <button
                 class="action-btn btn-delete"
                 @click.stop="handleDelete(command)"
-                title="删除"
+                data-prism-tooltip="删除" aria-label="删除"
               >
                 <i class="bi bi-trash"></i>
               </button>
@@ -132,10 +132,10 @@
 
     <!-- 编辑弹窗 -->
     <div v-if="editingCommand" class="edit-modal-wrapper">
-      <div class="modal-content modal-small">
+      <div class="modal-content modal-small" role="dialog" aria-modal="true" aria-label="编辑快捷命令">
         <div class="modal-header">
           <h3 class="modal-title">编辑快捷命令</h3>
-          <button class="btn-close" @click="cancelEdit">
+          <button class="btn-close" @click="cancelEdit" aria-label="关闭编辑快捷命令">
             <i class="bi bi-x"></i>
           </button>
         </div>
@@ -388,12 +388,14 @@ if (props.visible) {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 999999;
+  z-index: var(--prism-z-dialog);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(2px);
+  background: var(--prism-overlay, color-mix(in srgb, var(--liquid-canvas) 42%, transparent));
+  backdrop-filter: blur(10px);
+  padding: 20px;
+  font-family: var(--prism-font);
 }
 
 .edit-modal-wrapper {
@@ -402,25 +404,30 @@ if (props.visible) {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 1000000;
+  z-index: var(--prism-z-nested-dialog);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(3px);
+  background: var(--prism-overlay, color-mix(in srgb, var(--liquid-canvas) 42%, transparent));
+  backdrop-filter: blur(10px);
+  padding: 20px;
+  font-family: var(--prism-font);
 }
 
 .modal-content {
-  background: var(--vscode-bg-light);
-  border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  border: 1px solid var(--vscode-border);
+  background: var(--prism-surface);
+  border-radius: var(--prism-radius-dialog);
+  box-shadow: var(--prism-shadow-raised);
+  border: 1px solid var(--liquid-rim);
   width: 800px;
   max-width: 90vw;
-  max-height: 85vh;
+  max-height: calc(100dvh - 40px);
   display: flex;
   flex-direction: column;
   position: relative;
+  backdrop-filter: blur(28px) saturate(1.3);
+  overflow: hidden;
+  color: var(--prism-text);
 }
 
 .modal-small {
@@ -452,13 +459,17 @@ if (props.visible) {
   font-size: 20px;
   cursor: pointer;
   color: var(--vscode-fg-muted);
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: all 0.2s;
+  padding: 0;
+  border-radius: var(--prism-radius-control);
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
 }
 
 .btn-close:hover {
-  background: var(--vscode-hover);
+  background: var(--vscode-list-hoverBackground);
   color: var(--vscode-fg);
 }
 
@@ -485,10 +496,11 @@ if (props.visible) {
   width: 100%;
   padding: 8px 12px 8px 36px;
   border: 1px solid var(--vscode-border);
-  border-radius: 6px;
-  background: var(--vscode-bg-lighter);
+  border-radius: var(--prism-radius-control);
+  background: var(--prism-control);
   color: var(--vscode-fg);
   font-size: 14px;
+  min-height: 38px;
 }
 
 .search-input:focus {
@@ -502,8 +514,10 @@ if (props.visible) {
   justify-content: space-between;
   margin-bottom: 16px;
   padding: 8px 12px;
-  background: var(--vscode-bg-lighter);
-  border-radius: 6px;
+  background: color-mix(in srgb, var(--prism-control) 50%, transparent);
+  border-radius: var(--prism-radius-control);
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .stat-item {
@@ -524,24 +538,25 @@ if (props.visible) {
   border: 1px solid var(--vscode-border);
   background: var(--vscode-bg);
   color: var(--vscode-fg-muted);
-  border-radius: 4px;
+  border-radius: var(--prism-radius-small);
   cursor: pointer;
   font-size: 12px;
   display: flex;
   align-items: center;
   gap: 4px;
-  transition: all 0.2s;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
+  min-height: 32px;
 }
 
 .sort-btn:hover {
-  background: var(--vscode-hover);
+  background: var(--vscode-list-hoverBackground);
   color: var(--vscode-fg);
 }
 
 .sort-btn.active {
-  background: var(--vscode-accent);
-  color: white;
-  border-color: var(--vscode-accent);
+  background: var(--prism-info-bg);
+  color: var(--vscode-accent);
+  border-color: color-mix(in srgb, var(--vscode-accent) 30%, transparent);
 }
 
 .commands-list {
@@ -577,17 +592,17 @@ if (props.visible) {
   justify-content: space-between;
   padding: 12px;
   border: 1px solid var(--vscode-border);
-  border-radius: 6px;
-  background: var(--vscode-bg-lighter);
+  border-radius: var(--prism-radius-control);
+  background: var(--prism-control);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
 }
 
 .command-item:hover {
-  background: var(--vscode-hover);
+  background: var(--vscode-list-hoverBackground);
   border-color: var(--vscode-accent);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transform: none;
+  box-shadow: none;
 }
 
 .command-info {
@@ -606,9 +621,9 @@ if (props.visible) {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   color: var(--vscode-fg);
-  background: var(--vscode-bg);
+  background: var(--prism-surface-raised);
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: var(--prism-radius-small);
   word-break: break-all;
 }
 
@@ -623,7 +638,7 @@ if (props.visible) {
   font-size: 11px;
   padding: 2px 8px;
   background: var(--vscode-accent);
-  color: white;
+  color: var(--vscode-button-foreground);
   border-radius: 10px;
   display: flex;
   align-items: center;
@@ -667,14 +682,18 @@ if (props.visible) {
 }
 
 .action-btn {
-  padding: 6px 8px;
+  padding: 0;
   border: none;
   background: transparent;
   color: var(--vscode-fg-muted);
-  border-radius: 4px;
+  border-radius: var(--prism-radius-small);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
   font-size: 14px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
 }
 
 .action-btn:hover {
@@ -683,8 +702,8 @@ if (props.visible) {
 }
 
 .btn-delete:hover {
-  color: var(--vscode-editorGutter-deletedBackground);
-  background: rgba(220, 38, 38, 0.1);
+  color: var(--prism-danger);
+  background: var(--prism-danger-bg);
 }
 
 .modal-footer {
@@ -699,19 +718,19 @@ if (props.visible) {
 .btn-primary,
 .btn-secondary {
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: var(--prism-radius-control);
   border: none;
   cursor: pointer;
   font-size: 14px;
   display: flex;
   align-items: center;
   gap: 6px;
-  transition: all 0.2s;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
 }
 
 .btn-primary {
   background: var(--vscode-accent);
-  color: white;
+  color: var(--vscode-button-foreground);
 }
 
 .btn-primary:hover {
@@ -725,7 +744,7 @@ if (props.visible) {
 }
 
 .btn-secondary:hover {
-  background: var(--vscode-hover);
+  background: var(--vscode-list-hoverBackground);
 }
 
 .form-group {
@@ -744,11 +763,12 @@ if (props.visible) {
   width: 100%;
   padding: 8px 12px;
   border: 1px solid var(--vscode-border);
-  border-radius: 6px;
-  background: var(--vscode-bg-lighter);
+  border-radius: var(--prism-radius-control);
+  background: var(--prism-control);
   color: var(--vscode-fg);
   font-size: 14px;
   font-family: inherit;
+  min-height: 38px;
 }
 
 .form-control:focus {
@@ -759,6 +779,20 @@ if (props.visible) {
 textarea.form-control {
   resize: vertical;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+button { touch-action: manipulation; }
+button:focus-visible { outline: 2px solid var(--vscode-accent); outline-offset: 2px; }
+.btn-primary, .btn-secondary { min-height: 36px; border-radius: var(--prism-radius-control); font-family: inherit; }
+.modal-body { min-height: 0; }
+.modal-footer, .sort-options, .command-footer { flex-wrap: wrap; }
+@media (max-width: 600px) {
+  .modal-wrapper, .edit-modal-wrapper { padding: 12px; }
+  .modal-content, .modal-small { width: 100%; max-width: 100%; max-height: calc(100dvh - 24px); }
+  .modal-header, .modal-body, .modal-footer { padding: 14px 16px; }
+  .modal-title { font-size: 16px; }
+  .command-item { gap: 8px; }
+  .command-actions { margin-left: 0; }
+  .command-header { flex-wrap: wrap; gap: 8px; }
 }
 </style>
 

@@ -1,5 +1,5 @@
 <template>
-  <section :id="'section-ssh'" class="setting-section">
+  <section :id="'section-ssh'" class="setting-section prism-settings-section">
     <h2 class="section-title">
       <i class="bi bi-terminal"></i>
       {{ $t('settings.sshTitle') }}
@@ -13,9 +13,10 @@
         <p class="setting-hint">{{ $t('settings.connectionTimeoutHint') }}</p>
       </div>
       <div class="setting-right">
-        <input 
-          v-model.number="sshTimeout" 
-          type="number" 
+        <input
+          :aria-label="$t('settings.connectionTimeout')"
+          v-model.number="sshTimeout"
+          type="number"
           class="form-input"
           min="10"
           max="300"
@@ -31,7 +32,11 @@
       </div>
       <div class="setting-right">
         <label class="toggle-switch">
-          <input v-model="keepAlive" type="checkbox" />
+          <input
+            :aria-label="$t('settings.keepAliveInterval')"
+            v-model="keepAlive"
+            type="checkbox"
+          />
           <span class="toggle-slider"></span>
         </label>
       </div>
@@ -44,9 +49,10 @@
         <p class="setting-hint">{{ $t('settings.defaultPortHint') }}</p>
       </div>
       <div class="setting-right">
-        <input 
-          v-model.number="defaultSSHPort" 
-          type="number" 
+        <input
+          :aria-label="$t('settings.defaultPort')"
+          v-model.number="defaultSSHPort"
+          type="number"
           class="form-input"
           min="1"
           max="65535"
@@ -66,5 +72,5 @@ const defaultSSHPort = ref<number>(22)
 </script>
 
 <style scoped>
-/* 样式从父组件继承 */
+/* Section layout and controls are shared in settings-foundation.css. */
 </style>

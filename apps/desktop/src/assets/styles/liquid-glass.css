@@ -133,8 +133,29 @@
   gap: 0;
   margin: 14px 16px 0;
 }
+.liquid-sidebar-region {
+  display: flex;
+  flex: 0 0 auto;
+  min-width: 0;
+  width: calc(var(--sidebar-width) + 12px);
+  overflow: clip;
+  /* One deliberate container resize lets the editor fill the released space continuously. */
+  transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.liquid-sidebar-region[data-open='false'] {
+  width: 0;
+  pointer-events: none;
+}
+.liquid-sidebar-region[data-resizing='true'] {
+  transition: none;
+}
+.liquid-app .liquid-sidebar-region :is(button, input, select, textarea, a) {
+  /* Keep legacy transition: all from animating inherited drawer visibility or focus outlines. */
+  transition-property: background-color, border-color, color, box-shadow, opacity, transform;
+}
 .liquid-sidebar {
-  flex-shrink: 0;
+  flex: 0 0 var(--sidebar-width);
+  width: var(--sidebar-width);
   min-width: 0;
   --liquid-content-display: flex;
   box-shadow: 0 12px 32px -24px var(--liquid-shadow);
@@ -524,11 +545,28 @@ body.resizing * {
   .liquid-workbench {
     margin: 8px 8px 0;
   }
-  .liquid-sidebar {
+  .liquid-sidebar-region {
     position: absolute;
     z-index: 30;
     inset: 0 auto 0 0;
+    width: var(--sidebar-width);
     max-width: calc(100% - 50px);
+    overflow: visible;
+    transform: none;
+    visibility: visible;
+    transition:
+      transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      visibility 0s;
+  }
+  .liquid-sidebar-region[data-open='false'] {
+    width: var(--sidebar-width);
+    transform: translateX(calc(-100% - 8px));
+    visibility: hidden;
+    transition-delay: 0s, 220ms;
+  }
+  .liquid-sidebar {
+    flex-basis: 100%;
+    width: 100%;
     background: var(--liquid-panel-solid);
     box-shadow: 8px 0 50px -12px var(--liquid-shadow);
   }
@@ -540,6 +578,17 @@ body.resizing * {
     background: #0c172847;
     border: 0;
     border-radius: 20px;
+  }
+  .sidebar-scrim-enter-active,
+  .sidebar-scrim-leave-active {
+    transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .sidebar-scrim-enter-from,
+  .sidebar-scrim-leave-to {
+    opacity: 0;
+  }
+  .sidebar-scrim-leave-active {
+    pointer-events: none;
   }
   .liquid-app .vscode-splitter-vertical {
     display: none;
@@ -576,12 +625,38 @@ body.resizing * {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .liquid-sidebar-region {
+    transition: none;
+  }
+  .liquid-sidebar-region *,
+  .liquid-sidebar-region *::before,
+  .liquid-sidebar-region *::after {
+    /* Legacy controls used transition: all, including inherited drawer visibility. */
+    transition-property: opacity, background-color, color, border-color !important;
+    transition-duration: 80ms !important;
+  }
+  .sidebar-scrim-enter-active,
+  .sidebar-scrim-leave-active {
+    transition: opacity 80ms ease-out;
+  }
   .liquid-app .liquid-dock button {
     transform: none !important;
     transition:
       background-color 100ms ease-out,
       color 100ms ease-out;
   }
+}
+html[data-motion='off'] .liquid-sidebar-region,
+html[data-transitions='off'] .liquid-sidebar-region,
+html[data-motion='off'] .liquid-sidebar-region *,
+html[data-transitions='off'] .liquid-sidebar-region *,
+html[data-motion='off'] .liquid-sidebar-region *::before,
+html[data-transitions='off'] .liquid-sidebar-region *::before,
+html[data-motion='off'] .liquid-sidebar-region *::after,
+html[data-transitions='off'] .liquid-sidebar-region *::after,
+html[data-motion='off'] .sidebar-scrim,
+html[data-transitions='off'] .sidebar-scrim {
+  transition: none !important;
 }
 html[data-transitions='off'] .liquid-app .liquid-dock button {
   transition: none;

@@ -1,0 +1,558 @@
+/* Settings pages share a single surface, type and control system. These opt-in
+   classes also support extracted sections without depending on a parent's scope. */
+.prism-settings {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  container-type: inline-size;
+  color: var(--prism-text);
+  background: transparent;
+  font-family: var(--prism-font);
+}
+
+.prism-settings .settings-sidebar {
+  width: 196px;
+  flex: 0 0 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--liquid-panel) 70%, transparent);
+  border-right: 1px solid var(--prism-border);
+  backdrop-filter: blur(20px) saturate(140%);
+}
+
+.prism-settings .sidebar-header {
+  padding: 24px 20px 18px;
+}
+.prism-settings .sidebar-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 620;
+  color: var(--prism-text);
+  line-height: 1.5;
+}
+.prism-settings .settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 10px 16px;
+}
+.prism-settings .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--prism-radius-control);
+  background: transparent;
+  color: var(--prism-muted);
+  text-align: left;
+  font-family: inherit;
+  line-height: 1.4;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color var(--prism-duration) ease,
+    color var(--prism-duration) ease,
+    border-color var(--prism-duration) ease;
+}
+.prism-settings .nav-item.active {
+  background: var(--liquid-selected);
+  border-color: var(--liquid-rim);
+  color: var(--vscode-accent);
+  box-shadow: inset 0 1px var(--liquid-inner-light);
+}
+.prism-settings .nav-item:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 2px;
+}
+.prism-settings .nav-icon {
+  font-size: 15px;
+  flex: 0 0 auto;
+}
+.prism-settings .nav-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+.prism-settings .settings-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  scroll-padding-top: 24px;
+}
+.prism-settings .content-inner {
+  width: 100%;
+  max-width: 1220px;
+  margin: 0 auto;
+  padding: 30px clamp(18px, 3vw, 36px) 50px;
+}
+
+.prism-settings-section {
+  min-width: 0;
+  margin-bottom: 24px;
+  color: var(--prism-text);
+  font-family: var(--prism-font);
+  scroll-margin-top: 24px;
+}
+.prism-settings-section:not(.ai-settings) {
+  padding: clamp(20px, 2.4vw, 28px);
+  border: 1px solid var(--liquid-rim);
+  border-radius: var(--prism-radius-panel);
+  background: var(--prism-surface);
+  box-shadow: var(--prism-shadow);
+  backdrop-filter: blur(22px) saturate(140%);
+}
+.prism-settings-section .section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  font-size: 21px;
+  line-height: 1.5;
+  font-weight: 620;
+  letter-spacing: -0.4px;
+  color: var(--prism-text);
+}
+.prism-settings-section .section-title > i {
+  font-size: 19px;
+  color: var(--vscode-accent);
+}
+.prism-settings-section .section-description {
+  margin: 0 0 18px;
+  font-size: 12px;
+  color: var(--prism-muted);
+  line-height: 1.8;
+  max-width: 80ch;
+}
+.prism-settings-section .setting-row {
+  display: flex;
+  gap: 26px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--prism-border);
+}
+.prism-settings-section .setting-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.prism-settings-section .setting-left {
+  flex: 1;
+  min-width: 0;
+}
+.prism-settings-section .setting-right {
+  display: flex;
+  flex: 0 1 300px;
+  flex-direction: column;
+  gap: 8px;
+  width: min(300px, 100%);
+  min-width: 0;
+}
+.prism-settings-section .setting-label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--prism-text);
+}
+.prism-settings-section .setting-hint {
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--prism-muted);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.prism-settings-section .setting-action {
+  margin-top: 6px;
+}
+.prism-settings-section .setting-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 10px 12px;
+  margin: 4px 0 0;
+  border: 1px solid var(--prism-border);
+  border-radius: var(--prism-radius-control);
+  background: var(--liquid-selected);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--prism-muted);
+  overflow-wrap: anywhere;
+}
+.prism-settings-section .setting-info > i {
+  color: var(--vscode-accent);
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.prism-settings-section :is(.form-input, .form-select, .form-textarea) {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--prism-border);
+  border-radius: var(--prism-radius-control);
+  background-color: var(--prism-control);
+  color: var(--prism-text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--liquid-shadow) 8%, transparent);
+  transition:
+    border-color var(--prism-duration) ease,
+    box-shadow var(--prism-duration) ease;
+}
+.prism-settings-section .form-select {
+  height: auto;
+  padding-inline: 12px;
+  cursor: pointer;
+}
+.prism-settings-section .form-textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+.prism-settings-section :is(.form-input, .form-select, .form-textarea)::placeholder {
+  color: var(--prism-muted);
+  opacity: 0.8;
+}
+.prism-settings-section :is(.form-input, .form-select, .form-textarea):focus {
+  outline: none;
+  border-color: var(--vscode-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--vscode-accent) 14%, transparent);
+}
+.prism-settings-section :is(.form-input, .form-select, .form-textarea):disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+.prism-settings-section input[type='range'] {
+  accent-color: var(--vscode-accent);
+}
+.prism-settings-section .form-range::-webkit-slider-runnable-track {
+  background: var(--prism-border);
+  border-radius: 999px;
+}
+.prism-settings-section .form-range::-moz-range-track {
+  background: var(--prism-border);
+  border-radius: 999px;
+}
+.prism-settings-section .form-range::-webkit-slider-thumb {
+  background: var(--vscode-accent);
+}
+.prism-settings-section .form-range::-moz-range-thumb {
+  background: var(--vscode-accent);
+}
+.prism-settings-section .form-range:focus::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--vscode-accent) 24%, transparent);
+}
+.prism-settings-section .form-range:focus::-moz-range-thumb {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--vscode-accent) 24%, transparent);
+}
+.prism-settings-section .form-range:disabled::-webkit-slider-thumb {
+  background: var(--prism-muted);
+}
+.prism-settings-section .form-range:disabled::-moz-range-thumb {
+  background: var(--prism-muted);
+}
+.prism-settings-section .badge {
+  padding: 7px 12px;
+  border: 1px solid var(--prism-border);
+  border-radius: 999px;
+  background: var(--liquid-selected);
+  color: var(--vscode-accent);
+  font-weight: 500;
+  align-self: flex-start;
+}
+
+.prism-settings-section .toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 42px;
+  height: 24px;
+  flex: 0 0 auto;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.prism-settings-section .toggle-switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  margin: 0;
+  cursor: inherit;
+}
+.prism-settings-section .toggle-slider {
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--prism-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--prism-muted) 28%, transparent);
+  pointer-events: none;
+  transition:
+    background-color var(--prism-duration) ease,
+    border-color var(--prism-duration) ease;
+}
+.prism-settings-section .toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  top: 2px;
+  left: 2px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--liquid-shadow) 38%, transparent);
+  transition: transform 180ms var(--prism-ease);
+}
+.prism-settings-section .toggle-switch input:checked + .toggle-slider {
+  background: var(--vscode-accent);
+  border-color: transparent;
+}
+.prism-settings-section .toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(18px);
+}
+.prism-settings-section .toggle-switch input:focus-visible + .toggle-slider {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 3px;
+}
+.prism-settings-section .toggle-switch:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.prism-settings-section .toggle-label {
+  font-size: 12px;
+  color: var(--prism-muted);
+}
+
+.prism-settings-section .about-info {
+  padding: 20px 12px 8px;
+  text-align: center;
+}
+.prism-settings-section .app-logo {
+  font-size: 48px;
+  line-height: 1;
+  color: var(--vscode-accent);
+  margin-bottom: 18px;
+}
+.prism-settings-section .app-name {
+  font-size: 24px;
+  font-weight: 620;
+  color: var(--prism-text);
+  margin: 0 0 8px;
+}
+.prism-settings-section .app-version {
+  font-size: 13px;
+  color: var(--prism-muted);
+  margin: 0 0 16px;
+}
+.prism-settings-section .app-description {
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--prism-muted);
+  max-width: 440px;
+  margin: 0 auto 20px;
+}
+.prism-settings-section .about-links {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.prism-settings-section .sync-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.prism-settings-section .sync-time {
+  font-size: 12px;
+  color: var(--prism-muted);
+}
+.prism-settings-section .btn-update {
+  width: 100%;
+  justify-content: center;
+}
+
+.prism-settings .notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  max-width: min(440px, calc(100vw - 40px));
+  z-index: 10000;
+  padding: 12px 18px;
+  border: 1px solid var(--prism-border);
+  border-radius: var(--prism-radius-control);
+  background: var(--prism-surface-raised);
+  color: var(--prism-text);
+  box-shadow: var(--prism-shadow);
+  backdrop-filter: blur(22px);
+  font-size: 13px;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms var(--prism-ease);
+  pointer-events: none;
+}
+.prism-settings .notification.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+.prism-settings .notification-success {
+  color: var(--prism-success);
+  border-color: color-mix(in srgb, var(--prism-success) 35%, var(--prism-border));
+}
+.prism-settings .notification-error {
+  color: var(--prism-danger);
+  border-color: color-mix(in srgb, var(--prism-danger) 35%, var(--prism-border));
+}
+.prism-settings .notification-warning {
+  color: var(--prism-warning);
+  border-color: color-mix(in srgb, var(--prism-warning) 35%, var(--prism-border));
+}
+
+.prism-settings .settings-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 48px 24px;
+  border: 1px solid var(--liquid-rim);
+  border-radius: var(--prism-radius-panel);
+  background: var(--prism-surface);
+  box-shadow: var(--prism-shadow);
+  text-align: center;
+  backdrop-filter: blur(22px) saturate(140%);
+}
+.prism-settings .settings-empty-state > i {
+  color: var(--vscode-accent);
+  font-size: 32px;
+}
+.prism-settings .settings-empty-state h2 {
+  color: var(--prism-text);
+  font-size: 20px;
+  font-weight: 600;
+  margin: 4px 0 0;
+}
+.prism-settings .settings-empty-state p {
+  color: var(--prism-muted);
+  font-size: 13px;
+  line-height: 1.8;
+  margin: 0 0 8px;
+  max-width: 44ch;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .prism-settings .nav-item:not(.active):hover {
+    background: var(--vscode-list-hoverBackground);
+    color: var(--prism-text);
+    transition-duration: 0ms;
+  }
+  .prism-settings-section
+    :is(.form-input, .form-select, .form-textarea):not(:focus):not(:disabled):hover {
+    border-color: color-mix(in srgb, var(--prism-muted) 50%, var(--prism-border));
+  }
+}
+
+@container (max-width: 800px) {
+  .prism-settings .settings-sidebar {
+    width: 168px;
+  }
+  .prism-settings .sidebar-header {
+    padding: 21px 16px 16px;
+  }
+  .prism-settings .sidebar-title {
+    font-size: 15px;
+  }
+  .prism-settings .content-inner {
+    padding: 22px 18px 40px;
+  }
+  .prism-settings-section:not(.ai-settings) {
+    padding: 20px;
+  }
+  .prism-settings-section .setting-row {
+    flex-direction: column;
+    gap: 14px;
+  }
+  .prism-settings-section .setting-right {
+    flex-basis: auto;
+    width: 100%;
+  }
+}
+@container (max-width: 540px) {
+  .prism-settings .settings-sidebar {
+    width: 54px;
+  }
+  .prism-settings .sidebar-header {
+    padding: 18px 6px;
+    text-align: center;
+  }
+  .prism-settings .sidebar-title {
+    font-size: 11px;
+  }
+  .prism-settings .settings-nav {
+    padding: 0 6px 12px;
+  }
+  .prism-settings .nav-item {
+    justify-content: center;
+    padding: 10px 4px;
+  }
+  .prism-settings .nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+  .prism-settings .content-inner {
+    padding: 18px 12px 32px;
+  }
+  .prism-settings-section .section-title {
+    font-size: 18px;
+  }
+  .prism-settings-section:not(.ai-settings) {
+    padding: 17px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .prism-settings .notification {
+    transform: none;
+    transition-property: opacity;
+  }
+  .prism-settings-section .toggle-slider::before {
+    transition: none;
+  }
+  .prism-settings .rotating {
+    animation: none;
+  }
+}
+html[data-motion='off'] .prism-settings .notification,
+html[data-transitions='off'] .prism-settings .notification,
+html[data-motion='off'] .prism-settings-section .toggle-slider,
+html[data-transitions='off'] .prism-settings-section .toggle-slider,
+html[data-motion='off'] .prism-settings-section .toggle-slider::before,
+html[data-transitions='off'] .prism-settings-section .toggle-slider::before {
+  transition: none;
+}
+html[data-motion='off'] .prism-settings .notification,
+html[data-transitions='off'] .prism-settings .notification {
+  transform: none;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .prism-settings .settings-sidebar,
+  .prism-settings-section:not(.ai-settings),
+  .prism-settings .notification {
+    background: var(--prism-surface-raised);
+    backdrop-filter: none;
+  }
+}

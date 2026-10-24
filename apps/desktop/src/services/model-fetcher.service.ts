@@ -1,546 +1,253 @@
-/**
- * 模型列表获取服务
- * 负责从各个 AI 服务商的 API 获取可用的模型列表
- */
-
-import type { AIModel } from '../types/ai-providers.types'
+/** Provider discovery preserves API metadata and does not infer tools from arbitrary model names. */
+import type { AIModel, ModelParameterCapabilities, ModelReasoningConfig } from '../types/ai-providers.types'
+import { DEFAULT_PROVIDERS } from '../types/ai-providers'
+import { normalizeAIEndpoint, normalizeGoogleAPIBase } from '../utils/model-capabilities'
 import { reasoningMetadataFromAPI } from '../utils/model-reasoning'
 
-interface ModelFetchResult {
+export interface ModelFetchResult {
   success: boolean
   models?: AIModel[]
   error?: string
 }
 
-/**
- * OpenAI 模型列表获取
- */
-export async function fetchOpenAIModels(
-  apiKey: string,
-  endpoint: string = 'https://api.openai.com/v1'
-): Promise<ModelFetchResult> {
-  try {
-    const response = await fetch(`${endpoint}/models`, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      }
-    })
+type APIRecord = Record<string, any>
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const data = await response.json()
-
-    // 转换为我们的 AIModel 格式
-    const models: AIModel[] = data.data
-      .filter((model: any) => {
-        // 保留 GPT、o 系列推理模型和现有的图像模型。
-        return (
-          model.id.includes('gpt') || /^o[134](?:-|$)/.test(model.id) || model.id.includes('dall-e')
-        )
-      })
-      .map((model: any) => ({
-        id: model.id,
-        name: formatModelName(model.id), // 格式化显示名称
-        description: model.description,
-        providerId: 'openai',
-        contextWindow: getContextWindow(model.id),
-        capabilities: getCapabilities(model.id),
-        price: getPricing(model.id),
-        recommended: model.id === 'gpt-4o' || model.id === 'gpt-4o-mini' // 推荐模型
-      }))
-
-    return {
-      success: true,
-      models
-    }
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }
-  }
+function positive(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined
 }
 
-/**
- * Anthropic 模型列表
- * Anthropic 没有提供 list models API，使用固定列表
- */
-export async function fetchAnthropicModels(): Promise<ModelFetchResult> {
-  const models: AIModel[] = [
-    {
-      id: 'claude-3-5-sonnet-20241022',
-      name: 'Claude 3.5 Sonnet',
-      providerId: 'anthropic',
-      contextWindow: 200000,
-      capabilities: { text: true, image: false, vision: true, functionCall: true },
-      recommended: true
-    },
-    {
-      id: 'claude-3-5-haiku-20241022',
-      name: 'Claude 3.5 Haiku',
-      providerId: 'anthropic',
-      contextWindow: 200000,
-      capabilities: { text: true, image: false, vision: true, functionCall: true }
-    },
-    {
-      id: 'claude-3-opus-20240229',
-      name: 'Claude 3 Opus',
-      providerId: 'anthropic',
-      contextWindow: 200000,
-      capabilities: { text: true, image: false, vision: true, functionCall: true }
-    }
-  ]
-
-  return {
-    success: true,
-    models
-  }
+function catalogue(providerId: string, id: string): AIModel | undefined {
+  return DEFAULT_PROVIDERS.find(provider => provider.id === providerId)?.models.find(model => model.id === id)
 }
 
-/**
- * Google AI 模型列表获取
- */
-export async function fetchGoogleModels(
-  apiKey: string,
-  endpoint: string = 'https://generativelanguage.googleapis.com/v1beta'
-): Promise<ModelFetchResult> {
-  try {
-    const response = await fetch(`${endpoint}/models?key=${apiKey}`)
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const data = await response.json()
-
-    const models: AIModel[] = data.models
-      .filter((model: any) => {
-        // 只保留生成模型
-        return model.supportedGenerationMethods?.includes('generateContent')
-      })
-      .map((model: any) => ({
-        id: model.name.replace('models/', ''),
-        name: model.displayName || model.name,
-        description: model.description,
-        providerId: 'google',
-        contextWindow: model.inputTokenLimit || 32000,
-        capabilities: {
-          text: true,
-          image: false,
-          vision: model.name.includes('vision'),
-          functionCall: model.name.includes('pro')
-        }
-      }))
-
-    return {
-      success: true,
-      models
-    }
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }
-  }
+function knownTools(id: string): boolean {
+  // Exact documented families and snapshots, never image/audio/deep-research variants or aliases.
+  const value = id.toLowerCase().replace(/^(?:openai|deepseek)\//, '')
+  return /^(?:gpt-4o(?:-mini)?|gpt-4-turbo|gpt-3\.5-turbo|o3(?:-mini)?|o4-mini|gpt-5(?:\.[1-5])?(?:-(?:mini|nano|codex(?:-mini|-max)?))?|gpt-5\.(?:2|4|5)-pro|gpt-5\.6(?:-(?:sol|terra|luna))?|gpt-6(?:\.1)?-(?:astra|sol|luna)|deepseek-chat|deepseek-flash|deepseek-v4-(?:pro|flash|flash-vision-exp))(?:-\d{4}-?\d{2}-?\d{2})?$/.test(value)
 }
 
-/**
- * DeepSeek 模型列表
- */
-export async function fetchDeepSeekModels(
-  apiKey: string,
-  endpoint: string = 'https://api.deepseek.com/v1'
-): Promise<ModelFetchResult> {
-  try {
-    const response = await fetch(`${endpoint}/models`, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      }
-    })
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const data = await response.json()
-
-    const models: AIModel[] = data.data.map((model: any) => ({
-      id: model.id,
-      name: model.id,
-      providerId: 'deepseek',
-      contextWindow: 64000,
-      capabilities: {
-        text: true,
-        image: false,
-        vision: false,
-        functionCall: model.id.includes('chat') || supportsReasoningTools(model.id)
-      },
-      reasoning: reasoningMetadataFromAPI(model, 'deepseek')
-    }))
-
-    return {
-      success: true,
-      models
-    }
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }
-  }
-}
-
-/**
- * 通用的 OpenAI 兼容 API 模型列表获取
- * 适用于所有兼容 OpenAI API 格式的服务商
- */
-export async function fetchOpenAICompatibleModels(
-  providerId: string,
-  apiKey: string,
-  endpoint: string
-): Promise<ModelFetchResult> {
-  try {
-    const response = await fetch(`${endpoint}/models`, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      }
-    })
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const data = await response.json()
-
-    const reasoningProtocol = getReasoningMetadataProtocol(providerId, endpoint)
-    const models: AIModel[] = data.data.map((model: any) => {
-      const modelId = model.id.toLowerCase()
-
-      // 尝试从 API 响应中获取上下文窗口
-      let contextWindow = model.context_window || model.context_length || model.max_tokens
-
-      // 如果 API 没有提供，从模型 ID 智能判断
-      if (!contextWindow) {
-        if (modelId.includes('128k')) contextWindow = 128000
-        else if (modelId.includes('64k')) contextWindow = 64000
-        else if (modelId.includes('32k')) contextWindow = 32000
-        else if (modelId.includes('16k')) contextWindow = 16384
-        else if (modelId.includes('8k')) contextWindow = 8192
-        else if (modelId.includes('4k')) contextWindow = 4096
-        else contextWindow = 8000 // 默认值
-      }
-
-      // 尝试从 API 响应中获取价格信息
-      let price: AIModel['price'] | undefined
-      if (model.pricing) {
-        // 不同服务商的价格字段格式可能不同
-        const inputPrice =
-          model.pricing.prompt || model.pricing.input || model.pricing.input_cost_per_token
-        const outputPrice =
-          model.pricing.completion || model.pricing.output || model.pricing.output_cost_per_token
-
-        if (inputPrice && outputPrice) {
-          // 如果价格是字符串，转换为数字；如果已经是每百万 token 的价格则直接使用
-          const parsePrice = (p: any) => {
-            const num = typeof p === 'string' ? parseFloat(p) : p
-            // 如果价格小于 0.01，可能是每 token 的价格，需要乘以 1000000
-            return num < 0.01 ? num * 1000000 : num
-          }
-
-          price = {
-            input: parsePrice(inputPrice),
-            output: parsePrice(outputPrice)
-          }
-        }
-      }
-
-      // 智能判断能力
-      const capabilities = {
-        text: true,
-        image:
-          modelId.includes('dall-e') ||
-          modelId.includes('image') ||
-          modelId.includes('sd') ||
-          model.modality?.includes('image'),
-        vision:
-          modelId.includes('vision') ||
-          modelId.includes('gpt-4o') ||
-          modelId.includes('claude-3') ||
-          model.modality?.includes('multimodal'),
-        functionCall:
-          modelId.includes('gpt') ||
-          modelId.includes('claude') ||
-          modelId.includes('function') ||
-          supportsReasoningTools(modelId) ||
-          model.function_calling === true
-      }
-
-      return {
-        id: model.id,
-        name: model.name || model.id,
-        description: model.description,
-        providerId,
-        contextWindow,
-        capabilities,
-        price,
-        reasoning: reasoningProtocol
-          ? reasoningMetadataFromAPI(model, reasoningProtocol)
-          : undefined
-      }
-    })
-
-    return {
-      success: true,
-      models
-    }
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }
-  }
-}
-
-/**
- * OpenRouter 模型列表获取（专门处理 OpenRouter 的详细数据）
- */
-export async function fetchOpenRouterModels(
-  apiKey: string,
-  endpoint: string = 'https://openrouter.ai/api/v1'
-): Promise<ModelFetchResult> {
-  try {
-    const response = await fetch(`${endpoint}/models`, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      }
-    })
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const data = await response.json()
-
-    const models: AIModel[] = data.data.map((model: any) => {
-      // 提取价格信息（OpenRouter 返回的价格是字符串，单位是每 token）
-      let price: AIModel['price'] | undefined
-      if (model.pricing) {
-        price = {
-          input: parseFloat(model.pricing.prompt) * 1000000, // 转换为每百万 token 的美元价格
-          output: parseFloat(model.pricing.completion) * 1000000
-        }
-      }
-
-      // 从 architecture 中提取能力信息
-      const modality = model.architecture?.modality || 'text'
-      const isMultimodal = modality.includes('text+image') || modality.includes('multimodal')
-
-      return {
-        id: model.id,
-        name: model.name || model.id,
-        description: model.description,
-        providerId: 'openrouter',
-        contextWindow: model.context_length || model.top_provider?.context_length || 4096,
-        capabilities: {
-          text: true,
-          image: modality.includes('image'),
-          vision: isMultimodal,
-          functionCall:
-            model.architecture?.instruct_type === 'function' ||
-            model.supported_parameters?.includes('tools') ||
-            model.id.includes('gpt') ||
-            model.id.includes('claude') ||
-            supportsReasoningTools(model.id)
-        },
-        price,
-        reasoning: reasoningMetadataFromAPI(model, 'openrouter')
-      }
-    })
-
-    return {
-      success: true,
-      models
-    }
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }
-  }
-}
-
-/**
- * 根据服务商 ID 获取模型列表
- */
-export async function fetchModelsForProvider(
-  providerId: string,
-  apiKey: string,
-  endpoint?: string
-): Promise<ModelFetchResult> {
-  let result: ModelFetchResult
-
-  switch (providerId) {
-    case 'openai':
-      result = await fetchOpenAIModels(apiKey, endpoint)
-      break
-
-    case 'anthropic':
-      result = await fetchAnthropicModels()
-      break
-
-    case 'google':
-      result = await fetchGoogleModels(apiKey, endpoint)
-      break
-
-    case 'deepseek':
-      result = await fetchDeepSeekModels(apiKey, endpoint)
-      break
-
-    case 'minimax':
-      // MiniMax 不支持获取模型列表，模型已在配置中预定义
-      result = {
-        success: false,
-        error: 'MiniMax 模型列表已在配置中预定义，请手动选择'
-      }
-      break
-
-    case 'openrouter':
-      result = await fetchOpenRouterModels(apiKey, endpoint)
-      break
-
-    // 兼容 OpenAI API 的服务商
-    case 'together':
-    case 'groq':
-    case 'moonshot':
-    case 'zhipu':
-    case 'baichuan':
-    case 'siliconcloud':
-      if (endpoint) {
-        result = await fetchOpenAICompatibleModels(providerId, apiKey, endpoint)
-        break
-      }
-      result = {
-        success: false,
-        error: 'Endpoint is required for this provider'
-      }
-      break
-
-    default:
-      result = {
-        success: false,
-        error: `Provider ${providerId} not supported`
-      }
-      break
-  }
-
-  return result
-}
-
-// 辅助函数：格式化模型名称
-function formatModelName(modelId: string): string {
-  // 特殊模型名称映射
-  const nameMap: Record<string, string> = {
-    'gpt-4o': 'GPT-4o',
-    'gpt-4o-mini': 'GPT-4o mini',
-    'gpt-4-turbo': 'GPT-4 Turbo',
-    'gpt-4-turbo-preview': 'GPT-4 Turbo Preview',
-    'gpt-4': 'GPT-4',
-    'gpt-3.5-turbo': 'GPT-3.5 Turbo',
-    'gpt-3.5-turbo-16k': 'GPT-3.5 Turbo 16k',
-    'o1-preview': 'O1 Preview',
-    'o1-mini': 'O1 Mini'
-  }
-
-  // 检查是否有直接映射
-  if (nameMap[modelId]) {
-    return nameMap[modelId]
-  }
-
-  // 自动格式化：将 gpt-4-0125-preview 转换为 GPT-4 (0125 Preview)
-  const formatted = modelId
-    .replace(/^gpt-(\d+)\.?(\d*)/i, 'GPT-$1.$2')
-    .replace(/^o1-/i, 'O1 ')
-    .replace(/-/g, ' ')
-    .replace(/\b\w/g, l => l.toUpperCase())
-
-  return formatted || modelId
-}
-
-// 辅助函数：根据模型 ID 获取上下文窗口大小
-function getContextWindow(modelId: string): number {
-  if (modelId.includes('gpt-4o')) return 128000
-  if (modelId.includes('gpt-4-turbo')) return 128000
-  if (modelId.includes('gpt-4')) return 8192
-  if (modelId.includes('gpt-3.5-turbo-16k')) return 16384
-  if (modelId.includes('gpt-3.5-turbo')) return 4096
-  if (modelId.includes('o1')) return 128000
-  return 4096
-}
-
-// 辅助函数：根据模型 ID 获取能力
-function supportsReasoningTools(modelId: string): boolean {
-  const id = modelId.toLowerCase().replace(/^(?:openai|deepseek)\//, '')
-  return (
-    /^(?:o3(?:-mini)?|o4-mini)(?:-\d{4}-?\d{2}-?\d{2})?$/.test(id) ||
-    /^gpt-(?:5(?:\.[1-5])?(?:-(?:mini|nano|codex(?:-mini|-max)?))?|5\.(?:2|4|5)-pro|5\.6(?:-(?:sol|terra|luna))?|6(?:\.1)?-(?:astra|sol|luna))(?:-\d{4}-?\d{2}-?\d{2})?$/.test(
-      id
-    ) ||
-    /^(?:deepseek-flash|deepseek-v4-(?:pro|flash|flash-vision-exp))(?:-\d{4}-?\d{2}-?\d{2})?$/.test(
-      id
-    )
-  )
-}
-
-function getReasoningMetadataProtocol(
-  providerId: string,
-  endpoint: string
-): 'openrouter' | 'deepseek' | undefined {
+function metadataProtocol(providerId: string, endpoint: string): 'openrouter' | 'deepseek' | undefined {
   if (providerId === 'openrouter' || providerId === 'deepseek') return providerId
   try {
     const host = new URL(endpoint).hostname.toLowerCase()
     if (host === 'openrouter.ai') return 'openrouter'
     if (host === 'api.deepseek.com') return 'deepseek'
-  } catch {
-    // A custom or invalid endpoint does not establish a metadata protocol.
-  }
+  } catch { /* Custom endpoint parsing is left to fetch. */ }
   return undefined
 }
 
-function getCapabilities(modelId: string): AIModel['capabilities'] {
+function arrayField(data: APIRecord, field: string): APIRecord[] {
+  if (!Array.isArray(data[field])) throw new Error('模型接口返回格式不正确，缺少模型列表')
+  return data[field].filter((item: unknown): item is APIRecord => !!item && typeof item === 'object' && !Array.isArray(item))
+}
+
+async function fetchJSON(endpoint: string, apiKey: string, extraHeaders: Record<string, string> = {}): Promise<APIRecord> {
+  const response = await fetch(endpoint, {
+    headers: { ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}), ...extraHeaders },
+    signal: AbortSignal.timeout(15000)
+  })
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+  const data: unknown = await response.json()
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('模型接口未返回有效 JSON 对象')
+  return data as APIRecord
+}
+
+async function result(load: () => Promise<AIModel[]>): Promise<ModelFetchResult> {
+  try {
+    const models = await load()
+    return { success: true, models: [...new Map(models.map(model => [model.id, model])).values()] }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : '获取模型失败' }
+  }
+}
+
+function parsePrice(record: APIRecord): AIModel['price'] {
+  if (!record.pricing || typeof record.pricing !== 'object') return undefined
+  // Convert only fields with documented per-token units; do not guess units by magnitude.
+  const input = Number(record.pricing.prompt ?? record.pricing.input_cost_per_token)
+  const output = Number(record.pricing.completion ?? record.pricing.output_cost_per_token)
+  return Number.isFinite(input) && input >= 0 && Number.isFinite(output) && output >= 0
+    ? { input: input * 1000000, output: output * 1000000 } : undefined
+}
+
+function compatibleModel(providerId: string, record: APIRecord, endpoint: string): AIModel | null {
+  if (typeof record.id !== 'string' || !record.id.trim()) return null
+  const id = record.id
+  const known = catalogue(providerId, id)
+  const protocol = metadataProtocol(providerId, endpoint)
+  const supported: string[] | undefined = Array.isArray(record.supported_parameters) ? record.supported_parameters : undefined
+  const input: string[] | undefined = Array.isArray(record.architecture?.input_modalities) ? record.architecture.input_modalities : undefined
+  const output: string[] | undefined = Array.isArray(record.architecture?.output_modalities) ? record.architecture.output_modalities : undefined
+  const isRouter = protocol === 'openrouter'
+  const maxOutputTokens = positive(record.max_output_tokens ?? record.max_completion_tokens ?? record.top_provider?.max_completion_tokens)
+  const parameters: ModelParameterCapabilities = {
+    ...known?.parameters,
+    ...(maxOutputTokens ? { maxOutputTokens } : {}),
+    ...(supported ? { temperature: supported.includes('temperature'), topP: supported.includes('top_p') } : {}),
+    ...(isRouter ? { apiStyle: 'chat-completions', maxTokensParameter: 'max_tokens' } : {})
+  }
+  const functionCall = supported ? supported.includes('tools')
+    : typeof record.function_calling === 'boolean' ? record.function_calling
+    : known?.capabilities.functionCall ?? knownTools(id)
   return {
-    text: true,
-    image: modelId.includes('dall-e'),
-    vision:
-      modelId.includes('vision') || modelId.includes('gpt-4o') || modelId.includes('gpt-4-turbo'),
-    functionCall:
-      modelId.includes('gpt-4') ||
-      modelId.includes('gpt-3.5') ||
-      modelId.includes('o1') ||
-      supportsReasoningTools(modelId)
+    ...known,
+    id, name: record.name || known?.name || id, description: record.description || known?.description, providerId,
+    contextWindow: positive(record.context_window ?? record.context_length ?? record.top_provider?.context_length) ?? known?.contextWindow ?? 0,
+    capabilities: {
+      text: output ? output.includes('text') : known?.capabilities.text ?? !/^(?:dall-e|gpt-image|text-embedding|whisper|tts|sora)(?:[-.]|$)/i.test(id),
+      image: output ? output.includes('image') : known?.capabilities.image ?? false,
+      vision: input ? input.includes('image') : known?.capabilities.vision ?? false,
+      functionCall
+    },
+    price: parsePrice(record) ?? known?.price, parameters,
+    reasoning: protocol ? reasoningMetadataFromAPI(record, protocol) ?? known?.reasoning : known?.reasoning
   }
 }
 
-// 辅助函数：根据模型 ID 获取价格
-function getPricing(modelId: string): AIModel['price'] | undefined {
-  const pricing: Record<string, { input: number; output: number }> = {
-    'gpt-4o': { input: 2.5, output: 10 },
-    'gpt-4o-mini': { input: 0.15, output: 0.6 },
-    'gpt-4-turbo': { input: 10, output: 30 },
-    'gpt-4': { input: 30, output: 60 },
-    'gpt-3.5-turbo': { input: 0.5, output: 1.5 }
-  }
+export function fetchOpenAIModels(apiKey: string, endpoint = 'https://api.openai.com/v1'): Promise<ModelFetchResult> {
+  return result(async () => {
+    const base = normalizeAIEndpoint(endpoint)
+    const data = await fetchJSON(`${base}/models`, apiKey)
+    return arrayField(data, 'data')
+      .filter(record => typeof record.id === 'string' && /^(?:gpt-|o[134](?:-|$)|dall-e)/.test(record.id))
+      .map(record => compatibleModel('openai', record, base)).filter((model): model is AIModel => model !== null)
+  })
+}
 
-  for (const [key, value] of Object.entries(pricing)) {
-    if (modelId.includes(key)) {
-      return value
+/** Anthropic provides authenticated, paginated model discovery. */
+export function fetchAnthropicModels(apiKey = '', endpoint = 'https://api.anthropic.com/v1'): Promise<ModelFetchResult> {
+  return result(async () => {
+    const base = normalizeAIEndpoint(endpoint)
+    const models: AIModel[] = []
+    let after = ''
+    const seenCursors = new Set<string>()
+    for (let page = 0; page < 20; page++) {
+      const query = `limit=100${after ? `&after_id=${encodeURIComponent(after)}` : ''}`
+      const data = await fetchJSON(`${base}/models?${query}`, apiKey, { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' })
+      for (const record of arrayField(data, 'data')) {
+        if (typeof record.id !== 'string' || record.lifecycle === 'retired') continue
+        const known = catalogue('anthropic', record.id)
+        const rawEffort = record.capabilities?.effort
+        const efforts = (['low', 'medium', 'high', 'xhigh', 'max'] as const).filter(level => rawEffort?.[level]?.supported === true)
+        const reasoning: ModelReasoningConfig | false | undefined = efforts.length
+          ? { protocol: 'anthropic', supportedEfforts: efforts, mandatory: true, thinkingMode: record.capabilities?.thinking?.types?.disabled?.supported === false ? 'always' : 'adaptive' }
+          : rawEffort?.supported === false ? false : known?.reasoning
+        models.push({
+          ...known,
+          id: record.id, name: record.display_name || known?.name || record.id, providerId: 'anthropic',
+          contextWindow: positive(record.max_input_tokens) ?? known?.contextWindow ?? 0,
+          capabilities: { text: true, image: false, vision: record.capabilities?.image_input?.supported ?? known?.capabilities.vision ?? false, functionCall: known?.capabilities.functionCall ?? /^claude-/.test(record.id) },
+          parameters: { ...known?.parameters, apiStyle: 'anthropic', ...(positive(record.max_tokens) ? { maxOutputTokens: positive(record.max_tokens) } : {}) },
+          reasoning
+        })
+      }
+      if (!data.has_more) return models
+      if (typeof data.last_id !== 'string' || !data.last_id || seenCursors.has(data.last_id)) throw new Error('模型接口分页游标无效')
+      after = data.last_id
+      seenCursors.add(after)
     }
-  }
+    throw new Error('模型列表超过分页上限，请缩小模型范围')
+  })
+}
 
-  return undefined
+export function googleAPIBase(endpoint: string): string {
+  return normalizeGoogleAPIBase(endpoint)
+}
+
+export function fetchGoogleModels(apiKey: string, endpoint = 'https://generativelanguage.googleapis.com/v1beta'): Promise<ModelFetchResult> {
+  return result(async () => {
+    const base = googleAPIBase(endpoint)
+    const models: AIModel[] = []
+    let cursor = ''
+    const seenCursors = new Set<string>()
+    for (let page = 0; page < 20; page++) {
+      const data = await fetchJSON(`${base}/models?pageSize=1000${cursor ? `&pageToken=${encodeURIComponent(cursor)}` : ''}`, '', { 'x-goog-api-key': apiKey })
+      for (const record of arrayField(data, 'models')) {
+        if (typeof record.name !== 'string' || !Array.isArray(record.supportedGenerationMethods) || !record.supportedGenerationMethods.includes('generateContent')) continue
+        const id = record.name.replace(/^models\//, '')
+        const known = catalogue('google', id)
+        models.push({
+          ...known,
+          id, name: record.displayName || known?.name || id, description: record.description || known?.description, providerId: 'google',
+          contextWindow: positive(record.inputTokenLimit) ?? known?.contextWindow ?? 0,
+          capabilities: { text: true, image: known?.capabilities.image ?? false, vision: known?.capabilities.vision ?? false, functionCall: known?.capabilities.functionCall ?? false },
+          parameters: { ...known?.parameters, apiStyle: 'gemini', ...(positive(record.outputTokenLimit) ? { maxOutputTokens: positive(record.outputTokenLimit) } : {}) },
+          reasoning: record.thinking === false ? false : known?.reasoning
+        })
+      }
+      if (!data.nextPageToken) return models
+      if (typeof data.nextPageToken !== 'string' || seenCursors.has(data.nextPageToken)) throw new Error('模型接口分页游标无效')
+      cursor = data.nextPageToken
+      seenCursors.add(cursor)
+    }
+    throw new Error('模型列表超过分页上限，请缩小模型范围')
+  })
+}
+
+export function fetchOpenAICompatibleModels(providerId: string, apiKey: string, endpoint: string): Promise<ModelFetchResult> {
+  return result(async () => {
+    const base = normalizeAIEndpoint(endpoint)
+    const data = await fetchJSON(`${base}/models`, apiKey)
+    return arrayField(data, 'data').map(record => compatibleModel(providerId, record, base)).filter((model): model is AIModel => model !== null)
+  })
+}
+
+export function fetchDeepSeekModels(apiKey: string, endpoint = 'https://api.deepseek.com/v1'): Promise<ModelFetchResult> {
+  return fetchOpenAICompatibleModels('deepseek', apiKey, endpoint)
+}
+
+export function fetchOpenRouterModels(apiKey: string, endpoint = 'https://openrouter.ai/api/v1'): Promise<ModelFetchResult> {
+  return fetchOpenAICompatibleModels('openrouter', apiKey, endpoint)
+}
+
+export function fetchOllamaModels(endpoint = 'http://127.0.0.1:11434', apiKey = ''): Promise<ModelFetchResult> {
+  return result(async () => {
+    const base = normalizeAIEndpoint(endpoint).replace(/\/v1$/, '')
+    const data = await fetchJSON(`${base}/api/tags`, apiKey)
+    const models: AIModel[] = arrayField(data, 'models').filter(record => typeof (record.model || record.name) === 'string').map(record => ({
+      id: record.model || record.name, name: record.name || record.model, providerId: 'ollama', contextWindow: 0,
+      capabilities: { text: true, image: false, vision: record.capabilities?.includes('vision') === true, functionCall: record.capabilities?.includes('tools') === true },
+      parameters: { apiStyle: 'ollama' }
+    }))
+    // /tags lists installed names; /show supplies actual tool/vision capabilities and context.
+    // Four workers avoid flooding the local daemon when many models are installed.
+    let next = 0
+    await Promise.all(Array.from({ length: Math.min(4, models.length) }, async () => {
+      while (next < models.length) {
+        const model = models[next++]
+        try {
+          const response = await fetch(`${base}/api/show`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
+            body: JSON.stringify({ model: model.id }), signal: AbortSignal.timeout(5000)
+          })
+          if (!response.ok) continue
+          const details = await response.json()
+          if (Array.isArray(details.capabilities)) {
+            model.capabilities.functionCall = details.capabilities.includes('tools')
+            model.capabilities.vision = details.capabilities.includes('vision')
+            model.capabilities.text = details.capabilities.includes('completion')
+          }
+          const info = details.model_info
+          if (info && typeof info === 'object') {
+            const key = typeof info['general.architecture'] === 'string' ? `${info['general.architecture']}.context_length` : ''
+            model.contextWindow = positive(info[key]) ?? 0
+          }
+        } catch { /* Older daemons/proxies may not expose /show; retain the valid installed list. */ }
+      }
+    }))
+    return models
+  })
+}
+
+export async function fetchModelsForProvider(providerId: string, apiKey: string, endpoint?: string, runtimeProviderId = providerId): Promise<ModelFetchResult> {
+  switch (runtimeProviderId) {
+    case 'openai': return fetchOpenAIModels(apiKey, endpoint)
+    case 'anthropic': return fetchAnthropicModels(apiKey, endpoint)
+    case 'google': return fetchGoogleModels(apiKey, endpoint)
+    case 'deepseek': return fetchDeepSeekModels(apiKey, endpoint)
+    case 'openrouter': return fetchOpenRouterModels(apiKey, endpoint)
+    case 'ollama': return fetchOllamaModels(endpoint, apiKey)
+    case 'minimax': return { success: false, error: 'MiniMax 未提供公开的模型列表接口，请使用已核对的预设或手动添加模型' }
+    default: return endpoint ? fetchOpenAICompatibleModels(providerId, apiKey, endpoint) : { success: false, error: '请先配置服务端点' }
+  }
 }

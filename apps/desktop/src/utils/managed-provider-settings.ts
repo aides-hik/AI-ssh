@@ -7,16 +7,7 @@ export function mergeProviderForSave(provider: AIProvider, latestProvider?: AIPr
   const models = provider.models?.map(model => {
     if (!isManagedProvider) {
       return {
-        id: model.id,
-        name: model.name,
-        description: model.description,
-        providerId: model.providerId,
-        contextWindow: model.contextWindow,
-        capabilities: model.capabilities,
-        price: model.price,
-        recommended: model.recommended,
-        isCustom: model.isCustom,
-        reasoning: model.reasoning,
+        ...model,
         enabled: model.enabled !== false
       }
     }
@@ -24,6 +15,7 @@ export function mergeProviderForSave(provider: AIProvider, latestProvider?: AIPr
     const latestModel = latestModelsById.get(model.id)
     return {
       ...(latestModel || model),
+      requestConfig: model.requestConfig,
       enabled: model.enabled !== false
     }
   })

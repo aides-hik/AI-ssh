@@ -23,10 +23,30 @@ export interface AIProvider {
 export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 export interface ModelReasoningConfig {
-  protocol: 'openai' | 'openrouter' | 'deepseek' | 'qwen' | 'gemini'
+  protocol: 'openai' | 'openrouter' | 'deepseek' | 'qwen' | 'gemini' | 'anthropic'
   supportedEfforts?: ReasoningEffort[]
   supportsToggle?: boolean
   mandatory?: boolean
+  thinkingMode?: 'adaptive' | 'budget' | 'always'
+}
+
+export type ModelAPIStyle = 'chat-completions' | 'responses' | 'anthropic' | 'gemini' | 'ollama'
+
+/** Capabilities supplied by a verified catalogue or by model discovery, never user defaults. */
+export interface ModelParameterCapabilities {
+  apiStyle?: ModelAPIStyle
+  maxOutputTokens?: number
+  temperature?: boolean
+  topP?: boolean
+  maxTokensParameter?: 'max_tokens' | 'max_completion_tokens'
+}
+
+/** Missing values delegate to the service. Explicit request options take precedence. */
+export interface ModelRequestConfig {
+  temperature?: number
+  topP?: number
+  maxTokens?: number
+  reasoning?: 'default' | 'enabled' | ReasoningEffort
 }
 
 export interface AIModel {
@@ -53,6 +73,8 @@ export interface AIModel {
   isCustom?: boolean // 是否为用户手动添加的模型
   // Optional capabilities reported by the model service; false explicitly disables adjustment.
   reasoning?: ModelReasoningConfig | false
+  parameters?: ModelParameterCapabilities
+  requestConfig?: ModelRequestConfig
 }
 
 // 默认服务商配置允许携带预置 API Key 和额外配置

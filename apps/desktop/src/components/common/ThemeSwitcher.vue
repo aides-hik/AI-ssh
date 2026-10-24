@@ -1,8 +1,10 @@
 <template>
   <div class="theme-switcher">
-    <button 
+    <button
+      type="button"
       class="theme-toggle-btn"
-      :title="`当前主题: ${currentThemeLabel}`"
+      :aria-label="`切换主题，当前主题: ${currentThemeLabel}`"
+      :data-prism-tooltip="`当前主题: ${currentThemeLabel}`"
       @click="toggleTheme"
     >
       <i :class="themeIcon"></i>
@@ -54,38 +56,35 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
 }
-
 .theme-toggle-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
   padding: 0;
-  background: var(--vscode-button-secondaryBackground);
-  border: 1px solid var(--vscode-input-border);
-  border-radius: 4px;
-  color: var(--vscode-button-secondaryForeground);
+  border: 1px solid var(--prism-border);
+  border-radius: var(--prism-radius-control);
+  background: var(--prism-control);
+  color: var(--prism-text);
   cursor: pointer;
-  transition: all 0.2s ease;
   font-size: 16px;
+  touch-action: manipulation;
+  transition:
+    background-color var(--prism-duration) var(--prism-ease),
+    border-color var(--prism-duration) var(--prism-ease),
+    color var(--prism-duration) var(--prism-ease);
 }
-
-.theme-toggle-btn:hover {
-  background: var(--vscode-button-secondaryHoverBackground);
-  border-color: var(--vscode-focusBorder);
+.theme-toggle-btn:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 3px;
 }
-
 .theme-toggle-btn:active {
-  transform: scale(0.95);
+  opacity: 0.7;
 }
-
-.theme-toggle-btn i {
-  transition: transform 0.3s ease;
-}
-
-.theme-toggle-btn:hover i {
-  transform: rotate(20deg);
+@media (hover: hover) and (pointer: fine) {
+  .theme-toggle-btn:hover {
+    background: var(--vscode-list-hoverBackground);
+    border-color: var(--vscode-accent);
+  }
 }
 </style>
-

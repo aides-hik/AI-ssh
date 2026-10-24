@@ -1,11 +1,11 @@
 <template>
-  <div class="session-settings-view">
+  <div class="session-settings-view prism-settings" :aria-busy="isLoading">
     <!-- 左侧导航树 -->
     <div class="settings-sidebar">
       <div class="sidebar-header">
         <h3 class="sidebar-title">{{ $t('session.sessionSettings') }}</h3>
         <!-- 保存状态指示器 -->
-        <div class="save-status" v-if="saveStatus">
+        <div class="save-status" v-if="saveStatus" role="status" aria-live="polite">
           <i
             :class="[
               'bi',
@@ -20,93 +20,127 @@
         </div>
       </div>
       <nav class="settings-nav">
-        <div
+        <button
+          type="button"
           v-for="section in settingsSections"
           :key="section.id"
           :class="['nav-item', { active: activeSection === section.id }]"
+          :aria-current="activeSection === section.id ? 'page' : undefined"
+          :data-prism-tooltip="section.label"
           @click="scrollToSection(section.id)"
         >
           <i :class="['nav-icon', section.icon]"></i>
           <span class="nav-label">{{ section.label }}</span>
-        </div>
+        </button>
       </nav>
     </div>
 
     <!-- 右侧内容区域 -->
     <div class="settings-content" ref="contentContainer" @scroll="onScroll">
       <div class="content-inner">
-        <!-- 基本信息 -->
-        <section :id="'section-basic'" class="setting-section">
-          <h2 class="section-title">
-            <i class="bi bi-info-circle"></i>
-            {{ $t('session.basicInfoTitle') }}
-          </h2>
-          <p class="section-description">{{ $t('session.basicInfoDesc') }}</p>
+        <div v-if="isLoading" class="settings-empty-state" role="status">
+          <i class="bi bi-hourglass-split" aria-hidden="true" />
+          <h2>正在读取会话设置</h2>
+          <p>会话配置载入后即可编辑。</p>
+        </div>
+        <div v-else-if="loadError || !currentSessionId" class="settings-empty-state" role="status">
+          <i
+            :class="loadError ? 'bi bi-exclamation-circle' : 'bi bi-chat-square-text'"
+            aria-hidden="true"
+          />
+          <h2>{{ loadError ? '无法读取会话' : '尚未选择会话' }}</h2>
+          <p>
+            {{
+              loadError
+                ? '请重试，或返回工作台重新打开会话。'
+                : '先打开一个 AI 会话，再设置它的名称和上下文。'
+            }}
+          </p>
+          <button v-if="loadError" type="button" class="prism-button" @click="loadSessionConfig">
+            重新加载
+          </button>
+          <router-link to="/ssh" class="prism-button prism-button--primary">返回工作台</router-link>
+        </div>
+        <template v-else>
+          <!-- 基本信息 -->
+          <section :id="'section-basic'" class="setting-section prism-settings-section">
+            <h2 class="section-title">
+              <i class="bi bi-info-circle"></i>
+              {{ $t('session.basicInfoTitle') }}
+            </h2>
+            <p class="section-description">{{ $t('session.basicInfoDesc') }}</p>
 
-          <!-- 会话名称 -->
-          <div class="setting-row">
-            <div class="setting-left">
-              <label class="setting-label">{{ $t('session.sessionName') }}</label>
-              <p class="setting-hint">{{ $t('session.sessionNameHint') }}</p>
+            <!-- 会话名称 -->
+            <div class="setting-row">
+              <div class="setting-left">
+                <label class="setting-label">{{ $t('session.sessionName') }}</label>
+                <p class="setting-hint">{{ $t('session.sessionNameHint') }}</p>
+              </div>
+              <div class="setting-right">
+                <input
+                  :aria-label="$t('session.sessionName')"
+                  v-model="sessionName"
+                  type="text"
+                  :placeholder="$t('session.sessionNamePlaceholder')"
+                  class="form-input"
+                />
+              </div>
             </div>
-            <div class="setting-right">
-              <input
-                v-model="sessionName"
-                type="text"
-                :placeholder="$t('session.sessionNamePlaceholder')"
-                class="form-input"
-              />
-            </div>
-          </div>
-        </section>
+          </section>
 
-        <!-- 高级设置 -->
-        <section :id="'section-advanced'" class="setting-section">
-          <h2 class="section-title">
-            <i class="bi bi-gear-wide-connected"></i>
-            {{ $t('session.advancedTitle') }}
-          </h2>
-          <p class="section-description">{{ $t('session.advancedDesc') }}</p>
+          <!-- 高级设置 -->
+          <section :id="'section-advanced'" class="setting-section prism-settings-section">
+            <h2 class="section-title">
+              <i class="bi bi-gear-wide-connected"></i>
+              {{ $t('session.advancedTitle') }}
+            </h2>
+            <p class="section-description">{{ $t('session.advancedDesc') }}</p>
 
-          <!-- 上下文窗口 -->
-          <div class="setting-row">
-            <div class="setting-left">
-              <label class="setting-label">{{ $t('session.contextWindow') }}</label>
-              <p class="setting-hint">{{ $t('session.contextWindowHint') }}</p>
+            <!-- 上下文窗口 -->
+            <div class="setting-row">
+              <div class="setting-left">
+                <label class="setting-label">{{ $t('session.contextWindow') }}</label>
+                <p class="setting-hint">{{ $t('session.contextWindowHint') }}</p>
+              </div>
+              <div class="setting-right">
+                <input
+                  :aria-label="$t('session.contextWindow')"
+                  v-model.number="contextWindow"
+                  type="number"
+                  class="form-input"
+                  min="1"
+                  max="50"
+                  @change="contextWindow = normalizeSessionContextWindow(contextWindow)"
+                />
+              </div>
             </div>
-            <div class="setting-right">
-              <input
-                v-model.number="contextWindow"
-                type="number"
-                class="form-input"
-                min="1"
-                max="50"
-                @change="contextWindow = normalizeSessionContextWindow(contextWindow)"
-              />
-            </div>
-          </div>
 
-          <!-- 启用流式输出 -->
-          <div class="setting-row">
-            <div class="setting-left">
-              <label class="setting-label">{{ $t('session.enableStreaming') }}</label>
-              <p class="setting-hint">{{ $t('session.enableStreamingHint') }}</p>
+            <!-- 启用流式输出 -->
+            <div class="setting-row">
+              <div class="setting-left">
+                <label class="setting-label">{{ $t('session.enableStreaming') }}</label>
+                <p class="setting-hint">{{ $t('session.enableStreamingHint') }}</p>
+              </div>
+              <div class="setting-right">
+                <label class="toggle-switch">
+                  <input
+                    :aria-label="$t('session.enableStreaming')"
+                    v-model="enableStreaming"
+                    type="checkbox"
+                  />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
             </div>
-            <div class="setting-right">
-              <label class="toggle-switch">
-                <input v-model="enableStreaming" type="checkbox" />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-        </section>
+          </section>
+        </template>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
 
 import { useI18n } from 'vue-i18n'
 import { chatService, normalizeSessionContextWindow } from '../services/chat.service'
@@ -122,10 +156,27 @@ const settingsSections = computed(() => [
 const activeSection = ref('basic')
 const contentContainer = ref<HTMLElement | null>(null)
 const isScrolling = ref(false)
+let sectionScrollTimer: ReturnType<typeof setTimeout> | undefined
+let sectionScrollTarget = 0
+let sectionScrollDeadline = 0
+const releaseSectionScroll = () => {
+  const container = contentContainer.value
+  if (
+    container &&
+    Math.abs(container.scrollTop - sectionScrollTarget) > 2 &&
+    performance.now() < sectionScrollDeadline
+  ) {
+    sectionScrollTimer = setTimeout(releaseSectionScroll, 120)
+    return
+  }
+  isScrolling.value = false
+  onScroll()
+}
 
 // 会话管理
 const currentSessionId = ref<string>('')
 const isLoading = ref(true)
+const loadError = ref(false)
 
 // 保存状态
 type SaveStatus = 'saving' | 'saved' | 'error' | null
@@ -157,28 +208,54 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 const scrollToSection = (sectionId: string) => {
   const element = document.getElementById(`section-${sectionId}`)
   if (element && contentContainer.value) {
+    clearTimeout(sectionScrollTimer)
     isScrolling.value = true
     activeSection.value = sectionId
 
     const container = contentContainer.value
-    const offsetTop = element.offsetTop - 82
+    const offsetTop =
+      container.scrollTop +
+      element.getBoundingClientRect().top -
+      container.getBoundingClientRect().top -
+      24
 
+    sectionScrollTarget = Math.max(
+      0,
+      Math.min(offsetTop, container.scrollHeight - container.clientHeight)
+    )
+    sectionScrollDeadline = performance.now() + 1600
     container.scrollTo({
-      top: offsetTop,
-      behavior: 'smooth'
+      top: sectionScrollTarget,
+      behavior:
+        document.documentElement.dataset.motion === 'off' ||
+        document.documentElement.dataset.transitions === 'off' ||
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches
+          ? 'instant'
+          : 'smooth'
     })
 
-    setTimeout(() => {
-      isScrolling.value = false
-    }, 600)
+    sectionScrollTimer = setTimeout(releaseSectionScroll, 600)
   }
 }
 
 const onScroll = () => {
-  if (isScrolling.value) return
+  if (isScrolling.value) {
+    clearTimeout(sectionScrollTimer)
+    sectionScrollTimer = setTimeout(releaseSectionScroll, 120)
+    return
+  }
 
   const container = contentContainer.value
   if (!container) return
+
+  // A short final section cannot always reach the top of the scroll container.
+  if (
+    container.scrollHeight > container.clientHeight + 1 &&
+    container.scrollTop + container.clientHeight >= container.scrollHeight - 2
+  ) {
+    activeSection.value = settingsSections.value.at(-1)?.id || activeSection.value
+    return
+  }
 
   const scrollTop = container.scrollTop
   const sections = settingsSections.value.map(s => ({
@@ -189,7 +266,11 @@ const onScroll = () => {
   for (let i = sections.length - 1; i >= 0; i--) {
     const section = sections[i]
     if (section.element) {
-      const offsetTop = section.element.offsetTop - 60
+      const offsetTop =
+        scrollTop +
+        section.element.getBoundingClientRect().top -
+        container.getBoundingClientRect().top -
+        60
       if (scrollTop >= offsetTop) {
         activeSection.value = section.id
         break
@@ -200,6 +281,8 @@ const onScroll = () => {
 
 // 加载会话配置
 const loadSessionConfig = async () => {
+  isLoading.value = true
+  loadError.value = false
   try {
     // 从 localStorage 获取当前会话 ID
     const sessionId = localStorage.getItem('current-session-id')
@@ -213,6 +296,7 @@ const loadSessionConfig = async () => {
     // 从数据库加载会话信息
     const session = await chatService.getSession(sessionId)
     if (!session) {
+      currentSessionId.value = ''
       isLoading.value = false
       return
     }
@@ -228,6 +312,8 @@ const loadSessionConfig = async () => {
 
     isLoading.value = false
   } catch {
+    currentSessionId.value = ''
+    loadError.value = true
     isLoading.value = false
   }
 }
@@ -296,301 +382,31 @@ watch(
 onMounted(async () => {
   await loadSessionConfig()
 })
+onBeforeUnmount(() => {
+  clearTimeout(sectionScrollTimer)
+  if (saveTimer) clearTimeout(saveTimer)
+})
 </script>
 
 <style scoped>
-/* ========== 布局 ========== */
-.session-settings-view {
-  display: flex;
-  height: 100vh;
-  background: var(--vscode-bg);
-  color: var(--vscode-fg);
-}
-
-/* ========== 左侧导航 ========== */
-.settings-sidebar {
-  width: 220px;
-  flex-shrink: 0;
-  background: var(--vscode-bg-lighter);
-  border-right: 1px solid var(--vscode-border);
-  display: flex;
-  flex-direction: column;
-}
-
-.sidebar-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--vscode-border);
-}
-
-.sidebar-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--vscode-fg);
-}
-
 .save-status {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 8px;
+  margin-top: 10px;
   font-size: 12px;
-  color: var(--vscode-fg-muted);
-  animation: fadeIn 0.3s ease-in-out;
+  color: var(--prism-muted);
 }
-
 .save-status i {
   font-size: 14px;
 }
-
 .save-status i.bi-hourglass-split {
   color: var(--vscode-accent);
-  animation: spin 1s linear infinite;
 }
-
 .save-status i.bi-check-circle {
-  color: var(--vscode-editorGutter-addedBackground);
+  color: var(--prism-success);
 }
-
 .save-status i.bi-exclamation-triangle {
-  color: var(--vscode-editorGutter-deletedBackground);
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.settings-nav {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px 0;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 20px;
-  cursor: pointer;
-  transition: all 0.2s;
-  color: var(--vscode-fg-muted);
-  user-select: none;
-}
-
-.nav-item:hover {
-  background: var(--vscode-bg);
-  color: var(--vscode-fg);
-}
-
-.nav-item.active {
-  background: var(--vscode-bg);
-  color: var(--vscode-accent);
-  border-left: 2px solid var(--vscode-accent);
-  padding-left: 18px;
-}
-
-.nav-icon {
-  font-size: 16px;
-  flex-shrink: 0;
-}
-
-.nav-label {
-  font-size: 14px;
-  font-weight: 500;
-}
-
-/* ========== 右侧内容 ========== */
-.settings-content {
-  flex: 1;
-  overflow-y: auto;
-  scroll-behavior: smooth;
-}
-
-.content-inner {
-  max-width: 800px;
-  padding: 32px 48px;
-}
-
-.setting-section {
-  margin-bottom: 48px;
-}
-
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 24px;
-  font-weight: 600;
-  margin: 0 0 8px 0;
-  color: var(--vscode-fg);
-}
-
-.section-title i {
-  font-size: 22px;
-  color: var(--vscode-accent);
-}
-
-.section-description {
-  margin: 0 0 24px 0;
-  color: var(--vscode-fg-muted);
-  font-size: 14px;
-}
-
-.setting-row {
-  display: flex;
-  gap: 32px;
-  padding: 20px 0;
-  border-bottom: 1px solid var(--vscode-border);
-}
-
-.setting-row:last-child {
-  border-bottom: none;
-}
-
-.setting-left {
-  flex: 1;
-  min-width: 0;
-}
-
-.setting-right {
-  flex-shrink: 0;
-  width: 320px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.setting-label {
-  display: block;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--vscode-fg);
-  margin-bottom: 4px;
-}
-
-.setting-hint {
-  font-size: 12px;
-  color: var(--vscode-fg-muted);
-  margin: 0;
-  line-height: 1.5;
-}
-
-/* ========== 表单控件 ========== */
-.form-input,
-.form-textarea {
-  width: 100%;
-  background: var(--vscode-input-bg);
-  border: 1px solid var(--vscode-border);
-  border-radius: 2px;
-  color: var(--vscode-fg);
-  font-size: 14px;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.form-input {
-  padding: 0 12px;
-}
-
-.form-textarea {
-  padding: 8px 12px;
-  resize: vertical;
-  min-height: 100px;
-  line-height: 1.5;
-  font-family: inherit;
-}
-
-.form-input:focus,
-.form-textarea:focus {
-  border-color: var(--vscode-accent);
-}
-
-.form-input:hover,
-.form-textarea:hover {
-  border-color: var(--vscode-fg-muted);
-}
-
-/* Toggle Switch */
-.toggle-switch {
-  position: relative;
-  display: inline-block;
-  width: 48px;
-  height: 24px;
-  cursor: pointer;
-}
-
-.toggle-switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.toggle-slider {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: var(--vscode-border);
-  border-radius: 24px;
-  transition: 0.3s;
-}
-
-.toggle-slider:before {
-  content: '';
-  position: absolute;
-  height: 18px;
-  width: 18px;
-  left: 3px;
-  bottom: 3px;
-  background-color: white;
-  border-radius: 50%;
-  transition: 0.3s;
-}
-
-.toggle-switch input:checked + .toggle-slider {
-  background-color: var(--vscode-accent);
-}
-
-.toggle-switch input:checked + .toggle-slider:before {
-  transform: translateX(24px);
-}
-
-/* ========== 滚动条 ========== */
-.settings-content::-webkit-scrollbar,
-.settings-nav::-webkit-scrollbar {
-  width: 8px;
-}
-
-.settings-content::-webkit-scrollbar-track,
-.settings-nav::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.settings-content::-webkit-scrollbar-thumb,
-.settings-nav::-webkit-scrollbar-thumb {
-  background: var(--vscode-border);
-  border-radius: 4px;
-}
-
-.settings-content::-webkit-scrollbar-thumb:hover,
-.settings-nav::-webkit-scrollbar-thumb:hover {
-  background: var(--vscode-fg-muted);
+  color: var(--prism-danger);
 }
 </style>

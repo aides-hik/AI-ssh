@@ -12,6 +12,12 @@
       ]"
       :style="{ paddingLeft: `${depth * 16}px` }"
       draggable="true"
+      tabindex="0"
+      :aria-label="node.name"
+      @keydown.enter.self.prevent="handleNodeClick"
+      @keydown.space.self.prevent="handleNodeClick"
+      @keydown.f2.self.prevent="startEdit"
+      @keydown.escape="closeActionMenu"
       @click="handleNodeClick"
       @dragstart="handleDragStart"
       @dragend="handleDragEnd"
@@ -63,7 +69,11 @@
       <div :class="['tree-node-actions', { 'menu-visible': showActions }]" @click.stop>
         <div ref="actionMenuWrapper" class="action-menu-wrapper">
           <button
+            type="button"
             class="vscode-icon-button more-button"
+            :aria-label="`${node.name}：更多操作`"
+            aria-haspopup="menu"
+            :aria-expanded="showActions"
             @click="toggleActionMenu($event)"
             @mouseenter="showActionMenu($event)"
             @mouseleave="scheduleHideActionMenu"
@@ -74,55 +84,82 @@
           <!-- 操作下拉菜单 -->
           <div
             v-if="showActions"
-            class="action-dropdown"
+            class="action-dropdown prism-menu"
+            role="menu"
+            @keydown="handleActionMenuKeydown"
             :style="actionDropdownStyle"
             @mouseenter="cancelHideActionMenu"
             @mouseleave="scheduleHideActionMenu"
           >
             <!-- 连接节点菜单 -->
             <template v-if="node.type === 'connection'">
-              <div class="action-item" @click="handleConnect">
+              <button type="button" class="action-item" role="menuitem" @click="handleConnect">
                 <i class="bi bi-play"></i>
                 <span>{{ $t('ssh.treeConnect') }}</span>
-              </div>
-              <div class="action-item" @click="handleOpenFileManager">
+              </button>
+              <button
+                type="button"
+                class="action-item"
+                role="menuitem"
+                @click="handleOpenFileManager"
+              >
                 <i class="bi bi-folder-open"></i>
                 <span>{{ $t('ssh.treeFileManager') }}</span>
-              </div>
+              </button>
               <div class="action-divider"></div>
-              <div class="action-item" @click="handleEditConnection">
+              <button
+                type="button"
+                class="action-item"
+                role="menuitem"
+                @click="handleEditConnection"
+              >
                 <i class="bi bi-gear"></i>
                 <span>{{ $t('ssh.treeEdit') }}</span>
-              </div>
-              <div class="action-item" @click="startEdit">
+              </button>
+              <button type="button" class="action-item" role="menuitem" @click="startEdit">
                 <i class="bi bi-pencil"></i>
                 <span>{{ $t('ssh.treeRename') }}</span>
-              </div>
-              <div class="action-item danger" @click="handleDelete">
+              </button>
+              <button
+                type="button"
+                class="action-item danger"
+                role="menuitem"
+                @click="handleDelete"
+              >
                 <i class="bi bi-trash"></i>
                 <span>{{ $t('ssh.treeDelete') }}</span>
-              </div>
+              </button>
             </template>
 
             <!-- 文件夹节点菜单 -->
             <template v-else>
-              <div class="action-item" @click="handleCreateFolder">
+              <button type="button" class="action-item" role="menuitem" @click="handleCreateFolder">
                 <i class="bi bi-folder-plus"></i>
                 <span>{{ $t('ssh.treeNewFolder') }}</span>
-              </div>
-              <div class="action-item" @click="handleCreateConnection">
+              </button>
+              <button
+                type="button"
+                class="action-item"
+                role="menuitem"
+                @click="handleCreateConnection"
+              >
                 <i class="bi bi-hdd-network"></i>
                 <span>{{ $t('ssh.treeNewConnection') }}</span>
-              </div>
+              </button>
               <div class="action-divider"></div>
-              <div class="action-item" @click="startEdit">
+              <button type="button" class="action-item" role="menuitem" @click="startEdit">
                 <i class="bi bi-pencil"></i>
                 <span>{{ $t('ssh.treeRename') }}</span>
-              </div>
-              <div class="action-item danger" @click="handleDelete">
+              </button>
+              <button
+                type="button"
+                class="action-item danger"
+                role="menuitem"
+                @click="handleDelete"
+              >
                 <i class="bi bi-trash"></i>
                 <span>{{ $t('ssh.treeDelete') }}</span>
-              </div>
+              </button>
             </template>
           </div>
         </div>
@@ -130,7 +167,10 @@
     </div>
 
     <!-- 子节点 -->
-    <div v-if="node.type === 'folder' && (isExpanded || forceExpanded) && node.children" class="tree-node-children">
+    <div
+      v-if="node.type === 'folder' && (isExpanded || forceExpanded) && node.children"
+      class="tree-node-children"
+    >
       <SSHTreeNode
         v-for="child in node.children"
         :key="child.id"
@@ -279,6 +319,46 @@ const handleNodeClick = async () => {
   }
 }
 
+// Keep the floating menu within the visible workspace, including near the status bar.
+const fitActionMenu = async () => {
+  await nextTick()
+  const menu = actionMenuWrapper.value?.querySelector<HTMLElement>('.action-dropdown')
+  if (!showActions.value || !menu) return
+  const rect = menu.getBoundingClientRect()
+  actionMenuPosition.value = {
+    left: Math.max(8, Math.min(actionMenuPosition.value.left, window.innerWidth - rect.width - 8)),
+    top: Math.max(8, Math.min(actionMenuPosition.value.top, window.innerHeight - rect.height - 8))
+  }
+}
+
+const closeActionMenu = () => {
+  showActions.value = false
+  actionMenuMode.value = null
+  cancelHideActionMenu()
+}
+
+const handleActionMenuKeydown = (event: KeyboardEvent) => {
+  const controls = Array.from(
+    actionMenuWrapper.value?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []
+  )
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    closeActionMenu()
+    actionMenuWrapper.value?.querySelector<HTMLButtonElement>('.more-button')?.focus()
+  } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+    event.preventDefault()
+    const index = controls.indexOf(document.activeElement as HTMLButtonElement)
+    const next =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? controls.length - 1
+          : (index + (event.key === 'ArrowDown' ? 1 : -1) + controls.length) % controls.length
+    controls[next]?.focus()
+  }
+}
+
 // 显示操作菜单
 const showActionMenu = (event?: MouseEvent) => {
   if (hideTimer) {
@@ -293,13 +373,14 @@ const showActionMenu = (event?: MouseEvent) => {
   if (event?.currentTarget instanceof HTMLElement) {
     const rect = event.currentTarget.getBoundingClientRect()
     actionMenuPosition.value = {
-      left: rect.right - 120,
+      left: rect.right - 168,
       top: rect.bottom + 2
     }
   }
 
   actionMenuMode.value = 'hover'
   showActions.value = true
+  void fitActionMenu()
 }
 
 // 切换操作菜单
@@ -325,6 +406,7 @@ const openContextMenu = (event: MouseEvent) => {
   }
   actionMenuMode.value = 'contextmenu'
   showActions.value = true
+  void fitActionMenu()
 }
 
 // 延迟隐藏操作菜单
@@ -365,6 +447,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  cancelHideActionMenu()
   document.removeEventListener('click', handleOutsideClick, true)
 })
 
@@ -495,246 +578,230 @@ const handleDrop = (event: DragEvent) => {
 <style scoped>
 .ssh-tree-node {
   user-select: none;
+  min-width: 0;
 }
-
 .tree-node-content {
   display: flex;
   align-items: center;
-  padding: 4px 8px 4px 0;
+  min-height: 34px;
+  padding: 4px 7px 4px 0;
+  border: 1px solid transparent;
+  border-radius: var(--prism-radius-control);
+  position: relative;
   font-size: 13px;
   cursor: pointer;
-  border-radius: 4px;
-  transition: background-color 0.1s ease;
-  position: relative;
+  transition:
+    background-color var(--prism-duration) var(--prism-ease),
+    border-color var(--prism-duration) var(--prism-ease);
 }
-
-.tree-node-content:hover {
-  background: var(--vscode-bg-lighter);
+.tree-node-content:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: -2px;
 }
-
 .tree-node-content.is-selected {
-  background: var(--vscode-bg-lighter);
+  background: var(--vscode-list-activeSelectionBackground);
 }
-
 .tree-node-content.is-dragging {
   opacity: 0.5;
 }
-
 .tree-node-content.is-drag-over {
-  background: var(--vscode-accent);
-  opacity: 0.3;
+  background: var(--vscode-list-activeSelectionBackground);
+  border-color: var(--vscode-accent);
 }
-
 .tree-node-arrow {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
   width: 16px;
   height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   margin-right: 4px;
-  color: var(--vscode-fg-muted);
-  flex-shrink: 0;
+  color: var(--prism-muted);
 }
-
 .chevron-icon {
   transform: rotate(0deg);
-  transition: transform 0.15s ease;
-  color: var(--vscode-fg-muted);
+  color: var(--prism-muted);
+  transition: transform 150ms var(--prism-ease);
 }
-
 .chevron-icon.expanded {
   transform: rotate(90deg);
 }
-
 .tree-node-spacer {
   width: 16px;
   height: 16px;
 }
-
 .tree-node-icon {
-  margin-right: 6px;
-  font-size: 14px;
+  flex-shrink: 0;
+  margin: 0 7px;
+  font-size: 15px;
 }
-
 .tree-node-label-group {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 6px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
   min-width: 0;
   flex: 1;
 }
-
 .tree-node-label {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--vscode-fg);
+  color: var(--prism-text);
 }
-
 .tree-node-connection-status {
-  color: var(--vscode-warning);
-  font-size: 12px;
-  line-height: 1;
+  padding: 3px 6px;
+  border-radius: var(--prism-radius-small);
+  background: var(--prism-warning-bg);
+  color: var(--prism-warning);
+  font-size: 10px;
+  line-height: 1.3;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-
 .tree-node-input {
   flex: 1;
-  background: var(--vscode-bg-input);
+  width: 100%;
+  min-width: 0;
+  padding: 4px 7px;
   border: 1px solid var(--vscode-accent);
-  color: var(--vscode-fg);
+  border-radius: var(--prism-radius-small);
+  background: var(--prism-control);
+  color: var(--prism-text);
+  font: inherit;
   font-size: 13px;
-  padding: 2px 6px;
-  outline: none;
 }
-
+.tree-node-input:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 1px;
+}
 .tree-node-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
   margin-left: auto;
   opacity: 0;
-  transition: opacity 0.15s ease;
-  display: flex;
-  gap: 4px;
+  transition: opacity 120ms var(--prism-ease);
 }
-
-.tree-node-content:hover .tree-node-actions {
-  opacity: 1;
-}
-
+.tree-node-content:hover .tree-node-actions,
+.tree-node-content:focus-within .tree-node-actions,
 .tree-node-actions.menu-visible {
   opacity: 1;
 }
-
 .tree-node-children {
   margin-left: 0;
 }
-
-/* 图标样式 */
-.bi-chevron-right::before {
-  content: '›';
-  font-size: 16px;
-}
-.bi-chevron-down::before {
-  content: '⌄';
-  font-size: 16px;
-}
-.bi-folder::before {
-  content: '📁';
-}
-.bi-folder-open::before {
-  content: '📂';
-}
-.bi-folder-plus::before {
-  content: '📁';
-}
-.bi-hdd-network::before {
-  content: '🖥️';
-}
-.bi-play::before {
-  content: '▶️';
-}
-.bi-pencil::before {
-  content: '✏️';
-}
-.bi-trash::before {
-  content: '🗑️';
-}
-
 .vscode-icon-button {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: color 0.15s ease;
-  color: var(--vscode-fg-muted);
-  background: transparent;
-  border: none;
-  cursor: pointer;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
   padding: 0;
+  border: 0;
+  border-radius: var(--prism-radius-small);
+  background: transparent;
+  color: var(--prism-muted);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color 120ms var(--prism-ease),
+    color 120ms var(--prism-ease);
 }
-
-.vscode-icon-button:hover {
-  color: var(--vscode-fg);
-  background: var(--vscode-bg-lighter);
+.vscode-icon-button:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 1px;
 }
-
 .vscode-icon-button i {
-  font-size: 11px;
+  font-size: 14px;
 }
-
-/* 操作菜单样式 */
 .action-menu-wrapper {
   position: relative;
 }
-
 .more-button {
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-
-.tree-node-content:hover .more-button {
   opacity: 1;
 }
-
 .action-dropdown {
   position: fixed;
-  z-index: 1000;
-  background: var(--vscode-bg-lighter);
-  border: 1px solid var(--vscode-border);
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  min-width: 120px;
-  padding: 4px 0;
+  z-index: 10000;
+  min-width: 168px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  padding: 5px;
+  background: color-mix(in srgb, var(--prism-surface-raised) 91%, transparent);
+  border: 1px solid var(--prism-border);
+  border-radius: var(--prism-radius-panel);
+  box-shadow: var(--prism-shadow);
+  backdrop-filter: blur(22px) saturate(1.2);
 }
-
 .action-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  width: 100%;
+  min-height: 34px;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--prism-radius-small);
+  background: transparent;
+  color: var(--prism-text);
+  text-align: left;
+  font: inherit;
   font-size: 13px;
-  color: var(--vscode-fg);
   cursor: pointer;
-  transition: all 0.15s ease;
+  touch-action: manipulation;
+  transition:
+    background-color 120ms var(--prism-ease),
+    color 120ms var(--prism-ease);
 }
-
-.action-item:hover {
-  background: var(--vscode-accent);
-  color: var(--vscode-button-foreground);
+.action-item:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: -2px;
+  background: var(--vscode-list-hoverBackground);
 }
-
 .action-item.danger {
-  color: var(--vscode-error);
+  color: var(--prism-danger);
 }
-
-.action-item.danger:hover {
-  background: var(--vscode-accent);
-  color: var(--vscode-button-foreground);
+.action-item.danger:focus-visible {
+  background: var(--prism-danger-bg);
 }
-
 .action-divider {
   height: 1px;
-  background: var(--vscode-border);
-  margin: 4px 0;
+  margin: 5px;
+  background: var(--prism-border);
 }
-
 .action-item i {
-  font-size: 12px;
   width: 16px;
+  font-size: 14px;
   text-align: center;
 }
-
-/* 三点图标 */
-.bi-three-dots-vertical::before {
-  content: '⋮';
-  font-size: 16px;
-  font-weight: bold;
+@media (hover: hover) and (pointer: fine) {
+  .tree-node-content:hover:not(.is-selected) {
+    background: var(--vscode-list-hoverBackground);
+  }
+  .vscode-icon-button:hover {
+    background: var(--vscode-list-hoverBackground);
+    color: var(--prism-text);
+  }
+  .action-item:hover {
+    background: var(--vscode-list-hoverBackground);
+  }
+  .action-item.danger:hover {
+    background: var(--prism-danger-bg);
+  }
 }
-
-/* 齿轮图标 */
-.bi-gear::before {
-  content: '⚙';
-  font-size: 14px;
+@media (hover: none), (pointer: coarse) {
+  .tree-node-actions {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chevron-icon {
+    transition: none;
+  }
+}
+html[data-motion='off'] .chevron-icon,
+html[data-transitions='off'] .chevron-icon {
+  transition: none;
 }
 </style>

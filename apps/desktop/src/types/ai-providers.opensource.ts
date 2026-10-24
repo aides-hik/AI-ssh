@@ -1,4 +1,4 @@
-// 开源和小型服务商
+// AI 聊天服务目录。官方核对来源见 docs/ai-provider-catalog.md。
 
 import type { ProviderConfig } from './ai-providers.types'
 
@@ -6,117 +6,104 @@ export const OPENSOURCE_PROVIDERS: ProviderConfig[] = [
   {
     id: 'upstage',
     name: 'Upstage',
-    description: '韩国 AI 公司 Solar 模型',
+    description: 'Upstage Solar 官方兼容接口；推理可关闭或按任务调整强度',
     icon: 'bi bi-sunrise',
     website: 'https://www.upstage.ai',
     endpoint: 'https://api.upstage.ai/v1',
+    config: { catalogStatus: 'verified', docsUrl: 'https://console.upstage.ai/docs/models/history', verifiedAt: '2026-10-23' },
     models: [
-      { id: 'solar-1-mini-chat', name: 'Solar 1 Mini', description: '轻量级高效模型', providerId: 'upstage', contextWindow: 32768, capabilities: { text: true, image: false, functionCall: false, vision: false }, recommended: true },
-      { id: 'solar-pro', name: 'Solar Pro', providerId: 'upstage', contextWindow: 4096, capabilities: { text: true, image: false, functionCall: false, vision: false } }
+      { id: 'solar-pro4', name: 'Solar Pro 4', providerId: 'upstage', contextWindow: 512000, capabilities: { text: true, image: false, functionCall: true, vision: false }, recommended: true, reasoning: { protocol: 'openai', supportedEfforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max'] }, parameters: { maxOutputTokens: 128000, temperature: true, topP: true } },
+      { id: 'solar-mini4', name: 'Solar Mini 4', providerId: 'upstage', contextWindow: 512000, capabilities: { text: true, image: false, functionCall: true, vision: false }, reasoning: { protocol: 'openai', supportedEfforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max'] }, parameters: { maxOutputTokens: 128000, temperature: true, topP: true } }
     ]
   },
   {
     id: 'lepton',
     name: 'Lepton AI',
-    description: '快速部署 AI 模型',
+    description: 'Lepton 模型需部署端点；请填写你的 OpenAI 兼容服务地址',
     icon: 'bi bi-lightning',
     website: 'https://lepton.ai',
-    endpoint: 'https://api.lepton.ai/v1',
-    models: [
-      { id: 'llama3-70b', name: 'Llama 3 70B', providerId: 'lepton', contextWindow: 8192, capabilities: { text: true, image: false, functionCall: false, vision: false }, recommended: true },
-      { id: 'mixtral-8x7b', name: 'Mixtral 8x7B', providerId: 'lepton', contextWindow: 32768, capabilities: { text: true, image: false, functionCall: false, vision: false } }
-    ]
+    endpoint: '',
+    config: { catalogStatus: 'dynamic', docsUrl: 'https://www.lepton.ai/docs', verifiedAt: '2026-10-23' },
+    models: []
   },
   {
     id: 'anyscale',
     name: 'Anyscale',
-    description: 'Ray 团队的 LLM 服务',
+    description: '旧 Anyscale Endpoints 预设待核实；请填写当前部署提供的兼容端点',
     icon: 'bi bi-bounding-box',
     website: 'https://www.anyscale.com',
-    endpoint: 'https://api.endpoints.anyscale.com/v1',
-    models: [
-      { id: 'meta-llama/Meta-Llama-3-70B-Instruct', name: 'Llama 3 70B', providerId: 'anyscale', contextWindow: 8192, capabilities: { text: true, image: false, functionCall: false, vision: false }, recommended: true },
-      { id: 'mistralai/Mixtral-8x7B-Instruct-v0.1', name: 'Mixtral 8x7B', providerId: 'anyscale', contextWindow: 32768, capabilities: { text: true, image: false, functionCall: false, vision: false } }
-    ]
+    endpoint: '',
+    config: { catalogStatus: 'unverified', docsUrl: 'https://docs.anyscale.com', verifiedAt: '2026-10-23' },
+    models: []
   },
   {
     id: 'deepinfra',
     name: 'DeepInfra',
-    description: '开源模型推理服务',
+    description: 'DeepInfra 模型目录随托管服务更新；刷新或添加聊天模型',
     icon: 'bi bi-server',
     website: 'https://deepinfra.com',
     endpoint: 'https://api.deepinfra.com/v1/openai',
-    models: [
-      { id: 'meta-llama/Meta-Llama-3.1-70B-Instruct', name: 'Llama 3.1 70B', providerId: 'deepinfra', contextWindow: 128000, capabilities: { text: true, image: false, functionCall: false, vision: false }, recommended: true },
-      { id: 'mistralai/Mixtral-8x22B-Instruct-v0.1', name: 'Mixtral 8x22B', providerId: 'deepinfra', contextWindow: 65536, capabilities: { text: true, image: false, functionCall: false, vision: false } }
-    ]
+    config: { catalogStatus: 'dynamic', docsUrl: 'https://deepinfra.com/docs/openai_api', verifiedAt: '2026-10-23' },
+    models: []
   },
   {
     id: 'octoai',
     name: 'OctoAI',
-    description: '高性能模型服务',
+    description: '旧 OctoAI 公共服务状态未核实；请使用当前提供商或自建兼容端点',
     icon: 'bi bi-octagon',
     website: 'https://octo.ai',
-    endpoint: 'https://text.octoai.run/v1',
-    models: [
-      { id: 'meta-llama-3-70b-instruct', name: 'Llama 3 70B', providerId: 'octoai', contextWindow: 8192, capabilities: { text: true, image: false, functionCall: false, vision: false }, recommended: true },
-      { id: 'mixtral-8x7b-instruct', name: 'Mixtral 8x7B', providerId: 'octoai', contextWindow: 32768, capabilities: { text: true, image: false, functionCall: false, vision: false } }
-    ]
+    endpoint: '',
+    config: { catalogStatus: 'unverified', docsUrl: 'https://octo.ai', verifiedAt: '2026-10-23' },
+    models: []
   },
   {
     id: 'modal',
     name: 'Modal Labs',
-    description: '无服务器 AI 部署',
+    description: 'Modal 是部署平台；填写你部署的 OpenAI 兼容 Web Endpoint',
     icon: 'bi bi-window-stack',
     website: 'https://modal.com',
-    endpoint: 'https://api.modal.com/v1',
-    models: [
-      { id: 'llama-3-70b', name: 'Llama 3 70B', providerId: 'modal', contextWindow: 8192, capabilities: { text: true, image: false, functionCall: false, vision: false }, recommended: true }
-    ]
+    endpoint: '',
+    config: { catalogStatus: 'dynamic', docsUrl: 'https://modal.com/docs/examples/vllm_inference', verifiedAt: '2026-10-23' },
+    models: []
   },
   {
     id: 'runpod',
     name: 'RunPod',
-    description: 'GPU 云服务',
+    description: 'RunPod 是部署平台；填写你的 vLLM /openai/v1 端点与模型',
     icon: 'bi bi-cpu',
     website: 'https://runpod.io',
-    endpoint: 'https://api.runpod.ai/v2',
-    models: [
-      { id: 'llama3-70b-instruct', name: 'Llama 3 70B', providerId: 'runpod', contextWindow: 8192, capabilities: { text: true, image: false, functionCall: false, vision: false }, recommended: true }
-    ]
+    endpoint: '',
+    config: { catalogStatus: 'dynamic', docsUrl: 'https://docs.runpod.io/serverless/vllm/openai-compatibility', verifiedAt: '2026-10-23' },
+    models: []
   },
   {
     id: 'banana',
     name: 'Banana',
-    description: 'ML 模型托管',
+    description: '旧 Banana 托管接口状态未核实；请使用当前部署的兼容地址',
     icon: 'bi bi-bookmark',
     website: 'https://banana.dev',
-    endpoint: 'https://api.banana.dev/v1',
-    models: [
-      { id: 'llama-2-70b', name: 'Llama 2 70B', providerId: 'banana', contextWindow: 4096, capabilities: { text: true, image: false, functionCall: false, vision: false } }
-    ]
+    endpoint: '',
+    config: { catalogStatus: 'unverified', docsUrl: 'https://banana.dev', verifiedAt: '2026-10-23' },
+    models: []
   },
   {
     id: 'higress',
     name: 'Higress AI',
-    description: '阿里云网关 AI 插件',
+    description: 'Higress 是自建 AI 网关；填写你的网关地址与路由模型名',
     icon: 'bi bi-router',
     website: 'https://higress.io',
-    endpoint: 'https://api.higress.io/v1',
-    models: [
-      { id: 'qwen-turbo', name: 'Qwen Turbo (via Higress)', providerId: 'higress', contextWindow: 8192, capabilities: { text: true, image: false, functionCall: false, vision: false }, recommended: true }
-    ]
+    endpoint: '',
+    config: { catalogStatus: 'dynamic', docsUrl: 'https://higress.io/docs/latest/plugins/ai/api-provider/ai-proxy/', verifiedAt: '2026-10-23' },
+    models: []
   },
   {
     id: 'friendli',
     name: 'Friendli AI',
-    description: '优化的模型推理',
+    description: 'Friendli 模型服务；按账号模型目录和服务地址配置',
     icon: 'bi bi-emoji-smile',
     website: 'https://friendli.ai',
-    endpoint: 'https://api.friendli.ai/v1',
-    models: [
-      { id: 'mixtral-8x7b-instruct-v0-1', name: 'Mixtral 8x7B', providerId: 'friendli', contextWindow: 32768, capabilities: { text: true, image: false, functionCall: false, vision: false }, recommended: true }
-    ]
+    endpoint: 'https://api.friendli.ai/serverless/v1',
+    config: { catalogStatus: 'dynamic', docsUrl: 'https://friendli.ai/docs/guides/model-apis/quickstart', verifiedAt: '2026-10-23' },
+    models: []
   }
 ]
-

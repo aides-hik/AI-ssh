@@ -1,20 +1,23 @@
 <template>
-  <div class="prompt-optimizer-view">
+  <div class="prompt-optimizer-view prism-settings">
     <!-- 左侧导航树 -->
     <div class="settings-sidebar">
       <div class="sidebar-header">
         <h3 class="sidebar-title">提示词优化助手</h3>
       </div>
       <nav class="settings-nav">
-        <div
+        <button
+          type="button"
           v-for="section in optimizerSections"
           :key="section.id"
           :class="['nav-item', { active: activeSection === section.id }]"
+          :aria-current="activeSection === section.id ? 'page' : undefined"
+          :data-prism-tooltip="section.label"
           @click="scrollToSection(section.id)"
         >
           <i :class="['nav-icon', section.icon]"></i>
           <span class="nav-label">{{ section.label }}</span>
-        </div>
+        </button>
       </nav>
     </div>
 
@@ -22,7 +25,7 @@
     <div class="settings-content" ref="contentContainer" @scroll="onScroll">
       <div class="content-inner">
         <!-- 步骤1: 任务描述与生成提示词 -->
-        <section :id="'section-task'" class="setting-section">
+        <section :id="'section-task'" class="setting-section prism-settings-section">
           <h2 class="section-title">
             <i class="bi bi-1-circle"></i>
             描述您的任务
@@ -43,7 +46,7 @@
               <button
                 @click="generatePrompt"
                 :disabled="!taskDescription.trim() || isGenerating"
-                class="btn-primary generate-btn"
+                class="btn-primary prism-button prism-button--primary generate-btn"
               >
                 <i :class="['bi', isGenerating ? 'bi-hourglass-split' : 'bi-magic']"></i>
                 {{ isGenerating ? '生成中...' : '生成基础提示词' }}
@@ -53,7 +56,7 @@
         </section>
 
         <!-- 步骤2: 显示生成的提示词并测试 -->
-        <section :id="'section-prompt'" class="setting-section">
+        <section :id="'section-prompt'" class="setting-section prism-settings-section">
           <h2 class="section-title">
             <i class="bi bi-2-circle"></i>
             生成的提示词
@@ -85,7 +88,7 @@
               <button
                 @click="testPrompt"
                 :disabled="!testQuestion.trim() || isTesting"
-                class="btn-primary mt-2"
+                class="btn-primary prism-button prism-button--primary mt-2"
               >
                 <i :class="['bi', isTesting ? 'bi-hourglass-split' : 'bi-send']"></i>
                 {{ isTesting ? '测试中...' : '测试提示词' }}
@@ -95,7 +98,7 @@
         </section>
 
         <!-- 步骤3: 测试结果与优化 -->
-        <section :id="'section-test'" class="setting-section">
+        <section :id="'section-test'" class="setting-section prism-settings-section">
           <h2 class="section-title">
             <i class="bi bi-3-circle"></i>
             测试结果与优化
@@ -116,14 +119,17 @@
                     @click="copyTestResult"
                     class="btn-copy"
                     :class="{ copied: isCopied }"
-                    :title="isCopied ? '已复制' : '复制回复内容'"
+                    :data-prism-tooltip="isCopied ? '已复制' : '复制回复内容'"
                   >
                     <i :class="['bi', isCopied ? 'bi-check-lg' : 'bi-clipboard']"></i>
                     {{ isCopied ? '已复制' : '复制' }}
                   </button>
                 </div>
-                <div class="test-result-box">
-                  {{ testResult }}
+                <div class="test-result-box" :aria-busy="isTesting">
+                  <span v-if="!testResult" class="result-placeholder">{{
+                    isTesting ? '正在等待模型回复…' : '测试后的 AI 回复会显示在这里。'
+                  }}</span>
+                  <template v-else>{{ testResult }}</template>
                 </div>
               </div>
             </div>
@@ -145,7 +151,7 @@
               <button
                 @click="optimizePrompt"
                 :disabled="!userFeedback.trim() || isOptimizing"
-                class="btn-primary mt-2"
+                class="btn-primary prism-button prism-button--primary mt-2"
               >
                 <i :class="['bi', isOptimizing ? 'bi-hourglass-split' : 'bi-magic']"></i>
                 {{ isOptimizing ? '优化中...' : '优化提示词' }}
@@ -156,11 +162,15 @@
 
         <!-- 操作按钮区 -->
         <div class="action-bar">
-          <button @click="savePrompt" :disabled="!generatedPrompt.trim()" class="btn-success">
+          <button
+            @click="savePrompt"
+            :disabled="!generatedPrompt.trim()"
+            class="btn-success prism-button prism-button--primary"
+          >
             <i class="bi bi-check-circle"></i>
             保存提示词
           </button>
-          <button @click="resetAll" class="btn-secondary">
+          <button @click="resetAll" class="btn-secondary prism-button">
             <i class="bi bi-arrow-counterclockwise"></i>
             重新开始
           </button>
@@ -190,6 +200,22 @@ const optimizerSections = [
 const activeSection = ref('task')
 const contentContainer = ref<HTMLElement | null>(null)
 const isScrolling = ref(false)
+let sectionScrollTimer: ReturnType<typeof setTimeout> | undefined
+let sectionScrollTarget = 0
+let sectionScrollDeadline = 0
+const releaseSectionScroll = () => {
+  const container = contentContainer.value
+  if (
+    container &&
+    Math.abs(container.scrollTop - sectionScrollTarget) > 2 &&
+    performance.now() < sectionScrollDeadline
+  ) {
+    sectionScrollTimer = setTimeout(releaseSectionScroll, 120)
+    return
+  }
+  isScrolling.value = false
+  onScroll()
+}
 
 // AI 配置
 const currentProvider = ref<AIProvider | null>(null)
@@ -442,28 +468,54 @@ const handlePromptTextareaKeyDown = handleTextareaKeyDown
 const scrollToSection = (sectionId: string) => {
   const element = document.getElementById(`section-${sectionId}`)
   if (element && contentContainer.value) {
+    clearTimeout(sectionScrollTimer)
     isScrolling.value = true
     activeSection.value = sectionId
 
     const container = contentContainer.value
-    const offsetTop = element.offsetTop - 82
+    const offsetTop =
+      container.scrollTop +
+      element.getBoundingClientRect().top -
+      container.getBoundingClientRect().top -
+      24
 
+    sectionScrollTarget = Math.max(
+      0,
+      Math.min(offsetTop, container.scrollHeight - container.clientHeight)
+    )
+    sectionScrollDeadline = performance.now() + 1600
     container.scrollTo({
-      top: offsetTop,
-      behavior: 'smooth'
+      top: sectionScrollTarget,
+      behavior:
+        document.documentElement.dataset.motion === 'off' ||
+        document.documentElement.dataset.transitions === 'off' ||
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches
+          ? 'instant'
+          : 'smooth'
     })
 
-    setTimeout(() => {
-      isScrolling.value = false
-    }, 600)
+    sectionScrollTimer = setTimeout(releaseSectionScroll, 600)
   }
 }
 
 const onScroll = () => {
-  if (isScrolling.value) return
+  if (isScrolling.value) {
+    clearTimeout(sectionScrollTimer)
+    sectionScrollTimer = setTimeout(releaseSectionScroll, 120)
+    return
+  }
 
   const container = contentContainer.value
   if (!container) return
+
+  // A short final section cannot always reach the top of the scroll container.
+  if (
+    container.scrollHeight > container.clientHeight + 1 &&
+    container.scrollTop + container.clientHeight >= container.scrollHeight - 2
+  ) {
+    activeSection.value = optimizerSections.at(-1)?.id || activeSection.value
+    return
+  }
 
   const scrollTop = container.scrollTop
   const sections = optimizerSections.map(s => ({
@@ -474,7 +526,11 @@ const onScroll = () => {
   for (let i = sections.length - 1; i >= 0; i--) {
     const section = sections[i]
     if (section.element) {
-      const offsetTop = section.element.offsetTop - 60
+      const offsetTop =
+        scrollTop +
+        section.element.getBoundingClientRect().top -
+        container.getBoundingClientRect().top -
+        60
       if (scrollTop >= offsetTop) {
         activeSection.value = section.id
         break
@@ -509,206 +565,12 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  clearTimeout(sectionScrollTimer)
   unregisterModelSyncListeners?.()
 })
 </script>
 
 <style scoped>
-/* ========== 布局 ========== */
-.prompt-optimizer-view {
-  display: flex;
-  height: 100vh;
-  background: var(--vscode-bg);
-  color: var(--vscode-fg);
-}
-
-/* ========== 左侧导航 ========== */
-.settings-sidebar {
-  width: 220px;
-  flex-shrink: 0;
-  background: var(--vscode-bg-lighter);
-  border-right: 1px solid var(--vscode-border);
-  display: flex;
-  flex-direction: column;
-}
-
-.sidebar-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--vscode-border);
-}
-
-.sidebar-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--vscode-fg);
-}
-
-.settings-nav {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px 0;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 20px;
-  cursor: pointer;
-  transition: all 0.2s;
-  color: var(--vscode-fg-muted);
-  user-select: none;
-}
-
-.nav-item:hover {
-  background: var(--vscode-bg);
-  color: var(--vscode-fg);
-}
-
-.nav-item.active {
-  background: var(--vscode-bg);
-  color: var(--vscode-accent);
-  border-left: 2px solid var(--vscode-accent);
-  padding-left: 18px;
-}
-
-.nav-icon {
-  font-size: 16px;
-  flex-shrink: 0;
-}
-
-.nav-label {
-  font-size: 14px;
-  font-weight: 500;
-}
-
-/* ========== 内容区域 ========== */
-.settings-content {
-  flex: 1;
-  overflow-y: auto;
-  scroll-behavior: smooth;
-}
-
-.content-inner {
-  max-width: 900px;
-  padding: 32px 48px 80px 48px;
-}
-
-/* ========== Section 样式 ========== */
-.setting-section {
-  margin-bottom: 48px;
-  padding-bottom: 32px;
-  border-bottom: 1px solid var(--vscode-border);
-}
-
-.setting-section:last-of-type {
-  border-bottom: none;
-}
-
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 24px;
-  font-weight: 600;
-  margin: 0 0 8px 0;
-  color: var(--vscode-fg);
-}
-
-.section-title i {
-  font-size: 24px;
-  color: var(--vscode-accent);
-}
-
-.section-description {
-  margin: 0 0 24px 0;
-  color: var(--vscode-fg-muted);
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-/* ========== Setting Row ========== */
-.setting-row {
-  display: flex;
-  gap: 32px;
-  padding: 20px 0;
-  border-bottom: 1px solid var(--vscode-border);
-}
-
-.setting-row:last-child {
-  border-bottom: none;
-}
-
-.setting-left {
-  flex: 1;
-  min-width: 0;
-}
-
-.setting-right {
-  flex-shrink: 0;
-  width: 400px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.setting-label {
-  display: block;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--vscode-fg);
-  margin-bottom: 4px;
-}
-
-.setting-hint {
-  font-size: 12px;
-  color: var(--vscode-fg-muted);
-  margin: 0;
-  line-height: 1.5;
-}
-
-/* ========== 表单控件 ========== */
-.form-input,
-.form-textarea {
-  width: 100%;
-  background: var(--vscode-input-bg);
-  border: 1px solid var(--vscode-border);
-  border-radius: 2px;
-  color: var(--vscode-fg);
-  font-size: 14px;
-  outline: none;
-  transition: border-color 0.2s;
-  font-family: inherit;
-}
-
-.form-input {
-  padding: 0 12px;
-  height: 36px;
-}
-
-.form-textarea {
-  padding: 8px 12px;
-  resize: vertical;
-  min-height: 100px;
-  line-height: 1.6;
-}
-
-.form-input:focus,
-.form-textarea:focus {
-  border-color: var(--vscode-accent);
-}
-
-.form-input:hover,
-.form-textarea:hover {
-  border-color: var(--vscode-fg-muted);
-}
-
-.prompt-display {
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 13px;
-}
-
 /* ========== 任务输入容器 ========== */
 .task-input-container {
   width: 100%;
@@ -725,63 +587,6 @@ onUnmounted(() => {
   align-self: flex-end;
 }
 
-/* ========== 按钮样式 ========== */
-.btn-primary,
-.btn-success,
-.btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
-  border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-primary {
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--vscode-button-hoverBackground);
-  transform: translateY(-1px);
-}
-
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-success {
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
-}
-
-.btn-success:hover:not(:disabled) {
-  background: var(--vscode-button-hoverBackground);
-  transform: translateY(-1px);
-}
-
-.btn-success:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background: transparent;
-  border: 1px solid var(--vscode-border);
-  color: var(--vscode-fg);
-}
-
-.btn-secondary:hover {
-  background: var(--vscode-list-hoverBackground);
-  border-color: var(--vscode-accent);
-}
-
 /* ========== 结果展示区域 ========== */
 .result-container {
   width: 100%;
@@ -792,10 +597,10 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background: var(--vscode-bg-lighter);
+  background: var(--liquid-selected);
   border: 1px solid var(--vscode-border);
   border-bottom: none;
-  border-radius: 4px 4px 0 0;
+  border-radius: var(--prism-radius-control) var(--prism-radius-control) 0 0;
 }
 
 .result-title {
@@ -813,9 +618,12 @@ onUnmounted(() => {
   background: transparent;
   color: var(--vscode-fg-muted);
   border: 1px solid var(--vscode-border);
-  border-radius: 3px;
+  border-radius: var(--prism-radius-small);
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    background-color var(--prism-duration) ease,
+    color var(--prism-duration) ease,
+    border-color var(--prism-duration) ease;
 }
 
 .btn-copy:hover {
@@ -836,9 +644,9 @@ onUnmounted(() => {
 
 .test-result-box {
   padding: 16px;
-  background: var(--vscode-input-bg);
+  background: var(--prism-control);
   border: 1px solid var(--vscode-border);
-  border-radius: 0 0 4px 4px;
+  border-radius: 0 0 var(--prism-radius-control) var(--prism-radius-control);
   color: var(--vscode-fg);
   font-size: 14px;
   line-height: 1.8;
@@ -854,9 +662,10 @@ onUnmounted(() => {
 .action-bar {
   display: flex;
   gap: 12px;
+  flex-wrap: wrap;
   padding: 24px 0;
   margin-top: 32px;
-  border-top: 2px solid var(--vscode-border);
+  border-top: 1px solid var(--prism-border);
   justify-content: center;
 }
 
@@ -907,5 +716,27 @@ onUnmounted(() => {
   to {
     transform: rotate(360deg);
   }
+}
+
+.prompt-display {
+  font-family: var(--vscode-editor-font-family, Consolas, monospace);
+  font-size: 13px;
+}
+.btn-copy:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bi-hourglass-split {
+    animation: none;
+  }
+}
+html[data-motion='off'] .bi-hourglass-split,
+html[data-transitions='off'] .bi-hourglass-split {
+  animation: none;
+}
+.result-placeholder {
+  color: var(--prism-muted);
+  font-size: 12px;
 }
 </style>

@@ -1,35 +1,45 @@
 <template>
   <div class="context-menu-demo">
     <h2>右键菜单组件示例</h2>
-    
+
     <div class="demo-section">
       <h3>基础菜单</h3>
-      <div class="demo-box" @contextmenu="handleBasicMenu">
+      <button
+        type="button"
+        class="demo-box"
+        @click="handleBasicMenu"
+        @contextmenu="handleBasicMenu"
+      >
         右键点击这里显示基础菜单
-      </div>
+      </button>
     </div>
-    
+
     <div class="demo-section">
       <h3>带图标和快捷键</h3>
-      <div class="demo-box" @contextmenu="handleFullMenu">
+      <button type="button" class="demo-box" @click="handleFullMenu" @contextmenu="handleFullMenu">
         右键点击这里显示完整菜单
-      </div>
+      </button>
     </div>
-    
+
     <div class="demo-section">
       <h3>文件操作菜单</h3>
-      <div class="demo-box" @contextmenu="handleFileMenu">
+      <button type="button" class="demo-box" @click="handleFileMenu" @contextmenu="handleFileMenu">
         右键点击这里显示文件操作菜单
-      </div>
+      </button>
     </div>
-    
+
     <div class="demo-section">
       <h3>危险操作</h3>
-      <div class="demo-box" @contextmenu="handleDangerMenu">
+      <button
+        type="button"
+        class="demo-box"
+        @click="handleDangerMenu"
+        @contextmenu="handleDangerMenu"
+      >
         右键点击这里显示危险操作菜单
-      </div>
+      </button>
     </div>
-    
+
     <!-- 右键菜单 -->
     <ContextMenu
       :visible="menuVisible"
@@ -44,7 +54,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import ContextMenu, { type ContextMenuItem } from '../components/common/ContextMenu.vue'
-import { $confirm } from '@/composables/useDialog'
+import { $alert, $confirm } from '@/composables/useDialog'
 
 const menuVisible = ref(false)
 const menuX = ref(0)
@@ -55,15 +65,15 @@ const currentMenuItems = ref<ContextMenuItem[]>([])
 const basicMenuItems: ContextMenuItem[] = [
   {
     label: '选项 1',
-    onClick: () => alert('选项 1 被点击')
+    onClick: () => $alert('选项 1 被点击')
   },
   {
     label: '选项 2',
-    onClick: () => alert('选项 2 被点击')
+    onClick: () => $alert('选项 2 被点击')
   },
   {
     label: '选项 3',
-    onClick: () => alert('选项 3 被点击')
+    onClick: () => $alert('选项 3 被点击')
   }
 ]
 
@@ -73,27 +83,27 @@ const fullMenuItems: ContextMenuItem[] = [
     label: '复制',
     icon: 'bi bi-clipboard',
     shortcut: 'Ctrl+C',
-    onClick: () => alert('复制')
+    onClick: () => $alert('复制')
   },
   {
     label: '粘贴',
     icon: 'bi bi-clipboard-check',
     shortcut: 'Ctrl+V',
-    onClick: () => alert('粘贴')
+    onClick: () => $alert('粘贴')
   },
   {
     label: '剪切',
     icon: 'bi bi-scissors',
     shortcut: 'Ctrl+X',
     disabled: true,
-    onClick: () => alert('剪切（已禁用）')
+    onClick: () => $alert('剪切（已禁用）')
   },
   { type: 'divider' },
   {
     label: '全选',
     icon: 'bi bi-check2-square',
     shortcut: 'Ctrl+A',
-    onClick: () => alert('全选')
+    onClick: () => $alert('全选')
   }
 ]
 
@@ -102,36 +112,36 @@ const fileMenuItems: ContextMenuItem[] = [
   {
     label: '新建文件',
     icon: 'bi bi-file-earmark-plus',
-    onClick: () => alert('新建文件')
+    onClick: () => $alert('新建文件')
   },
   {
     label: '新建文件夹',
     icon: 'bi bi-folder-plus',
-    onClick: () => alert('新建文件夹')
+    onClick: () => $alert('新建文件夹')
   },
   { type: 'divider' },
   {
     label: '打开',
     icon: 'bi bi-folder2-open',
     shortcut: 'Enter',
-    onClick: () => alert('打开')
+    onClick: () => $alert('打开')
   },
   {
     label: '重命名',
     icon: 'bi bi-pencil',
     shortcut: 'F2',
-    onClick: () => alert('重命名')
+    onClick: () => $alert('重命名')
   },
   { type: 'divider' },
   {
     label: '复制路径',
     icon: 'bi bi-clipboard',
-    onClick: () => alert('已复制路径')
+    onClick: () => $alert('已复制路径')
   },
   {
     label: '在文件管理器中显示',
     icon: 'bi bi-folder',
-    onClick: () => alert('在文件管理器中显示')
+    onClick: () => $alert('在文件管理器中显示')
   }
 ]
 
@@ -140,12 +150,12 @@ const dangerMenuItems: ContextMenuItem[] = [
   {
     label: '编辑',
     icon: 'bi bi-pencil',
-    onClick: () => alert('编辑')
+    onClick: () => $alert('编辑')
   },
   {
     label: '复制',
     icon: 'bi bi-clipboard',
-    onClick: () => alert('复制')
+    onClick: () => $alert('复制')
   },
   { type: 'divider' },
   {
@@ -154,7 +164,7 @@ const dangerMenuItems: ContextMenuItem[] = [
     danger: true,
     onClick: async () => {
       if (await $confirm('确定要删除吗？')) {
-        alert('已删除')
+        $alert('已删除')
       }
     }
   },
@@ -164,7 +174,7 @@ const dangerMenuItems: ContextMenuItem[] = [
     danger: true,
     onClick: async () => {
       if (await $confirm('确定要永久删除吗？此操作无法撤销！')) {
-        alert('已永久删除')
+        $alert('已永久删除')
       }
     }
   }
@@ -172,8 +182,10 @@ const dangerMenuItems: ContextMenuItem[] = [
 
 function showMenu(e: MouseEvent, items: ContextMenuItem[]) {
   e.preventDefault()
-  menuX.value = e.clientX
-  menuY.value = e.clientY
+  const trigger = e.currentTarget as HTMLElement
+  const bounds = trigger.getBoundingClientRect()
+  menuX.value = e.clientX || bounds.left + 20
+  menuY.value = e.clientY || bounds.top + 20
   currentMenuItems.value = items
   menuVisible.value = true
 }
@@ -197,14 +209,19 @@ function handleDangerMenu(e: MouseEvent) {
 
 <style scoped>
 .context-menu-demo {
-  padding: 2rem;
+  height: 100%;
+  overflow: auto;
+  padding: clamp(20px, 4vw, 36px);
+  font-family: var(--prism-font);
   max-width: 1200px;
   margin: 0 auto;
 }
 
 h2 {
   margin-bottom: 2rem;
-  color: var(--bs-body-color);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--prism-text);
 }
 
 .demo-section {
@@ -214,24 +231,37 @@ h2 {
 .demo-section h3 {
   font-size: 1.1rem;
   margin-bottom: 1rem;
-  color: var(--bs-secondary-color);
+  color: var(--prism-muted);
 }
 
 .demo-box {
+  width: 100%;
+  font: inherit;
   padding: 3rem 2rem;
-  border: 2px dashed var(--bs-border-color);
-  border-radius: 8px;
+  border: 1px dashed var(--prism-border);
+  border-radius: var(--prism-radius-panel);
   text-align: center;
   cursor: pointer;
-  transition: all 0.2s;
-  background: var(--bs-body-bg);
-  color: var(--bs-secondary-color);
+  box-shadow: var(--prism-shadow);
+  backdrop-filter: blur(20px) saturate(140%);
+  transition:
+    border-color var(--prism-duration) ease,
+    background-color var(--prism-duration) ease,
+    color var(--prism-duration) ease;
+  background: var(--prism-surface);
+  color: var(--prism-muted);
 }
 
-.demo-box:hover {
-  border-color: var(--bs-primary);
-  background: var(--bs-primary-bg-subtle);
-  color: var(--bs-primary);
+.demo-box:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 4px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .demo-box:hover {
+    border-color: var(--vscode-accent);
+    background: var(--liquid-selected);
+    color: var(--vscode-accent);
+  }
 }
 </style>
-

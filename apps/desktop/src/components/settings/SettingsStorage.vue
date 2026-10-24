@@ -1,5 +1,5 @@
 <template>
-  <section :id="'section-storage'" class="setting-section">
+  <section :id="'section-storage'" class="setting-section prism-settings-section">
     <h2 class="section-title">
       <i class="bi bi-database"></i>
       {{ $t('settings.storageTitle') }}
@@ -24,7 +24,7 @@
         <p class="setting-hint">{{ $t('settings.clearCacheHint') }}</p>
       </div>
       <div class="setting-right">
-        <button @click="clearCache" class="btn btn-danger">
+        <button @click="clearCache" class="prism-button prism-button--danger">
           {{ $t('settings.clearCache') }}
         </button>
       </div>
@@ -37,7 +37,14 @@
         <p class="setting-hint">{{ $t('settings.syncIntervalHint') }}</p>
       </div>
       <div class="setting-right">
-        <input v-model.number="syncInterval" type="number" class="form-input" min="1" max="60" />
+        <input
+          :aria-label="$t('settings.syncInterval')"
+          v-model.number="syncInterval"
+          type="number"
+          class="form-input"
+          min="1"
+          max="60"
+        />
       </div>
     </div>
   </section>
@@ -63,5 +70,5 @@ const clearCache = async () => {
 </script>
 
 <style scoped>
-/* 样式从父组件继承 */
+/* Section layout and controls are shared in settings-foundation.css. */
 </style>

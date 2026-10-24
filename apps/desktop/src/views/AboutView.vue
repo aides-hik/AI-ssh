@@ -1,139 +1,216 @@
 <template>
-  <div class="about-view p-6">
-    <div class="about-content max-w-2xl mx-auto">
-      <!-- 应用logo和标题 -->
-      <div class="text-center mb-8">
-        <h1 class="text-3xl font-bold  dark:text-white mb-2">
-          {{ $t('welcome.appTitle') }}
-        </h1>
-        <p class=" ">
-          智能的 SSH 连接和管理工具
+  <div class="about-view">
+    <div class="about-content">
+      <header class="about-heading">
+        <span class="about-mark" aria-hidden="true"><i class="bi bi-diamond-half" /></span>
+        <div>
+          <h1>{{ $t('welcome.appTitle') }}</h1>
+          <p>智能的 SSH 连接和管理工具</p>
+        </div>
+        <span class="version-badge">版本 {{ appVersion }}</span>
+      </header>
+      <section class="about-panel" aria-labelledby="about-app-title">
+        <h2 id="about-app-title">关于应用</h2>
+        <p>
+          {{ $t('welcome.appTitle') }}集成 SSH 连接管理、远程终端、文件传输和 AI
+          智能助手，帮助您在一处继续服务器上的工作。
         </p>
-        <div class="mt-2">
-          <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-            版本 {{ appVersion }}
-          </span>
-        </div>
-      </div>
-      
-      <!-- 应用介绍 -->
-      <div class="app-info dark:bg-gray-800 rounded-lg p-6 shadow mb-6">
-        <h2 class="text-xl font-semibold mb-4  dark:text-white">关于应用</h2>
-        <div class="space-y-3  ">
-          <p>
-            {{ $t('welcome.appTitle') }}是一款现代化的 SSH 连接管理工具，集成了 AI 智能助手功能，
-            帮助您更高效地管理远程服务器连接和操作。
-          </p>
-          <p>
-            主要功能包括：智能对话助手、SSH 连接管理、终端操作、文件传输等。
-          </p>
-        </div>
-      </div>
-      
-      <!-- 技术栈 -->
-      <div class="tech-stack dark:bg-gray-800 rounded-lg p-6 shadow mb-6">
-        <h2 class="text-xl font-semibold mb-4  dark:text-white">技术栈</h2>
-        <div class="grid grid-cols-2 gap-4">
-          <div class="tech-item">
-            <div class="font-medium  ">前端框架</div>
-            <div class=" ">Vue 3 + TypeScript</div>
+      </section>
+      <section class="about-panel" aria-labelledby="about-stack-title">
+        <h2 id="about-stack-title">技术栈</h2>
+        <dl class="about-details stack-details">
+          <div>
+            <dt>前端框架</dt>
+            <dd>Vue + TypeScript</dd>
           </div>
-          <div class="tech-item">
-            <div class="font-medium  ">桌面框架</div>
-            <div class=" ">Electron</div>
+          <div>
+            <dt>桌面框架</dt>
+            <dd>Electron</dd>
           </div>
-          <div class="tech-item">
-            <div class="font-medium  ">样式框架</div>
-            <div class=" ">Tailwind CSS</div>
+          <div>
+            <dt>界面样式</dt>
+            <dd>液态玻璃 · CSS</dd>
           </div>
-          <div class="tech-item">
-            <div class="font-medium  ">构建工具</div>
-            <div class=" ">Vite</div>
+          <div>
+            <dt>构建工具</dt>
+            <dd>Vite</dd>
           </div>
-        </div>
-      </div>
-      
-      <!-- 系统信息 -->
-      <div class="system-info dark:bg-gray-800 rounded-lg p-6 shadow mb-6">
-        <h2 class="text-xl font-semibold mb-4  dark:text-white">系统信息</h2>
-        <div class="space-y-2 text-sm">
-          <div class="flex justify-between">
-            <span class=" ">操作系统:</span>
-            <span class="">{{ systemInfo.platform }}</span>
+        </dl>
+      </section>
+      <section class="about-panel" aria-labelledby="about-system-title">
+        <h2 id="about-system-title">系统信息</h2>
+        <dl class="about-details">
+          <div>
+            <dt>操作系统</dt>
+            <dd>{{ systemInfo.platform }}</dd>
           </div>
-          <div class="flex justify-between">
-            <span class=" ">架构:</span>
-            <span class="">{{ systemInfo.arch }}</span>
+          <div>
+            <dt>架构</dt>
+            <dd>{{ systemInfo.arch }}</dd>
           </div>
-          <div class="flex justify-between">
-            <span class=" ">Node.js 版本:</span>
-            <span class="">{{ systemInfo.nodeVersion }}</span>
+          <div>
+            <dt>Node.js 版本</dt>
+            <dd>{{ systemInfo.nodeVersion }}</dd>
           </div>
-          <div class="flex justify-between">
-            <span class=" ">Electron 版本:</span>
-            <span class="">{{ systemInfo.electronVersion }}</span>
+          <div>
+            <dt>Electron 版本</dt>
+            <dd>{{ systemInfo.electronVersion }}</dd>
           </div>
-        </div>
-      </div>
-      
+        </dl>
+        <p v-if="!isDesktop" class="about-runtime-note">完整系统信息可在桌面应用中查看。</p>
+      </section>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { APP_VERSION } from '@ai-ssh/shared'
 
-// 应用版本号
-const appVersion = ref('Loading...')
+const appVersion = ref(APP_VERSION)
+const isDesktop = !!window.electronAPI
+const systemInfo = ref({ platform: '—', arch: '—', nodeVersion: '—', electronVersion: '—' })
 
-const systemInfo = ref({
-  platform: 'Windows 10',
-  arch: 'x64',
-  nodeVersion: '18.17.0',
-  electronVersion: '27.3.11'
-})
-
-onMounted(() => {
-  // 获取应用版本号
+onMounted(async () => {
   if (window.electronAPI?.getVersion) {
-    window.electronAPI.getVersion().then((version: string) => {
-      appVersion.value = version
-    }).catch(() => {
-      appVersion.value = 'Unknown'
-    })
+    try {
+      appVersion.value = await window.electronAPI.getVersion()
+    } catch {
+      // Use the build version if the native query is unavailable.
+    }
   }
-
-  // 获取系统信息
   if (window.electronAPI?.system?.getSystemInfo) {
-    window.electronAPI.system.getSystemInfo().then((info: any) => {
-      systemInfo.value = info
-    })
+    try {
+      systemInfo.value = await window.electronAPI.system.getSystemInfo()
+    } catch {
+      // Keep unavailable values explicit instead of showing stale sample data.
+    }
   }
 })
 </script>
 
 <style scoped>
 .about-view {
-  max-height: 100vh;
-  overflow-y: auto;
-  background: var(--vscode-bg);
-  background-attachment: fixed;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: clamp(20px, 4vw, 48px);
+  color: var(--prism-text);
+  font-family: var(--prism-font);
 }
-
 .about-content {
-  padding: 2rem 0;
+  width: min(760px, 100%);
+  margin: 0 auto;
 }
-
-.app-logo {
-  animation: float 3s ease-in-out infinite;
+.about-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 28px;
 }
-
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0);
+.about-mark {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
+  color: var(--vscode-accent);
+  background: var(--liquid-selected);
+  border: 1px solid var(--liquid-rim);
+  box-shadow: inset 0 1px var(--liquid-inner-light);
+  font-size: 29px;
+}
+.about-heading h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+.about-heading p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--prism-muted);
+}
+.version-badge {
+  margin-left: auto;
+  padding: 7px 12px;
+  border: 1px solid var(--prism-border);
+  border-radius: 999px;
+  color: var(--vscode-accent);
+  background: var(--liquid-selected);
+  font-size: 12px;
+}
+.about-panel {
+  padding: clamp(20px, 3vw, 28px);
+  margin-bottom: 18px;
+  background: var(--prism-surface);
+  border: 1px solid var(--liquid-rim);
+  border-radius: var(--prism-radius-panel);
+  box-shadow: var(--prism-shadow);
+  backdrop-filter: blur(22px) saturate(140%);
+}
+.about-panel h2 {
+  margin: 0 0 18px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.about-panel p {
+  font-size: 13px;
+  line-height: 1.8;
+  margin: 0;
+  color: var(--prism-muted);
+}
+.about-details {
+  margin: 0;
+}
+.about-details > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 10px 0;
+}
+.about-details > div + div {
+  border-top: 1px solid var(--prism-border);
+}
+.about-details dt {
+  color: var(--prism-muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+.about-details dd {
+  color: var(--prism-text);
+  margin: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+.stack-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 28px;
+}
+.stack-details > div {
+  display: block;
+  border: 0 !important;
+}
+.stack-details dd {
+  text-align: left;
+  margin-top: 5px;
+}
+.about-panel .about-runtime-note {
+  margin-top: 14px;
+  font-size: 12px;
+}
+@media (max-width: 600px) {
+  .about-heading {
+    gap: 12px;
   }
-  50% {
-    transform: translateY(-10px);
+  .version-badge {
+    margin-left: 0;
+  }
+  .stack-details {
+    grid-template-columns: 1fr;
   }
 }
 </style>

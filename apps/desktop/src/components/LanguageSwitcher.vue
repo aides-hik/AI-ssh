@@ -1,13 +1,14 @@
 <template>
   <div class="language-switcher">
-    <select 
-      v-model="currentLocale" 
+    <select
+      v-model="currentLocale"
       @change="handleChange"
-      class="form-select form-select-sm"
-      :title="$t('settings.language')"
+      class="language-select prism-input"
+      :data-prism-tooltip="$t('settings.language')"
+      :aria-label="$t('settings.language')"
     >
-      <option value="zh-CN">🇨🇳 简体中文</option>
-      <option value="en-US">🇺🇸 English</option>
+      <option value="zh-CN">简体中文</option>
+      <option value="en-US">English</option>
     </select>
   </div>
 </template>
@@ -24,7 +25,6 @@ function handleChange() {
   setLocale(currentLocale.value)
 
   // 显示切换成功提示
-
 }
 
 onMounted(() => {
@@ -34,12 +34,25 @@ onMounted(() => {
 
 <style scoped>
 .language-switcher {
-  display: inline-block;
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
 }
-
-.language-switcher select {
+.language-select {
+  min-width: min(160px, 100%);
+  max-width: 100%;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--prism-border);
+  border-radius: var(--prism-radius-control);
+  background-color: var(--prism-control);
+  color: var(--prism-text);
+  font: inherit;
+  font-size: 13px;
   cursor: pointer;
-  min-width: 140px;
+}
+.language-select:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 2px;
 }
 </style>
-

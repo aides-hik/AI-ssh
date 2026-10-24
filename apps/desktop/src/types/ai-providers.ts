@@ -1,4 +1,5 @@
-// AI 服务商主入口文件 - 支持 60+ 个服务商
+// AI 聊天服务目录；保留历史服务商 ID 以兼容用户配置。
+// 模型和接入状态的官方核对来源见 docs/ai-provider-catalog.md。
 
 export * from './ai-providers.types'
 
@@ -11,15 +12,15 @@ import { OPENSOURCE_PROVIDERS } from './ai-providers.opensource'
 import { SPECIALIZED_PROVIDERS } from './ai-providers.specialized'
 import type { ProviderConfig } from './ai-providers.types'
 
-// 合并所有服务商 (共 60+ 个)
+// 合并聊天预设、需自行配置的服务和历史兼容入口。
 export const DEFAULT_PROVIDERS: ProviderConfig[] = [
-  ...INTERNATIONAL_PROVIDERS,        // 9 个国际主流
-  ...CHINESE_PROVIDERS,              // 12 个中国主流
-  ...CHINESE_EXTENDED_PROVIDERS,     // 10 个中国其他
-  ...PLATFORM_PROVIDERS,             // 7 个开发者平台
-  ...CLOUD_PROVIDERS,                // 5 个云服务
-  ...OPENSOURCE_PROVIDERS,           // 10 个开源/小型
-  ...SPECIALIZED_PROVIDERS           // 8 个专业服务
+  ...INTERNATIONAL_PROVIDERS,
+  ...CHINESE_PROVIDERS,
+  ...CHINESE_EXTENDED_PROVIDERS,
+  ...PLATFORM_PROVIDERS,
+  ...CLOUD_PROVIDERS,
+  ...OPENSOURCE_PROVIDERS,
+  ...SPECIALIZED_PROVIDERS
 ]
 
 // 按类别导出

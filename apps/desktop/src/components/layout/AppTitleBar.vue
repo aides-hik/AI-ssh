@@ -1,9 +1,12 @@
 <template>
-  <div class="vscode-titlebar flex items-center text-vscode-fg select-none">
+  <div
+    class="vscode-titlebar flex items-center text-vscode-fg select-none"
+    @keydown.esc.prevent.stop="closeTitlebarMenus"
+  >
     <!-- 左侧：应用菜单和标题 -->
-    <div class="flex items-center space-x-4 pl-4">
+    <div class="titlebar-leading flex items-center space-x-4 pl-4">
       <!-- 应用图标和名称 -->
-      <div class="flex items-center space-x-2">
+      <div class="titlebar-brand flex items-center space-x-2">
         <svg
           class="text-vscode-accent"
           fill="currentColor"
@@ -16,7 +19,9 @@
           />
           <path d="M3 6l2 1.5L3 9v1l3-2V7L3 5v1zm4 3h3v1H7V9z" />
         </svg>
-        <span class="text-sm font-medium" data-testid="app-brand">{{ $t('welcome.appTitle') }}</span>
+        <span class="text-sm font-medium" data-testid="app-brand">{{
+          $t('welcome.appTitle')
+        }}</span>
       </div>
 
       <!-- 菜单栏 -->
@@ -24,6 +29,12 @@
         <button
           v-for="menu in menus"
           :key="menu.id"
+          :data-menu-id="menu.id"
+          type="button"
+          aria-haspopup="menu"
+          :aria-expanded="activeMenu === menu.id"
+          @click.stop="toggleMenu(menu.id, $event)"
+          @keydown.down.prevent="focusMenu(menu.id, $event)"
           @mouseenter="showMenu(menu.id, $event)"
           @mouseleave="() => hideMenu()"
           :class="['vscode-menu-item', { active: activeMenu === menu.id }]"
@@ -34,7 +45,7 @@
     </div>
 
     <!-- 中间：当前文件路径 -->
-    <div class="flex-1 flex justify-center">
+    <div class="titlebar-path flex-1 flex justify-center">
       <div class="text-xs text-vscode-fg-muted truncate max-w-md">
         {{ currentFilePath }}
       </div>
@@ -45,10 +56,12 @@
       <!-- 大模型切换按钮 -->
       <div class="relative">
         <button
-          @click="toggleModelDropdown"
-          class="vscode-window-control px-2"
+          @click="toggleModelDropdown($event)"
+          aria-haspopup="dialog"
+          :aria-expanded="showModelDropdown"
+          class="vscode-window-control model-picker-trigger px-2"
           style="width: auto; min-width: 46px"
-          :title="`${$t('titlebar.currentModel')}: ${currentModel.name}`"
+          :data-prism-tooltip="`${$t('titlebar.currentModel')}: ${currentModel.name}`"
         >
           <span class="text-xs font-medium whitespace-nowrap">{{ currentModel.shortName }}</span>
           <svg
@@ -65,8 +78,10 @@
         <!-- 模型选择下拉窗口 -->
         <div
           v-if="showModelDropdown"
-          class="model-dropdown absolute top-full right-0 mt-1 bg-vscode-bg-light border border-vscode-border shadow-lg z-50 rounded"
-          style="width: 280px"
+          class="model-dropdown prism-menu absolute top-full right-0 mt-1 z-50"
+          :style="modelDropdownStyle"
+          role="dialog"
+          :aria-label="$t('titlebar.selectAiModel')"
         >
           <!-- 标题栏 -->
           <div class="flex items-center justify-between px-3 py-2 border-b border-vscode-border">
@@ -76,30 +91,51 @@
             <button
               @click="openModelSettings"
               class="model-settings-btn p-1 rounded hover:bg-vscode-bg-lighter"
-              :title="$t('titlebar.modelSettings')"
+              :data-prism-tooltip="$t('titlebar.modelSettings')" :aria-label="$t('titlebar.modelSettings')"
             >
               <i class="bi bi-gear" style="font-size: 14px"></i>
             </button>
           </div>
 
+          <label class="titlebar-model-search">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input
+              ref="modelSearchInput"
+              v-model="modelSearch"
+              type="search"
+              :placeholder="locale === 'en-US' ? 'Search models or providers' : '搜索模型或服务商'"
+              :aria-label="locale === 'en-US' ? 'Search models or providers' : '搜索模型或服务商'"
+            />
+          </label>
           <!-- 模型列表 -->
-          <div class="py-1 max-h-96 overflow-y-auto">
+          <div class="titlebar-model-list py-1 overflow-y-auto">
             <div
-              v-if="availableModels.length === 0"
+              v-if="filteredModels.length === 0"
               class="px-3 py-4 text-center text-sm text-vscode-fg-muted"
             >
               <i class="bi bi-info-circle mr-1"></i>
-              {{ $t('titlebar.noAvailableModels') }}
+              {{
+                modelSearch
+                  ? locale === 'en-US'
+                    ? 'No matching models'
+                    : '没有找到匹配的模型'
+                  : $t('titlebar.noAvailableModels')
+              }}
             </div>
 
-            <template v-if="availableModels.length > 0">
+            <template v-if="filteredModels.length > 0">
               <div
                 class="px-3 py-2 text-xs font-medium text-vscode-fg-muted border-b border-vscode-border"
               >
-                我的模型
+                {{ locale === 'en-US' ? 'My models' : '我的模型' }}
               </div>
-              <div
-                v-for="model in availableModels"
+              <button
+                type="button"
+                v-for="model in filteredModels"
+                :disabled="model.disabled"
+                :aria-pressed="
+                  currentModel.id === model.id && currentModel.providerId === model.providerId
+                "
                 :key="`${model.providerId}-${model.id}`"
                 @click="selectModel(model)"
                 :class="[
@@ -134,7 +170,7 @@
                     />
                   </svg>
                 </div>
-              </div>
+              </button>
             </template>
           </div>
         </div>
@@ -144,7 +180,7 @@
       <button
         @click="handleQuickThemeToggle"
         class="vscode-window-control"
-        :title="`${$t('titlebar.currentTheme')}: ${currentNewThemeLabel}`"
+        :data-prism-tooltip="`${$t('titlebar.currentTheme')}: ${currentNewThemeLabel}`" :aria-label="`${$t('titlebar.currentTheme')}: ${currentNewThemeLabel}`"
       >
         <svg
           v-if="currentNewTheme.includes('light')"
@@ -182,7 +218,7 @@
       <button
         @click="minimizeWindow"
         class="vscode-window-control"
-        :title="$t('titlebar.minimize')"
+        :data-prism-tooltip="$t('titlebar.minimize')" :aria-label="$t('titlebar.minimize')"
       >
         <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
           <path d="M0 5h10v1H0z" />
@@ -191,7 +227,7 @@
       <button
         @click="maximizeWindow"
         class="vscode-window-control"
-        :title="$t('titlebar.maximize')"
+        :data-prism-tooltip="$t('titlebar.maximize')" :aria-label="$t('titlebar.maximize')"
       >
         <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
           <path d="M0 0v10h10V0H0zm1 1h8v8H1V1z" />
@@ -200,7 +236,7 @@
       <button
         @click="closeWindow"
         class="vscode-window-control vscode-window-control-close"
-        :title="$t('titlebar.close')"
+        :data-prism-tooltip="$t('titlebar.close')" :aria-label="$t('titlebar.close')"
       >
         <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
           <path
@@ -213,17 +249,22 @@
     <!-- 下拉菜单 -->
     <div
       v-if="activeMenu"
-      class="vscode-dropdown absolute bg-vscode-bg-light border border-vscode-border shadow-lg z-[9999]"
+      class="vscode-dropdown prism-menu absolute z-[9999]"
+      role="menu"
+      @keydown="handleMenuKeydown"
       :style="{
         left: menuPosition + 'px',
-        top: '37px' // 标题栏高度
+        top: 'calc(100% + 4px)'
       }"
       @mouseenter="clearHideMenuTimeout"
       @mouseleave="hideMenu"
       @click.stop
     >
       <template v-for="item in currentMenuItems" :key="item.id">
-        <div
+        <button
+          type="button"
+          role="menuitem"
+          :disabled="!item.action"
           v-if="item.type !== 'separator'"
           @mouseenter="clearHideMenuTimeout"
           @click="executeMenuAction(item.action || '')"
@@ -234,15 +275,66 @@
         >
           <span>{{ item.label }}</span>
           <span v-if="item.shortcut" class="text-xs text-vscode-fg-muted">{{ item.shortcut }}</span>
-        </div>
+        </button>
         <div v-else-if="item.type === 'separator'" class="vscode-dropdown-separator"></div>
       </template>
     </div>
+    <Teleport to="body">
+      <Transition name="shortcuts-dialog">
+        <div
+          v-if="shortcutsVisible"
+          class="shortcuts-overlay prism-dialog-overlay"
+          @click.self="closeShortcuts"
+        >
+          <LiquidSurface
+            class="shortcuts-dialog"
+            :radius="24"
+            :strength="28"
+            :blur="10"
+            :interactive="false"
+            role="dialog"
+            aria-modal="true"
+            :aria-labelledby="shortcutsTitleId"
+          >
+            <div
+              ref="shortcutsContent"
+              class="shortcuts-content"
+              tabindex="-1"
+              @keydown="handleShortcutsKeydown"
+            >
+              <div class="shortcuts-header">
+                <div class="shortcuts-heading">
+                  <i class="bi bi-keyboard" aria-hidden="true"></i>
+                  <h3 :id="shortcutsTitleId">{{ $t('titlebar.shortcuts') }}</h3>
+                </div>
+                <button
+                  type="button"
+                  class="shortcuts-close prism-button prism-button--quiet"
+                  :aria-label="$t('titlebar.close')"
+                  @click="closeShortcuts"
+                >
+                  <i class="bi bi-x-lg" aria-hidden="true"></i>
+                </button>
+              </div>
+              <dl class="shortcuts-list">
+                <div v-for="shortcut in keyboardShortcuts" :key="shortcut.keys">
+                  <dt>{{ shortcut.label }}</dt>
+                  <dd>
+                    <kbd>{{ shortcut.keys }}</kbd>
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          </LiquidSurface>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, inject } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, inject, nextTick, useId } from 'vue'
+import LiquidSurface from '@/components/common/LiquidSurface.vue'
 import { useI18n } from 'vue-i18n'
 import { themeService } from '../../services/theme.service'
 import { settingsService } from '../../services/settings.service'
@@ -259,7 +351,7 @@ const emit = defineEmits<{
   'open-settings': []
 }>()
 
-const { t: $t } = useI18n()
+const { t: $t, locale } = useI18n()
 const openNewTab =
   inject<(id: string, name: string, icon: string, path: string) => void>('openNewTab')
 
@@ -270,6 +362,51 @@ const currentFilePath = computed(() => $t('titlebar.appWelcome'))
 
 // 模型选择相关
 const showModelDropdown = ref(false)
+const modelSearch = ref('')
+const modelDropdownLeft = ref(8)
+const modelDropdownTop = ref(50)
+const modelDropdownStyle = computed(() => ({
+  left: `${modelDropdownLeft.value}px`,
+  top: `${modelDropdownTop.value}px`
+}))
+const modelSearchInput = ref<HTMLInputElement>()
+const shortcutsVisible = ref(false)
+const shortcutsContent = ref<HTMLElement>()
+const shortcutsTitleId = `shortcuts-${useId()}`
+let shortcutsTrigger: HTMLElement | null = null
+const keyboardShortcuts = computed(() => [
+  { keys: 'Ctrl + N', label: locale.value === 'en-US' ? 'New connection' : '新建连接' },
+  { keys: 'Ctrl + B', label: locale.value === 'en-US' ? 'Toggle sidebar' : '切换侧边栏' },
+  { keys: 'F11', label: $t('titlebar.fullscreen') },
+  { keys: 'Ctrl + K, Ctrl + T', label: $t('titlebar.toggleTheme') },
+  { keys: 'Ctrl + =', label: $t('titlebar.zoomIn') },
+  { keys: 'Ctrl + -', label: $t('titlebar.zoomOut') }
+])
+const closeShortcuts = () => {
+  shortcutsVisible.value = false
+  if (shortcutsTrigger?.isConnected) shortcutsTrigger.focus({ preventScroll: true })
+  shortcutsTrigger = null
+}
+const handleShortcutsKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    closeShortcuts()
+  } else if (event.key === 'Tab') {
+    event.preventDefault()
+    shortcutsContent.value?.querySelector<HTMLButtonElement>('button')?.focus()
+  }
+}
+const closeTitlebarMenus = () => {
+  const trigger = activeMenu.value
+    ? document.querySelector<HTMLButtonElement>(`[data-menu-id="${activeMenu.value}"]`)
+    : showModelDropdown.value
+      ? document.querySelector<HTMLButtonElement>('.model-picker-trigger')
+      : null
+  activeMenu.value = null
+  showModelDropdown.value = false
+  trigger?.focus({ preventScroll: true })
+}
 
 // 模型接口定义（用于标题栏显示）
 type TitleBarModel = TitleBarModelOption
@@ -295,6 +432,14 @@ const resetCurrentModel = () => {
 
 // 可用模型列表仅来自用户自己的本地配置。
 const availableModels = ref<TitleBarModel[]>([])
+const filteredModels = computed(() => {
+  const term = modelSearch.value.trim().toLocaleLowerCase()
+  return term
+    ? availableModels.value.filter(model =>
+        `${model.name} ${model.id} ${model.providerName}`.toLocaleLowerCase().includes(term)
+      )
+    : availableModels.value
+})
 
 // 从本地设置加载可用模型
 const loadAvailableModels = async () => {
@@ -380,6 +525,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('ai-provider-configs-updated', handleProviderConfigsUpdated)
   window.removeEventListener('settings-updated', handleSettingsUpdated)
   window.removeEventListener('theme-changed', handleThemeChange)
+  document.removeEventListener('click', handleClickOutside)
+  clearHideMenuTimeout()
 })
 
 // 当前主题标签（旧系统）
@@ -470,7 +617,8 @@ const currentMenuItems = computed(() => {
 // 菜单隐藏定时器
 let hideMenuTimeout: NodeJS.Timeout | null = null
 
-const showMenu = (menuId: string, event?: MouseEvent) => {
+const showMenu = (menuId: string, event?: MouseEvent | KeyboardEvent) => {
+  showModelDropdown.value = false
   // 清除延迟隐藏定时器
   if (hideMenuTimeout) {
     clearTimeout(hideMenuTimeout)
@@ -480,13 +628,40 @@ const showMenu = (menuId: string, event?: MouseEvent) => {
   activeMenu.value = menuId
   // 根据菜单ID和按钮位置计算菜单位置
   if (event) {
-    const target = event.target as HTMLElement
+    const target = event.currentTarget as HTMLElement
     const rect = target.getBoundingClientRect()
-    menuPosition.value = rect.left
+    menuPosition.value = Math.max(8, Math.min(rect.left, window.innerWidth - 248 - 8))
   } else {
     // 如果没有事件，根据菜单ID计算位置
     const menuIndex = ['file', 'edit', 'view', 'help'].indexOf(menuId)
     menuPosition.value = 100 + menuIndex * 80 // 估算位置
+  }
+}
+
+const toggleMenu = (menuId: string, event: MouseEvent) => showMenu(menuId, event)
+const focusMenu = async (menuId: string, event: KeyboardEvent) => {
+  showMenu(menuId, event)
+  await nextTick()
+  document
+    .querySelector<HTMLButtonElement>('.vscode-dropdown [role="menuitem"]:not(:disabled)')
+    ?.focus()
+}
+const handleMenuKeydown = (event: KeyboardEvent) => {
+  const controls = Array.from(
+    document.querySelectorAll<HTMLButtonElement>(
+      '.vscode-dropdown [role="menuitem"]:not(:disabled)'
+    )
+  )
+  if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+    event.preventDefault()
+    const index = controls.indexOf(document.activeElement as HTMLButtonElement)
+    const next =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? controls.length - 1
+          : (index + (event.key === 'ArrowDown' ? 1 : -1) + controls.length) % controls.length
+    controls[next]?.focus()
   }
 }
 
@@ -566,20 +741,12 @@ const executeMenuAction = async (action: string) => {
   }
 }
 
-// 显示快捷键模态框
-const showShortcutsModal = () => {
-  // 简单的快捷键显示，可以根据需要实现更复杂的功能
-  const shortcuts = [
-    'Ctrl+N: 新建连接',
-    'Ctrl+B: 切换侧边栏',
-    'F11: 全屏',
-    'Ctrl+K Ctrl+T: 切换主题',
-    'Ctrl+=: 放大',
-    'Ctrl+Shift+`: 新建终端'
-  ]
-
-  const message = shortcuts.join('\n')
-  alert(`键盘快捷键:\n\n${message}`)
+// Open immediately; focus does not wait for the entrance motion.
+const showShortcutsModal = async () => {
+  shortcutsTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  shortcutsVisible.value = true
+  await nextTick()
+  shortcutsContent.value?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true })
 }
 
 const minimizeWindow = () => {
@@ -603,12 +770,23 @@ const closeWindow = () => {
 // 主题切换
 
 // 模型切换相关方法
-const toggleModelDropdown = () => {
+const toggleModelDropdown = async (event?: MouseEvent) => {
   showModelDropdown.value = !showModelDropdown.value
 
   // 打开下拉菜单时重新加载配置，确保显示最新的模型列表
   if (showModelDropdown.value) {
+    modelSearch.value = ''
+    activeMenu.value = null
+    const rect = (event?.currentTarget as HTMLElement | null)?.getBoundingClientRect()
+    const width = Math.min(340, window.innerWidth - 16)
+    modelDropdownLeft.value = Math.max(
+      8,
+      Math.min((rect?.right ?? window.innerWidth - 8) - width, window.innerWidth - width - 8)
+    )
+    modelDropdownTop.value = (rect?.bottom ?? 46) + 4
     loadAvailableModels()
+    await nextTick()
+    modelSearchInput.value?.focus()
   }
 }
 
@@ -684,137 +862,356 @@ document.addEventListener('click', handleClickOutside)
 
 <style scoped>
 .vscode-titlebar {
-  background-color: var(--vscode-bg-light);
-  border-bottom: 1px solid var(--vscode-border);
-  -webkit-app-region: drag;
   position: relative;
+  min-width: 0;
+  color: var(--prism-text);
+  font-family: var(--prism-font);
+  background: var(--liquid-window-tint);
+  border-bottom: 1px solid var(--prism-border);
+  -webkit-app-region: drag;
+  z-index: 100;
 }
-
+.titlebar-leading {
+  min-width: 0;
+  flex-shrink: 0;
+}
+.titlebar-brand {
+  white-space: nowrap;
+}
+.titlebar-path {
+  min-width: 0;
+  padding-inline: 12px;
+}
 .vscode-titlebar > div:last-child {
   margin-left: auto;
   margin-right: 0;
 }
-
 .vscode-menu-item {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.875rem;
-  border-radius: 0.25rem;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: var(--prism-radius-small);
+  background: transparent;
+  color: var(--prism-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
   transition:
-    color 0.15s ease,
-    background-color 0.15s ease;
+    color 120ms var(--prism-ease),
+    background-color 120ms var(--prism-ease);
   -webkit-app-region: no-drag;
 }
-
-.vscode-menu-item:hover {
-  background-color: var(--vscode-bg-lighter);
-}
-
 .vscode-menu-item.active {
-  background-color: var(--vscode-bg-lighter);
+  background: var(--vscode-list-activeSelectionBackground);
 }
-
 .vscode-window-control {
-  width: 46px;
-  height: 37px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--vscode-fg);
+  width: 42px;
+  height: 46px;
+  padding: 0;
+  border: 0;
   background: transparent;
-  border: none;
+  color: var(--prism-text);
   cursor: pointer;
+  touch-action: manipulation;
   transition:
-    background-color 0.15s ease,
-    color 0.15s ease;
+    background-color 120ms var(--prism-ease),
+    color 120ms var(--prism-ease);
   -webkit-app-region: no-drag;
 }
-
-.vscode-window-control:hover {
-  background-color: var(--vscode-bg-lighter);
-  color: var(--vscode-fg);
+.model-picker-trigger {
+  max-width: 210px;
+  gap: 4px;
 }
-
-.vscode-window-control-close:hover {
-  background-color: var(--vscode-error) !important;
-  color: var(--vscode-button-foreground);
+.model-picker-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
+.vscode-menu-item:focus-visible,
+.vscode-window-control:focus-visible,
+.model-settings-btn:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: -3px;
+}
 .vscode-window-control svg {
+  flex-shrink: 0;
   opacity: 0.9;
 }
-
-.vscode-window-control:hover svg {
-  opacity: 1;
+.vscode-dropdown,
+.model-dropdown {
+  padding: 5px;
+  border: 1px solid var(--prism-border);
+  border-radius: var(--prism-radius-panel);
+  background: color-mix(in srgb, var(--prism-surface-raised) 91%, transparent);
+  color: var(--prism-text);
+  box-shadow: var(--prism-shadow);
+  backdrop-filter: blur(22px) saturate(1.2);
+  -webkit-app-region: no-drag;
 }
-
 .vscode-dropdown {
-  min-width: 200px;
-  padding: 4px 0;
-  background-color: var(--vscode-bg-light);
-  border-color: var(--vscode-border);
+  width: 248px;
+  max-width: calc(100vw - 16px);
 }
-
 .vscode-dropdown-item {
-  padding: 0.5rem 0.75rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 0.875rem;
+  width: 100%;
+  gap: 20px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--prism-radius-small);
+  background: transparent;
+  color: var(--prism-text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
   cursor: pointer;
-  transition: background-color 0.15s ease;
-  color: var(--vscode-fg);
+  transition: background-color 120ms var(--prism-ease);
 }
-
-.vscode-dropdown-item:hover {
-  background-color: var(--vscode-bg-lighter);
+.vscode-dropdown-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
-
-.vscode-dropdown-item[data-type='separator'] {
-  border-top: 1px solid var(--vscode-border);
-  margin: 0.25rem 0;
-  height: 1px;
-  padding: 0;
+.vscode-dropdown-item:focus-visible,
+.model-dropdown-item:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: -2px;
+  background: var(--vscode-list-hoverBackground);
 }
-
 .vscode-dropdown-separator {
-  border-top: 1px solid var(--vscode-border);
-  margin: 0.25rem 0;
   height: 1px;
+  margin: 5px;
+  background: var(--prism-border);
+}
+.model-dropdown {
+  position: fixed;
+  width: min(340px, calc(100vw - 16px));
+  margin-top: 0;
   padding: 0;
 }
-
-/* 模型下拉窗口样式 */
-.model-dropdown {
-  -webkit-app-region: no-drag;
-  box-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.3),
-    0 2px 4px -1px rgba(0, 0, 0, 0.2);
-}
-
-.model-dropdown-item:hover {
-  background: var(--vscode-accent);
-  color: var(--vscode-button-foreground);
-}
-
-.model-settings-btn {
-  transition: background-color 0.15s ease;
-  color: var(--vscode-fg);
-}
-
-.model-settings-btn:hover {
-  background-color: var(--vscode-bg-lighter);
-}
-
-.model-logo-container {
+.titlebar-model-search {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 8px;
+  margin: 10px;
+  padding: 0 10px;
+  border: 1px solid var(--prism-border);
+  border-radius: var(--prism-radius-control);
+  background: var(--prism-control);
+  color: var(--prism-muted);
 }
-
-.model-logo-container svg {
-  flex: 0 0 auto;
-  line-height: 1;
+.titlebar-model-search input {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 8px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--prism-text);
+  font: inherit;
+  font-size: 12px;
 }
-
-/* VSCode 风格窗口控制按钮完成 */
+.titlebar-model-search input::placeholder {
+  color: var(--prism-muted);
+}
+.titlebar-model-search:focus-within {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 1px;
+}
+.titlebar-model-list {
+  max-height: min(390px, calc(100dvh - 176px));
+  overscroll-behavior: contain;
+}
+.model-dropdown-item {
+  display: block;
+  width: calc(100% - 10px);
+  margin: 2px 5px;
+  border: 0;
+  border-radius: var(--prism-radius-control);
+  background: transparent;
+  font: inherit;
+  color: var(--prism-text);
+  text-align: left;
+}
+.model-dropdown-item[aria-pressed='true'] {
+  background: var(--vscode-list-activeSelectionBackground);
+}
+.model-dropdown-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.model-settings-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--prism-radius-small);
+  background: transparent;
+  color: var(--prism-muted);
+  cursor: pointer;
+  transition:
+    background-color 120ms var(--prism-ease),
+    color 120ms var(--prism-ease);
+}
+.shortcuts-overlay {
+  z-index: 10010;
+}
+.shortcuts-dialog {
+  --liquid-tint: var(--liquid-dialog-tint, color-mix(in srgb, var(--vscode-bg) 80%, transparent));
+  width: min(460px, calc(100vw - 40px));
+  max-height: calc(100dvh - 40px);
+  color: var(--prism-text);
+  box-shadow: var(--prism-shadow);
+}
+.shortcuts-content {
+  max-height: inherit;
+  overflow-y: auto;
+  outline: none;
+  font-family: var(--prism-font);
+}
+.shortcuts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px 16px;
+  border-bottom: 1px solid var(--prism-border);
+}
+.shortcuts-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.shortcuts-heading > i {
+  color: var(--vscode-accent);
+  font-size: 21px;
+}
+.shortcuts-header h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+.shortcuts-close {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: var(--prism-radius-small);
+}
+.shortcuts-list {
+  margin: 0;
+  padding: 14px 24px 20px;
+}
+.shortcuts-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 44px;
+}
+.shortcuts-list dt {
+  font-size: 13px;
+  font-weight: 400;
+}
+.shortcuts-list dd {
+  margin: 0;
+  flex-shrink: 0;
+}
+.shortcuts-list kbd {
+  display: inline-flex;
+  padding: 4px 7px;
+  border: 1px solid var(--prism-border);
+  border-radius: var(--prism-radius-small);
+  background: var(--prism-control);
+  color: var(--prism-muted);
+  font: 11px var(--prism-font);
+}
+.shortcuts-dialog-enter-active,
+.shortcuts-dialog-leave-active {
+  transition: opacity 180ms var(--prism-ease);
+}
+.shortcuts-dialog-enter-active .shortcuts-dialog,
+.shortcuts-dialog-leave-active .shortcuts-dialog {
+  transition: transform 180ms var(--prism-ease);
+}
+.shortcuts-dialog-enter-from,
+.shortcuts-dialog-leave-to {
+  opacity: 0;
+}
+.shortcuts-dialog-enter-from .shortcuts-dialog,
+.shortcuts-dialog-leave-to .shortcuts-dialog {
+  transform: translateY(6px) scale(0.985);
+}
+@media (hover: hover) and (pointer: fine) {
+  .vscode-menu-item:hover,
+  .vscode-window-control:hover,
+  .vscode-dropdown-item:hover:not(:disabled),
+  .model-dropdown-item:hover:not(:disabled),
+  .model-settings-btn:hover {
+    background: var(--vscode-list-hoverBackground);
+  }
+  .vscode-window-control-close:hover {
+    background: var(--prism-danger);
+    color: var(--prism-surface-raised);
+  }
+  .model-settings-btn:hover {
+    color: var(--prism-text);
+  }
+}
+@media (max-width: 1000px) {
+  .titlebar-path {
+    display: none;
+  }
+}
+@media (max-width: 680px) {
+  .titlebar-brand span {
+    display: none;
+  }
+  .titlebar-leading {
+    padding-left: 10px;
+    gap: 8px;
+  }
+  .model-picker-trigger {
+    max-width: 150px;
+  }
+  .vscode-menu-item {
+    padding-inline: 7px;
+  }
+}
+@media (max-width: 500px) {
+  .titlebar-leading > div + div {
+    margin-left: 0;
+  }
+  .titlebar-leading {
+    gap: 0;
+  }
+  .vscode-window-control {
+    width: 30px;
+  }
+  .model-picker-trigger {
+    max-width: 110px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shortcuts-dialog-enter-active .shortcuts-dialog,
+  .shortcuts-dialog-leave-active .shortcuts-dialog {
+    transition: none;
+  }
+  .shortcuts-dialog-enter-from .shortcuts-dialog,
+  .shortcuts-dialog-leave-to .shortcuts-dialog {
+    transform: none;
+  }
+}
+html[data-motion='off'] .shortcuts-dialog,
+html[data-motion='off'] .shortcuts-overlay,
+html[data-transitions='off'] .shortcuts-dialog,
+html[data-transitions='off'] .shortcuts-overlay {
+  transition: none !important;
+  transform: none !important;
+}
 </style>

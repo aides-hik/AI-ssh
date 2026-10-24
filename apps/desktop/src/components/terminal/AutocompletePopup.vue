@@ -140,7 +140,7 @@ function scrollToSelected() {
   if (selectedItem) {
     selectedItem.scrollIntoView({
       block: 'nearest',
-      behavior: 'smooth'
+      behavior: 'instant'
     })
   }
 }
@@ -170,17 +170,19 @@ defineExpose({
 .autocomplete-popup {
   position: fixed;
   z-index: 9999;
-  background: var(--vscode-editorSuggestWidget-background, #2D2D2D);
-  border: 1px solid var(--vscode-editorSuggestWidget-border, #454545);
-  border-radius: 4px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-  min-width: 300px;
-  max-width: 500px;
+  background: var(--prism-surface);
+  border: 1px solid var(--liquid-rim);
+  border-radius: 14px;
+  box-shadow: var(--prism-shadow);
+  min-width: min(300px, calc(100vw - 24px));
+  max-width: min(500px, calc(100vw - 24px));
   max-height: 320px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--prism-font);
+  backdrop-filter: blur(24px) saturate(1.3);
+  color: var(--prism-text);
 }
 
 .autocomplete-header {
@@ -188,16 +190,18 @@ defineExpose({
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background: var(--vscode-editorSuggestWidget-selectedBackground, #2A2D2E);
-  border-bottom: 1px solid var(--vscode-editorSuggestWidget-border, #454545);
+  background: transparent;
+  border-bottom: 1px solid var(--prism-border);
   font-size: 12px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .autocomplete-title {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--vscode-editorSuggestWidget-foreground, #CCCCCC);
+  color: var(--prism-text);
   font-weight: 500;
 }
 
@@ -215,9 +219,9 @@ defineExpose({
 
 .autocomplete-hint kbd {
   padding: 2px 6px;
-  background: var(--vscode-keybindingLabel-background);
-  border: 1px solid var(--vscode-keybindingLabel-border);
-  border-radius: 3px;
+  background: var(--prism-control);
+  border: 1px solid var(--prism-border);
+  border-radius: var(--prism-radius-small);
   color: var(--vscode-keybindingLabel-foreground);
   font-family: monospace;
   font-size: 10px;
@@ -227,23 +231,25 @@ defineExpose({
 .autocomplete-list {
   overflow-y: auto;
   overflow-x: hidden;
+  padding: 4px;
 }
 
 .autocomplete-item {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 6px 10px;
   cursor: pointer;
   transition: background-color 0.1s;
   border-left: 2px solid transparent;
-  min-height: 24px;
+  min-height: 32px;
+  border-radius: var(--prism-radius-small);
 }
 
 .autocomplete-item:hover,
 .autocomplete-item.active {
-  background: var(--vscode-editorSuggestWidget-selectedBackground, #2A2D2E);
-  border-left-color: var(--vscode-editorSuggestWidget-focusHighlightForeground, #007ACC);
+  background: var(--vscode-list-hoverBackground);
+  border-left-color: var(--vscode-accent);
 }
 
 .item-icon {
@@ -254,7 +260,7 @@ defineExpose({
 }
 
 .item-name {
-  color: var(--vscode-editorSuggestWidget-foreground, #CCCCCC);
+  color: var(--prism-text);
   font-family: var(--vscode-editor-font-family, 'Courier New', monospace);
   font-size: 12px;
   font-weight: 400;
@@ -266,7 +272,7 @@ defineExpose({
 
 .item-type {
   padding: 2px 8px;
-  border-radius: 3px;
+  border-radius: var(--prism-radius-small);
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -274,33 +280,33 @@ defineExpose({
 }
 
 .type-badge-subcommand {
-  background: rgba(76, 175, 80, 0.2);
-  color: #81c784;
+  background: var(--prism-success-bg);
+  color: var(--prism-success);
 }
 
 .type-badge-option {
-  background: rgba(33, 150, 243, 0.2);
-  color: #64b5f6;
+  background: var(--prism-info-bg);
+  color: var(--prism-info);
 }
 
 .type-badge-arg {
-  background: rgba(255, 152, 0, 0.2);
-  color: #ffb74d;
+  background: var(--prism-warning-bg);
+  color: var(--prism-warning);
 }
 
 .type-badge-file {
-  background: rgba(156, 39, 176, 0.2);
-  color: #ba68c8;
+  background: var(--prism-info-bg);
+  color: var(--prism-info);
 }
 
 .type-badge-folder {
-  background: rgba(233, 30, 99, 0.2);
-  color: #f06292;
+  background: var(--prism-warning-bg);
+  color: var(--prism-warning);
 }
 
 .type-badge-special {
-  background: rgba(158, 158, 158, 0.2);
-  color: #bdbdbd;
+  background: var(--prism-control);
+  color: var(--prism-muted);
 }
 
 .item-description {
@@ -323,12 +329,12 @@ defineExpose({
 }
 
 .autocomplete-list::-webkit-scrollbar-thumb {
-  background: var(--vscode-scrollbarSlider-background);
+  background: var(--prism-border);
   border-radius: 5px;
 }
 
 .autocomplete-list::-webkit-scrollbar-thumb:hover {
-  background: var(--vscode-scrollbarSlider-hoverBackground);
+  background: var(--prism-muted);
 }
 </style>
 

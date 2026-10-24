@@ -7,11 +7,11 @@
         <h3>{{ connectionInfo?.name || '服务器环境文档' }}</h3>
       </div>
       <div class="header-actions">
-        <button @click="handleSave" class="btn btn-sm btn-primary" :disabled="saving">
-          <i class="bi bi-save" :class="{ 'spinning': saving }"></i>
+        <button @click="handleSave" class="prism-button prism-button--primary" :disabled="saving">
+          <i class="bi bi-save" :class="{ spinning: saving }"></i>
           {{ saving ? '保存中...' : '保存' }}
         </button>
-        <button @click="handleClose" class="btn btn-sm btn-secondary">
+        <button @click="handleClose" class="prism-button">
           <i class="bi bi-x"></i>
           关闭
         </button>
@@ -24,7 +24,7 @@
     </div>
 
     <!-- 状态提示 -->
-    <div v-if="saveStatus" class="save-status" :class="saveStatus.type">
+    <div v-if="saveStatus" class="save-status" :class="saveStatus.type" role="status">
       <i :class="saveStatus.icon"></i>
       {{ saveStatus.message }}
     </div>
@@ -35,6 +35,8 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import * as monaco from 'monaco-editor'
 import '@/config/monaco-workers'
+import '@/assets/styles/monaco-glass.css'
+import { applyPrismMonacoTheme, observePrismMonacoTheme } from '@/config/monaco-theme'
 import { docStorageService } from '@/services/doc-storage.service'
 
 interface Props {
@@ -56,6 +58,7 @@ const emit = defineEmits<{
 
 const editorContainer = ref<HTMLElement>()
 let editor: monaco.editor.IStandaloneCodeEditor | null = null
+let disposeTheme = () => {}
 const saving = ref(false)
 const saveStatus = ref<{ type: 'success' | 'error'; icon: string; message: string } | null>(null)
 
@@ -130,7 +133,8 @@ onMounted(async () => {
   editor = monaco.editor.create(editorContainer.value, {
     value: '# 加载中...',
     language: 'markdown',
-    theme: 'vs-dark',
+    theme: applyPrismMonacoTheme(),
+    extraEditorClassName: 'prism-editor',
     automaticLayout: true,
     minimap: { enabled: true },
     fontSize: 14,
@@ -140,20 +144,19 @@ onMounted(async () => {
     tabSize: 2,
     insertSpaces: true,
     folding: true,
-    renderWhitespace: 'selection',
+    renderWhitespace: 'selection'
   })
+  disposeTheme = observePrismMonacoTheme(editor)
 
   // 加载文档
   await loadDocument()
-
-  // 设置主题为 VSCode 风格
-  monaco.editor.setTheme('vs-dark')
 
   // 聚焦编辑器
   editor.focus()
 })
 
 onBeforeUnmount(() => {
+  disposeTheme()
   editor?.dispose()
 })
 </script>
@@ -163,7 +166,13 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--vscode-editor-background);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  background: var(--prism-surface);
+  color: var(--prism-text);
+  font-family: var(--prism-font);
 }
 
 .editor-header {
@@ -172,13 +181,16 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   padding: 12px 16px;
   border-bottom: 1px solid var(--vscode-panel-border);
-  background: var(--vscode-panel-background);
+  background: transparent;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .header-left i {
@@ -191,15 +203,20 @@ onBeforeUnmount(() => {
   font-size: 16px;
   font-weight: 600;
   color: var(--vscode-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .header-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .editor-content {
   flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -209,27 +226,30 @@ onBeforeUnmount(() => {
 }
 
 .save-status {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  padding: 12px 16px;
-  border-radius: 4px;
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  max-width: calc(100% - 32px);
+  padding: 10px 14px;
+  border-radius: var(--prism-radius-control);
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 14px;
   z-index: 1000;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--prism-shadow);
+  border: 1px solid var(--prism-border);
+  backdrop-filter: blur(20px);
 }
 
 .save-status.success {
-  background: var(--vscode-editorGutter-addedBackground);
-  color: var(--vscode-button-foreground);
+  background: color-mix(in srgb, var(--prism-success) 12%, var(--prism-surface-raised));
+  color: var(--prism-success);
 }
 
 .save-status.error {
-  background: var(--vscode-error);
-  color: var(--vscode-button-foreground);
+  background: color-mix(in srgb, var(--prism-danger) 12%, var(--prism-surface-raised));
+  color: var(--prism-danger);
 }
 
 .spinning {

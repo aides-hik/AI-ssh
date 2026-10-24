@@ -8,6 +8,7 @@ export interface ReasoningCapability {
   protocol: 'chat-completions' | 'responses'
   omitTemperature: boolean
   reason?: 'unknown' | 'unsupported' | 'interface' | 'unconfigured'
+  thinkingMode?: ModelReasoningConfig['thinkingMode']
 }
 
 const EFFORTS: ReasoningEffort[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
@@ -72,8 +73,10 @@ function openAIProfile(id: string): ReasoningCapability | null {
 }
 
 function declaredProfile(config: ModelReasoningConfig): ReasoningCapability | null {
-  if (!['openai', 'openrouter', 'deepseek', 'qwen', 'gemini'].includes(config.protocol)) return null
+  if (!['openai', 'openrouter', 'deepseek', 'qwen', 'gemini', 'anthropic'].includes(config.protocol)) return null
   const efforts = EFFORTS.filter(effort => Array.isArray(config.supportedEfforts) && config.supportedEfforts.includes(effort) && !(config.mandatory && effort === 'none'))
+  if (efforts.length && config.supportsToggle && !config.mandatory && ['deepseek', 'openrouter'].includes(config.protocol) && !efforts.includes('none')) efforts.unshift('none')
+  if (config.protocol === 'anthropic' && efforts.length) return profile('anthropic', efforts, { omitTemperature: true, thinkingMode: config.thinkingMode || 'adaptive', kind: config.thinkingMode === 'budget' ? 'budget' : 'effort' })
   if (config.protocol === 'qwen') {
     const budgets = STANDARD.filter(effort => efforts.includes(effort))
     if (budgets.length) return profile('qwen', [...(config.supportsToggle && !config.mandatory ? ['none' as const] : []), ...budgets], { kind: 'budget' })
@@ -90,12 +93,12 @@ export function getReasoningCapability(provider: AIProvider | null, model: AIMod
   const id = modelId(model.id)
   const isOpenRouter = provider.id === 'openrouter' || host === 'openrouter.ai'
   const knownOpenAI = openAIProfile(id)
-  // Anthropic's compatibility layer ignores reasoning_effort. Do not offer ineffective controls.
-  if (host === 'api.anthropic.com') return unavailable('interface', true)
+  const nativeClaude = provider.config?.runtimeProviderId === 'anthropic' || provider.id === 'anthropic' || host === 'api.anthropic.com'
   if (model.reasoning === false) return { ...unavailable('unsupported', knownOpenAI?.omitTemperature), protocol: isOpenRouter ? 'chat-completions' : knownOpenAI?.protocol || 'chat-completions' }
   if (model.reasoning) {
     const declared = declaredProfile(model.reasoning)
     if (declared) {
+      if (declared.adapter === 'anthropic' && !nativeClaude && model.parameters?.apiStyle !== 'anthropic') return unavailable('interface', true)
       if (isOpenRouter) return { ...declared, adapter: 'openrouter', protocol: 'chat-completions' }
       const known = knownOpenAI
       if (known && declared.adapter === 'openai') return { ...declared, protocol: known.protocol, omitTemperature: true }
@@ -104,6 +107,15 @@ export function getReasoningCapability(provider: AIProvider | null, model: AIMod
     return { ...unavailable('unknown', knownOpenAI?.omitTemperature), protocol: isOpenRouter ? 'chat-completions' : knownOpenAI?.protocol || 'chat-completions' }
   }
   if (isOpenRouter) return unavailable('unknown') // Refresh /models to obtain per-model reasoning metadata.
+  if (nativeClaude || model.parameters?.apiStyle === 'anthropic') {
+    if (['claude-fable-5-1', 'claude-mythos-5-1', 'claude-fable-5', 'claude-mythos-5', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5', 'claude-sonnet-5', 'claude-haiku-5-5'].some(base => matches(id, base))) {
+      return profile('anthropic', [...STANDARD, 'xhigh', 'max'], { omitTemperature: true, thinkingMode: 'always' })
+    }
+    if (['claude-opus-4-7', 'claude-opus-4-8'].some(base => matches(id, base))) return profile('anthropic', [...STANDARD, 'xhigh', 'max'], { omitTemperature: true, thinkingMode: 'adaptive' })
+    if (['claude-opus-4-6', 'claude-sonnet-4-6'].some(base => matches(id, base))) return profile('anthropic', [...STANDARD, 'max'], { omitTemperature: true, thinkingMode: 'adaptive' })
+    if (['claude-3-7-sonnet', 'claude-sonnet-4', 'claude-opus-4', 'claude-opus-4-1', 'claude-sonnet-4-5', 'claude-haiku-4-5'].some(base => matches(id, base))) return profile('anthropic', ['none', ...STANDARD], { omitTemperature: true, thinkingMode: 'budget', kind: 'budget' })
+    return unavailable('unknown')
+  }
   const openai = knownOpenAI
   if (openai) return openai
 
@@ -159,6 +171,14 @@ export function buildReasoningRequest(provider: AIProvider, model: AIModel, sele
       case 'qwen':
         body.enable_thinking = valid !== 'none'
         if (valid === 'low' || valid === 'medium' || valid === 'high') body.thinking_budget = { low: 1024, medium: 4096, high: 8192 }[valid]
+        break
+      case 'anthropic':
+        if (capability.thinkingMode === 'budget') {
+          body.thinking = valid === 'none' ? { type: 'disabled' } : { type: 'enabled', budget_tokens: { low: 1024, medium: 4096, high: 8192 }[valid as 'low'] }
+        } else {
+          body.output_config = { effort: valid }
+          if (capability.thinkingMode === 'adaptive') body.thinking = { type: 'adaptive' }
+        }
         break
     }
   }

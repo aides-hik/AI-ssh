@@ -2,6 +2,7 @@ import { DEFAULT_PROVIDERS } from '../types/ai-providers'
 import type { AIModel, AIProvider } from '../types/ai-providers.types'
 import type { AIProviderConfig } from './settings.service'
 import { isRetiredManagedProvider, isRetiredModelSelection } from '../utils/standalone-providers'
+import { mergeSavedProviderWithDefault } from '../utils/provider-config-merge'
 
 export interface PersistedSelectedModel {
   source?: 'local' | 'official'
@@ -30,26 +31,7 @@ function findLocalProvider(settingsProviders: AIProviderConfig[], providerId: st
     return null
   }
 
-  return {
-    ...defaultProvider,
-    ...savedConfig,
-    apiKey: savedConfig.apiKey || '',
-    enabled: savedConfig.enabled !== undefined ? savedConfig.enabled : false,
-    isDefault: false,
-    models:
-      savedConfig.models && savedConfig.models.length > 0
-        ? savedConfig.models.map(configModel => {
-            const defaultModel = defaultProvider.models.find(model => model.id === configModel.id)
-            return defaultModel
-              ? {
-                  ...defaultModel,
-                  ...configModel,
-                  enabled: configModel.enabled !== undefined ? configModel.enabled : true
-                }
-              : configModel
-          })
-        : defaultProvider.models
-  }
+  return mergeSavedProviderWithDefault(defaultProvider, savedConfig)
 }
 
 export function resolveSelectedModel(
@@ -67,7 +49,22 @@ export function resolveSelectedModel(
       return null
     }
 
+    const providerId = parsed.providerId || parsed.provider?.id
+    const modelId = parsed.modelId || parsed.model?.id
+    if (providerId && modelId && settingsProviders.some(provider => provider.id === providerId)) {
+      const provider = findLocalProvider(settingsProviders, providerId)
+      const model = provider?.models.find(model => model.id === modelId)
+      // Saved snapshots must never restore stale credentials or a disabled/retired preset.
+      if (!provider || !model || provider.enabled === false || model.enabled === false) return null
+      return {
+        source: 'local', providerId: provider.id, providerName: provider.name,
+        modelId: model.id, modelName: model.name,
+        supportsDirectClientCall: true, supportsManagedServerCall: false, provider, model
+      }
+    }
+
     if (parsed.provider && parsed.model) {
+      if (parsed.provider.enabled === false || parsed.model.enabled === false) return null
       return {
         source: 'local',
         providerId: parsed.provider.id,

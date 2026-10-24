@@ -181,7 +181,7 @@ async function importConnections() {
   overflow: auto;
   container-type: inline-size;
   color: var(--vscode-fg);
-  font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  font-family: var(--prism-font);
 }
 .welcome-shell {
   width: min(1060px, 100%);
@@ -250,13 +250,12 @@ async function importConnections() {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  color: #b3c6e0;
-  background: #101b2e;
-  border: 1px solid #233752;
+  color: var(--prism-text);
+  background: var(--prism-surface);
+  border: 1px solid var(--liquid-rim);
   border-radius: 21px;
-  box-shadow:
-    0 12px 29px #16345d1c,
-    inset 0 1px #ffffff08;
+  box-shadow: var(--prism-shadow);
+  backdrop-filter: blur(22px) saturate(140%);
   overflow: hidden;
 }
 .welcome-session-bar {
@@ -265,10 +264,10 @@ async function importConnections() {
   justify-content: space-between;
   gap: 12px;
   padding: 15px 20px;
-  border-bottom: 1px solid #2b405944;
+  border-bottom: 1px solid var(--prism-border);
   font-size: 11px;
   line-height: 1.4;
-  background: #142138;
+  background: var(--liquid-selected);
 }
 .welcome-session-bar > span:first-child {
   display: flex;
@@ -276,11 +275,11 @@ async function importConnections() {
   gap: 9px;
 }
 .welcome-session-bar > span:first-child > i {
-  color: #83a0c5;
+  color: var(--vscode-accent);
   font-size: 13px;
 }
 .welcome-session-bar > span:last-child {
-  color: #7f96b5;
+  color: var(--prism-muted);
   font-size: 10px;
 }
 .welcome-session-empty {
@@ -296,7 +295,7 @@ async function importConnections() {
   width: 176px;
   height: 94px;
   margin: 0 0 18px;
-  color: #a7ceff;
+  color: var(--vscode-accent);
   flex: 0 0 auto;
 }
 .welcome-connection-art > svg {
@@ -313,25 +312,23 @@ async function importConnections() {
   height: 52px;
   display: grid;
   place-items: center;
-  color: #8faecc;
+  color: var(--vscode-accent);
   font-size: 23px;
-  border: 1px solid #4d6a8b50;
+  border: 1px solid var(--liquid-rim);
   border-radius: 16px;
-  background: linear-gradient(150deg, #243a5647, #17253a);
-  box-shadow:
-    0 5px 14px #080f1e26,
-    inset 0 1px #ffffff08;
+  background: var(--liquid-selected);
+  box-shadow: var(--prism-shadow);
 }
 .welcome-session h2 {
   margin: 0;
-  color: #d1dff0;
+  color: var(--prism-text);
   font-size: 21px;
   font-weight: 500;
   line-height: 1.5;
   letter-spacing: -0.3px;
 }
 .welcome-session-empty > p {
-  color: #8a9fb9;
+  color: var(--prism-muted);
   font-size: 11px;
   line-height: 1.9;
   margin: 10px 0 24px;
@@ -352,21 +349,25 @@ async function importConnections() {
   font-family: inherit;
   font-size: 11px;
   line-height: 1.5;
-  border-radius: 11px;
+  border-radius: var(--prism-radius-control);
   cursor: pointer;
   touch-action: manipulation;
   min-height: 38px;
+  transition:
+    background-color var(--prism-duration) ease,
+    border-color var(--prism-duration) ease,
+    color var(--prism-duration) ease;
 }
 .welcome-create {
-  color: #f7fbff;
-  background: #3979d8;
-  border: 1px solid #4989e7;
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-accent);
+  border: 1px solid var(--vscode-accent);
   box-shadow: inset 0 1px #ffffff20;
 }
 .welcome-import {
-  color: #9fb9d8;
-  background: #1c2c43;
-  border: 1px solid #344a65;
+  color: var(--prism-text);
+  background: var(--prism-control);
+  border: 1px solid var(--prism-border);
 }
 .welcome-session-actions button:disabled {
   opacity: 0.6;
@@ -375,12 +376,12 @@ async function importConnections() {
 .welcome-session-empty > .welcome-import-message {
   margin: 20px 0 0;
   max-width: 340px;
-  color: #a7c5e5;
+  color: var(--prism-info);
   font-size: 10px;
   overflow-wrap: anywhere;
 }
 .welcome-session-empty > .welcome-import-message.has-error {
-  color: #edb5b8;
+  color: var(--prism-danger);
 }
 .welcome-session-foot {
   display: flex;
@@ -388,9 +389,9 @@ async function importConnections() {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px;
-  border-top: 1px solid #2b405944;
+  border-top: 1px solid var(--prism-border);
   padding: 10px 20px;
-  color: #7892b1;
+  color: var(--prism-muted);
   font-size: 9px;
 }
 .welcome-session-foot > span:first-child {
@@ -495,18 +496,18 @@ async function importConnections() {
   outline-offset: 4px;
 }
 .welcome-session button:focus-visible {
-  outline-color: #8ebdff;
+  outline-color: var(--vscode-accent);
 }
 @media (hover: hover) and (pointer: fine) {
   .welcome-settings:hover {
     color: var(--vscode-accent);
   }
   .welcome-create:hover {
-    background: #4385e8;
+    background: var(--vscode-accent-hover);
   }
   .welcome-import:not(:disabled):hover {
-    background: #283c57;
-    color: #cee0f5;
+    background: var(--vscode-list-hoverBackground);
+    color: var(--prism-text);
   }
   .welcome-ai button:hover {
     text-decoration: underline;

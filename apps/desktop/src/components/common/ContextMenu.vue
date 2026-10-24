@@ -2,45 +2,48 @@
   <Teleport to="body">
     <div
       v-if="visible"
-      ref="menuRef"
-      class="context-menu"
-      :style="menuStyle"
-      @click.stop
-    >
-      <template v-for="(item, index) in items" :key="index">
-        <!-- 分隔线 -->
-        <div v-if="item.type === 'divider'" class="menu-divider"></div>
-        
-        <!-- 菜单项 -->
-        <div
-          v-else
-          class="menu-item"
-          :class="{
-            'disabled': item.disabled,
-            'danger': item.danger
-          }"
-          @click="handleItemClick(item)"
-        >
-          <i v-if="item.icon" class="menu-icon" :class="item.icon"></i>
-          <span class="menu-label">{{ item.label }}</span>
-          <span v-if="item.shortcut" class="menu-shortcut">{{ item.shortcut }}</span>
-          <i v-if="item.children" class="menu-arrow bi bi-chevron-right"></i>
-        </div>
-      </template>
-    </div>
-    
-    <!-- 遮罩层（用于点击外部关闭） -->
-    <div
-      v-if="visible"
       class="context-menu-backdrop"
       @click="close"
       @contextmenu.prevent="close"
     ></div>
+    <div
+      v-if="visible"
+      ref="menuRef"
+      class="context-menu prism-menu"
+      role="menu"
+      aria-label="操作菜单"
+      :style="menuStyle"
+      tabindex="-1"
+      @keydown="handleKeydown"
+      @click.stop
+    >
+      <template v-for="(item, index) in items" :key="index">
+        <div
+          v-if="item.type === 'divider'"
+          class="menu-divider prism-menu-divider"
+          role="separator"
+        ></div>
+        <button
+          v-else
+          class="menu-item prism-menu-item"
+          role="menuitem"
+          :class="{ disabled: item.disabled, danger: item.danger }"
+          :disabled="item.disabled"
+          :data-danger="item.danger || undefined"
+          @click="handleItemClick(item)"
+        >
+          <i v-if="item.icon" class="menu-icon" :class="item.icon" aria-hidden="true"></i>
+          <span class="menu-label">{{ item.label }}</span>
+          <span v-if="item.shortcut" class="menu-shortcut">{{ item.shortcut }}</span>
+          <i v-if="item.children" class="menu-arrow bi bi-chevron-right" aria-hidden="true"></i>
+        </button>
+      </template>
+    </div>
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, onBeforeUnmount } from 'vue'
 
 export interface ContextMenuItem {
   type?: 'item' | 'divider'
@@ -48,171 +51,117 @@ export interface ContextMenuItem {
   icon?: string
   shortcut?: string
   disabled?: boolean
-  danger?: boolean  // 危险操作（如删除），显示为红色
-  children?: ContextMenuItem[]  // 子菜单（暂不实现）
+  danger?: boolean
+  children?: ContextMenuItem[]
   onClick?: () => void
 }
-
-interface Props {
-  items: ContextMenuItem[]
-  visible: boolean
-  x: number
-  y: number
-}
-
-const props = defineProps<Props>()
-const emit = defineEmits<{
-  close: []
-}>()
-
+const props = defineProps<{ items: ContextMenuItem[]; visible: boolean; x: number; y: number }>()
+const emit = defineEmits<{ close: [] }>()
 const menuRef = ref<HTMLElement | null>(null)
-
-// 计算菜单位置（避免超出屏幕）
-const menuStyle = computed(() => {
-  let x = props.x
-  let y = props.y
-  
-  if (menuRef.value) {
-    const menuRect = menuRef.value.getBoundingClientRect()
-    const windowWidth = window.innerWidth
-    const windowHeight = window.innerHeight
-    
-    // 如果右侧超出屏幕，向左偏移
-    if (x + menuRect.width > windowWidth) {
-      x = windowWidth - menuRect.width - 10
-    }
-    
-    // 如果底部超出屏幕，向上偏移
-    if (y + menuRect.height > windowHeight) {
-      y = windowHeight - menuRect.height - 10
-    }
-    
-    // 确保不超出左侧和顶部
-    x = Math.max(10, x)
-    y = Math.max(10, y)
+const menuStyle = ref({ left: '8px', top: '8px' })
+let previous: HTMLElement | null = null
+let revision = 0
+function position() {
+  const bounds = menuRef.value?.getBoundingClientRect()
+  if (!bounds) return
+  menuStyle.value = {
+    left: `${Math.max(8, Math.min(props.x, innerWidth - bounds.width - 8))}px`,
+    top: `${Math.max(8, Math.min(props.y, innerHeight - bounds.height - 8))}px`
   }
-  
-  return {
-    left: `${x}px`,
-    top: `${y}px`
-  }
-})
-
-// 监听可见性变化，调整位置
-watch(() => props.visible, async (val) => {
-  if (val) {
+}
+function release() {
+  revision++
+  window.removeEventListener('resize', position)
+  if (menuRef.value?.contains(document.activeElement) && previous?.isConnected)
+    previous.focus({ preventScroll: true })
+  previous = null
+}
+watch(
+  () => [props.visible, props.x, props.y, props.items] as const,
+  async ([visible]) => {
+    if (!visible) {
+      release()
+      return
+    }
+    if (!previous)
+      previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const pending = ++revision
     await nextTick()
-    // 触发重新计算位置
-    if (menuRef.value) {
-      menuRef.value.style.opacity = '1'
-    }
-  }
-})
-
+    if (!props.visible || pending !== revision) return
+    position()
+    window.addEventListener('resize', position)
+    const first =
+      menuRef.value?.querySelector<HTMLElement>('button:not(:disabled)') || menuRef.value
+    first?.focus({ preventScroll: true })
+  },
+  { immediate: true }
+)
 function handleItemClick(item: ContextMenuItem) {
   if (item.disabled) return
-  
-  item.onClick?.()
   close()
+  item.onClick?.()
 }
-
 function close() {
+  release()
   emit('close')
 }
-
-// 键盘事件：Esc 关闭
-function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && props.visible) {
-    close()
-  }
+function handleKeydown(event: KeyboardEvent) {
+  const controls = [
+    ...(menuRef.value?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') || [])
+  ]
+  const index = controls.indexOf(document.activeElement as HTMLButtonElement)
+  let next: HTMLButtonElement | undefined
+  if (event.key === 'ArrowDown') next = controls[(index + 1) % controls.length]
+  else if (event.key === 'ArrowUp') next = controls[(index - 1 + controls.length) % controls.length]
+  else if (event.key === 'Home') next = controls[0]
+  else if (event.key === 'End') next = controls.at(-1)
+  else if (event.key === 'Escape' || event.key === 'Tab') close()
+  else return
+  event.preventDefault()
+  event.stopPropagation()
+  next?.focus()
 }
-
-// 添加键盘监听
-if (typeof window !== 'undefined') {
-  window.addEventListener('keydown', handleKeydown)
-}
+onBeforeUnmount(release)
 </script>
 
 <style scoped>
 .context-menu-backdrop {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   z-index: 9998;
   background: transparent;
 }
-
 .context-menu {
   position: fixed;
   z-index: 9999;
-  min-width: 180px;
-  background: var(--bs-body-bg);
-  border: 1px solid var(--bs-border-color);
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  padding: 4px;
-  opacity: 0;
-  transition: opacity 0.15s ease;
+  min-width: min(200px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 16px);
+  overflow: auto;
+  outline: none;
 }
-
-.menu-item {
-  display: flex;
-  align-items: center;
-  padding: 8px 12px;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: all 0.15s ease;
-  font-size: 0.875rem;
-  gap: 10px;
-  user-select: none;
-}
-
-.menu-item:hover:not(.disabled) {
-  background: var(--bs-secondary-bg);
-}
-
-.menu-item.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.menu-item.danger {
-  color: var(--bs-danger);
-}
-
-.menu-item.danger:hover:not(.disabled) {
-  background: var(--bs-danger-bg-subtle);
-}
-
 .menu-icon {
   width: 18px;
-  font-size: 0.875rem;
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  color: var(--prism-muted);
   text-align: center;
 }
-
+.menu-item.danger .menu-icon {
+  color: inherit;
+}
 .menu-label {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
-
 .menu-shortcut {
-  font-size: 0.75rem;
-  color: var(--bs-secondary-color);
-  opacity: 0.7;
+  margin-left: 20px;
+  color: var(--prism-muted);
+  font-size: 11px;
+  white-space: nowrap;
 }
-
 .menu-arrow {
-  font-size: 0.75rem;
-  color: var(--bs-secondary-color);
-  margin-left: auto;
-}
-
-.menu-divider {
-  height: 1px;
-  background: var(--bs-border-color);
-  margin: 4px 0;
+  font-size: 10px;
+  color: var(--prism-muted);
 }
 </style>
-

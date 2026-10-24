@@ -23,7 +23,7 @@
           </button>
           <button
             class="vscode-button sidebar-folder-button"
-            :title="$t('ssh.newFolder')"
+            :data-prism-tooltip="$t('ssh.newFolder')"
             :aria-label="$t('ssh.newFolder')"
             @click="createRootFolder"
           >
@@ -99,35 +99,57 @@
     </div>
 
     <!-- 输入对话框 -->
-    <div v-if="showInputDialog" class="input-dialog-overlay" @click.self="closeInputDialog">
-      <div class="input-dialog">
-        <div class="input-dialog-header">
-          <h3 class="text-sm font-medium text-vscode-fg">{{ inputDialogTitle }}</h3>
-          <button @click="closeInputDialog" class="vscode-icon-button">
-            <i class="bi bi-x"></i>
-          </button>
-        </div>
-        <div class="input-dialog-body">
-          <input
-            ref="inputDialogInput"
-            v-model="inputDialogValue"
-            type="text"
-            :placeholder="inputDialogPlaceholder"
-            class="form-input-full"
-            @keyup.enter="confirmInputDialog"
-            @keyup.escape="closeInputDialog"
-          />
-        </div>
-        <div class="input-dialog-footer">
-          <button @click="closeInputDialog" class="vscode-button">
-            {{ $t('ssh.cancel') }}
-          </button>
-          <button @click="confirmInputDialog" class="vscode-button primary">
-            {{ $t('ssh.confirm') }}
-          </button>
+    <Teleport to="body">
+      <div
+        v-if="showInputDialog"
+        class="input-dialog-overlay prism-dialog-overlay"
+        @click.self="closeInputDialog"
+      >
+        <div
+          class="input-dialog prism-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="sidebar-input-title"
+        >
+          <div class="input-dialog-header">
+            <h3 id="sidebar-input-title" class="text-sm font-medium text-vscode-fg">
+              {{ inputDialogTitle }}
+            </h3>
+            <button
+              type="button"
+              @click="closeInputDialog"
+              class="vscode-icon-button"
+              :aria-label="$t('ssh.cancel')"
+            >
+              <i class="bi bi-x"></i>
+            </button>
+          </div>
+          <div class="input-dialog-body">
+            <input
+              ref="inputDialogInput"
+              v-model="inputDialogValue"
+              type="text"
+              :placeholder="inputDialogPlaceholder"
+              class="form-input-full"
+              @keyup.enter="confirmInputDialog"
+              @keyup.escape="closeInputDialog"
+            />
+          </div>
+          <div class="input-dialog-footer">
+            <button @click="closeInputDialog" class="vscode-button">
+              {{ $t('ssh.cancel') }}
+            </button>
+            <button
+              @click="confirmInputDialog"
+              class="vscode-button primary"
+              :disabled="!inputDialogValue.trim()"
+            >
+              {{ $t('ssh.confirm') }}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
@@ -628,775 +650,188 @@ const confirmInputDialog = () => {
 
 <style scoped>
 .vscode-sidebar-container {
-  background: var(--vscode-bg-light);
-  color: var(--vscode-fg);
+  min-width: 0;
+  background: transparent;
+  color: var(--prism-text);
+  font-family: var(--prism-font);
 }
 
 .vscode-sidebar-header {
-  background: var(--vscode-bg-light);
+  background: transparent;
 }
 
 .vscode-button {
-  padding: 6px 12px;
-  font-size: 13px;
-  font-family:
-    'Segoe UI',
-    system-ui,
-    -apple-system,
-    sans-serif;
-  border: 1px solid var(--vscode-border);
-  border-radius: 2px;
-  background: var(--vscode-bg-light);
-  color: var(--vscode-fg);
-  cursor: pointer;
-  transition: all 0.1s ease;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 26px;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid var(--prism-border);
+  border-radius: var(--prism-radius-control);
+  background: var(--prism-control);
+  color: var(--prism-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color var(--prism-duration) var(--prism-ease),
+    border-color var(--prism-duration) var(--prism-ease),
+    color var(--prism-duration) var(--prism-ease);
 }
 
 .connection-list-actions {
   display: flex;
   gap: 8px;
 }
-
 .connection-list-actions .primary {
   flex: 1;
 }
-
-.vscode-button:hover {
-  background: var(--vscode-bg-lighter);
-  border-color: var(--vscode-accent);
+.sidebar-folder-button {
+  width: 36px;
+  padding: 0;
 }
 
-.vscode-button:focus {
-  outline: 1px solid var(--vscode-accent);
-  outline-offset: 2px;
+.vscode-button:focus-visible,
+.vscode-icon-button:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 3px;
 }
-
-.vscode-button:active {
-  background: var(--vscode-bg);
-}
-
-/* 主要按钮样式 */
 .vscode-button.primary {
   background: var(--vscode-accent);
   color: var(--vscode-button-foreground);
   border-color: var(--vscode-accent);
 }
-
-.vscode-button.primary:hover {
-  background: var(--vscode-accent-hover);
-  border-color: var(--vscode-accent-hover);
+.vscode-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
-
-.vscode-button.primary:active {
-  background: var(--vscode-accent-hover);
+.vscode-button:active:not(:disabled) {
+  opacity: 0.8;
 }
 
 .vscode-tree-title {
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--vscode-fg-muted);
+  color: var(--prism-muted);
+  text-transform: none;
+  letter-spacing: 0;
 }
-
 .vscode-tree-item {
   display: flex;
   align-items: center;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.875rem;
+  min-height: 34px;
+  padding: 6px 8px;
+  border-radius: var(--prism-radius-small);
+  font-size: 13px;
   cursor: pointer;
-  border-radius: 0.25rem;
-  transition: background-color 0.1s ease;
+  transition: background-color var(--prism-duration) var(--prism-ease);
 }
-
-.vscode-tree-item:hover {
-  background: var(--vscode-bg-lighter);
-}
-
-.vscode-tree-actions {
-  margin-left: auto;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  display: flex;
-  gap: 0.25rem;
-}
-
-.vscode-tree-item:hover .vscode-tree-actions {
-  opacity: 1;
-}
-
 .vscode-icon-button {
-  width: 1.5rem;
-  height: 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.25rem;
-  transition: color 0.15s ease;
-  color: var(--vscode-fg-muted);
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--prism-radius-small);
+  background: transparent;
+  color: var(--prism-muted);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color var(--prism-duration) var(--prism-ease),
+    color var(--prism-duration) var(--prism-ease);
 }
-
-.vscode-icon-button:hover {
-  color: var(--vscode-fg);
-  background: var(--vscode-bg-lighter);
-}
-
 .vscode-icon-button i {
-  font-size: 11px;
+  font-size: 18px;
 }
 
-/* Bootstrap Icons 图标字体支持 */
-.bi-plus::before {
-  content: '➕';
+.sidebar-empty {
+  overflow-wrap: anywhere;
 }
-.bi-hdd-network::before {
-  content: '🖥️';
+.sidebar-empty .vscode-button {
+  margin: 14px auto 0;
 }
-.bi-play::before {
-  content: '▶️';
+.sidebar-empty[role='status']:has(.vscode-button) {
+  margin-top: 8px;
+  padding: 16px 12px;
+  border: 1px solid color-mix(in srgb, var(--prism-danger) 24%, transparent);
+  border-radius: var(--prism-radius-control);
+  background: var(--prism-danger-bg);
+  color: var(--prism-danger);
 }
-.bi-pencil::before {
-  content: '✏️';
-}
-.bi-chat-dots::before {
-  content: '💬';
-}
-.bi-folder-plus::before {
-  content: '📁';
-}
-.bi-folder::before {
-  content: '📂';
-}
-.bi-terminal::before {
-  content: '💻';
-}
-.bi-clock-history::before {
-  content: '🕒';
+.sidebar-search:focus-within {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 2px;
 }
 
-[class^='bi-'] {
-  font-style: normal;
-  display: inline-block;
-  width: 1rem;
-  height: 1rem;
-  text-align: center;
-}
-
-/* 颜色变量 */
-.text-vscode-accent {
-  color: var(--vscode-accent);
-}
-
-.text-vscode-success {
-  color: var(--vscode-success);
-}
-
-.text-vscode-warning {
-  color: var(--vscode-warning);
-}
-
-.text-vscode-info {
-  color: var(--vscode-accent);
-}
-
-.text-vscode-fg-muted {
-  color: var(--vscode-fg-muted);
-}
-
-/* 输入对话框样式 */
 .input-dialog-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5); /* 半透明遮罩，保持黑色 */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
+  padding: 20px;
+  z-index: 10000;
 }
-
 .input-dialog {
-  background: var(--vscode-bg-light);
-  border: 1px solid var(--vscode-border);
-  border-radius: 4px;
-  width: 400px;
-  max-width: 90vw;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  width: min(100%, 420px);
+  min-width: 0;
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
 }
-
-.input-dialog-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--vscode-border);
-}
-
-.input-dialog-body {
-  padding: 16px;
-}
-
+.input-dialog-header,
 .input-dialog-footer {
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--vscode-border);
-}
-
-.form-input-full {
-  width: 100%;
-  padding: 8px 12px;
-  background: var(--vscode-input-bg);
-  border: 1px solid var(--vscode-border);
-  border-radius: 4px;
-  color: var(--vscode-fg);
-  font-size: 13px;
-  outline: none;
-}
-
-.form-input-full:focus {
-  border-color: var(--vscode-accent);
-}
-
-/* 文档管理选项卡 */
-.doc-tabs-header {
-  display: flex;
-  border-bottom: 1px solid var(--vscode-border);
-  background: var(--vscode-bg-light);
-}
-
-.doc-tab {
-  flex: 1;
-  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border: none;
-  background: transparent;
-  color: var(--vscode-fg-muted);
-  cursor: pointer;
-  transition: all 0.2s;
-  font-size: 0.875rem;
-  position: relative;
-}
-
-.doc-tab:hover {
-  background: var(--vscode-bg-lighter);
-  color: var(--vscode-fg);
-}
-
-.doc-tab.active {
-  color: var(--vscode-fg);
-  font-weight: 500;
-}
-
-.doc-tab.active::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--vscode-accent);
-}
-
-.doc-tab i {
-  font-size: 0.875rem;
-}
-
-.doc-tab.icon-only {
-  flex: 0 0 auto;
-  min-width: 2.5rem;
-  padding: 0.75rem 0.5rem;
-}
-
-.doc-tab.icon-only span {
-  display: none;
-}
-
-/* 搜索输入框 */
-.search-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.search-icon {
-  position: absolute;
-  left: 0.75rem;
-  color: var(--vscode-fg-muted);
-  pointer-events: none;
-}
-
-.search-input {
-  width: 100%;
-  padding: 0.5rem 2rem 0.5rem 2.5rem;
-  background: var(--vscode-input-bg);
-  border: 1px solid var(--vscode-input-border);
-  color: var(--vscode-input-fg);
-  border-radius: 6px;
-  font-size: 0.875rem;
-  transition: all 0.2s;
-}
-
-.search-input:focus {
-  outline: none;
-  border-color: var(--vscode-focus-border);
-  background: var(--vscode-bg-light);
-}
-
-.search-input::placeholder {
-  color: var(--vscode-fg-muted);
-  opacity: 0.6;
-}
-
-.search-clear {
-  position: absolute;
-  right: 0.5rem;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  color: var(--vscode-fg-muted);
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.search-clear:hover {
-  background: var(--vscode-bg-lighter);
-  color: var(--vscode-fg);
-}
-
-/* 搜索选项按钮 */
-.search-options {
-  display: flex;
-  gap: 4px;
-  padding: 0 2px;
-}
-
-.search-option-btn {
-  min-width: 28px;
-  height: 28px;
-  padding: 0 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--vscode-fg-muted);
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-size: 12px;
-}
-
-.search-option-btn:hover {
-  background: var(--vscode-bg-lighter);
-  color: var(--vscode-fg);
-}
-
-.search-option-btn.active {
-  background: var(--vscode-accent);
-  color: white;
-  border-color: var(--vscode-accent);
-}
-
-.search-option-btn i {
-  font-size: 14px;
-}
-
-/* 搜索结果头部 */
-.search-results-header {
-  display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 6px 8px;
-  margin-bottom: 4px;
+  gap: 12px;
+  padding: 18px 22px;
 }
-
-.icon-btn-xs {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  color: var(--vscode-fg-muted);
-  border-radius: 3px;
-  cursor: pointer;
-  transition: all 0.2s;
+.input-dialog-header {
+  border-bottom: 1px solid var(--prism-border);
 }
-
-.icon-btn-xs:hover {
-  background: var(--vscode-bg-lighter);
-  color: var(--vscode-fg);
-}
-
-/* 搜索结果组 */
-.search-result-group {
-  margin-bottom: 2px;
-}
-
-.search-result-file {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.15s;
-}
-
-.search-result-file:hover {
-  background: var(--vscode-bg-lighter);
-}
-
-.chevron-icon {
-  font-size: 12px;
-  color: var(--vscode-fg-muted);
-  flex-shrink: 0;
-}
-
-.file-icon {
+.input-dialog-header h3 {
+  margin: 0;
   font-size: 16px;
-  color: var(--vscode-accent);
-  flex-shrink: 0;
-}
-
-.file-name {
-  font-size: 13px;
-  color: var(--vscode-fg);
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.file-path {
-  font-size: 11px;
-  color: var(--vscode-fg-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.match-count {
-  padding: 2px 6px;
-  background: var(--vscode-accent);
-  color: white;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 500;
-  flex-shrink: 0;
-}
-
-/* 匹配内容预览 */
-.search-matches {
-  margin-left: 28px;
-  margin-top: 2px;
-  margin-bottom: 4px;
-}
-
-.search-match-item {
-  display: flex;
-  gap: 8px;
-  padding: 4px 8px;
-  font-size: 12px;
-  cursor: pointer;
-  border-radius: 3px;
-  transition: all 0.15s;
-}
-
-.search-match-item:hover {
-  background: var(--vscode-bg-lighter);
-}
-
-.match-line-number {
-  color: var(--vscode-fg-muted);
-  min-width: 32px;
-  text-align: right;
-  font-family: monospace;
-  flex-shrink: 0;
-}
-
-.match-content {
-  color: var(--vscode-fg);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: monospace;
-}
-
-/* 搜索高亮 */
-:deep(.search-highlight) {
-  background: rgba(var(--vscode-accent-rgb, 0, 122, 204), 0.3);
-  color: var(--vscode-fg);
-  padding: 1px 2px;
-  border-radius: 2px;
   font-weight: 600;
 }
-
-/* 空状态 */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 24px;
-  text-align: center;
+.input-dialog-body {
+  padding: 22px;
 }
-
-.empty-state i {
-  font-size: 48px;
-  color: var(--vscode-fg-muted);
-  opacity: 0.3;
-  margin-bottom: 16px;
+.input-dialog-footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--prism-border);
 }
-
-.empty-state p {
-  color: var(--vscode-fg);
-  margin-bottom: 8px;
-}
-
-.empty-state .hint {
-  font-size: 12px;
-  color: var(--vscode-fg-muted);
-}
-
-.hint-list {
-  margin-top: 16px;
-  font-size: 12px;
-  color: var(--vscode-fg-muted);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.hint-list kbd {
-  background: var(--vscode-bg-lighter);
-  padding: 2px 6px;
-  border-radius: 3px;
-  border: 1px solid var(--vscode-border);
-  font-size: 11px;
-  font-family: monospace;
-}
-
-/* 标星文档列表 */
-.starred-files-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.starred-file-item {
-  display: flex;
-  align-items: center;
-  padding: 0.5rem;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.1s ease;
-  gap: 0.5rem;
-}
-
-.starred-file-item:hover {
-  background: var(--vscode-bg-lighter);
-}
-
-.starred-file-item .file-icon {
-  flex-shrink: 0;
-  font-size: 1rem;
-  color: var(--bs-info);
-}
-
-.starred-file-item .file-info {
-  flex: 1;
+.form-input-full {
+  width: 100%;
   min-width: 0;
+  min-height: 40px;
+  padding: 9px 12px;
+  background: var(--prism-control);
+  border: 1px solid var(--prism-border);
+  border-radius: var(--prism-radius-control);
+  color: var(--prism-text);
+  font: inherit;
+  transition: border-color var(--prism-duration) var(--prism-ease);
+}
+.form-input-full:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 2px;
+}
+.form-input-full::placeholder {
+  color: var(--prism-muted);
 }
 
-.starred-file-item .file-name {
-  font-size: 0.8125rem;
-  color: var(--vscode-fg);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.starred-file-item .file-path {
-  font-size: 0.7rem;
-  color: var(--vscode-fg-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.starred-file-item .star-icon {
-  flex-shrink: 0;
-  font-size: 0.875rem;
-  color: #ffc107;
-  opacity: 0.7;
-  transition:
-    opacity 0.2s ease,
-    transform 0.2s ease;
-  padding: 0.25rem;
-  border-radius: 4px;
-}
-
-.starred-file-item .star-icon.clickable {
-  cursor: pointer;
-}
-
-.starred-file-item .star-icon.clickable:hover {
-  opacity: 1;
-  transform: scale(1.15);
-  background: rgba(255, 193, 7, 0.1);
-}
-
-/* 使用最多文档列表 */
-.most-used-files-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.most-used-file-item {
-  display: flex;
-  align-items: center;
-  padding: 0.5rem;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.1s ease;
-  gap: 0.5rem;
-}
-
-.most-used-file-item:hover {
-  background: var(--vscode-bg-lighter);
-}
-
-.most-used-file-item .file-icon {
-  flex-shrink: 0;
-  font-size: 1rem;
-  color: var(--bs-info);
-}
-
-.most-used-file-item .file-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.most-used-file-item .file-name {
-  font-size: 0.8125rem;
-  color: var(--vscode-fg);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.most-used-file-item .file-path {
-  font-size: 0.7rem;
-  color: var(--vscode-fg-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.most-used-file-item .usage-badge {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.125rem 0.5rem;
-  border-radius: 12px;
-  background: var(--vscode-bg-lighter);
-  font-size: 0.75rem;
-  color: var(--vscode-fg-muted);
-}
-
-.most-used-file-item .usage-badge i {
-  font-size: 0.7rem;
-}
-
-.most-used-file-item .usage-badge .count {
-  font-weight: 500;
-  color: var(--vscode-accent);
-}
-
-/* 最近使用文档列表 */
-.recent-files-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.recent-file-item {
-  display: flex;
-  align-items: center;
-  padding: 0.5rem;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.1s ease;
-  gap: 0.5rem;
-}
-
-.recent-file-item:hover {
-  background: var(--vscode-bg-lighter);
-}
-
-.recent-file-item .file-icon {
-  flex-shrink: 0;
-  font-size: 1rem;
-  color: var(--bs-success);
-}
-
-.recent-file-item .file-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.recent-file-item .file-name {
-  font-size: 0.8125rem;
-  color: var(--vscode-fg);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.recent-file-item .file-path {
-  font-size: 0.7rem;
-  color: var(--vscode-fg-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.recent-file-item .time-badge {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.125rem 0.5rem;
-  border-radius: 12px;
-  background: var(--vscode-bg-lighter);
-  font-size: 0.7rem;
-  color: var(--vscode-fg-muted);
-}
-
-.recent-file-item .time-badge i {
-  font-size: 0.7rem;
-}
-
-.recent-file-item .time-badge .time {
-  font-weight: 500;
+@media (hover: hover) and (pointer: fine) {
+  .vscode-button:hover:not(:disabled),
+  .vscode-tree-item:hover,
+  .vscode-icon-button:hover {
+    background: var(--vscode-list-hoverBackground);
+  }
+  .vscode-button:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--vscode-accent) 35%, var(--prism-border));
+  }
+  .vscode-button.primary:hover:not(:disabled) {
+    background: var(--vscode-accent-hover);
+    border-color: var(--vscode-accent-hover);
+  }
+  .vscode-icon-button:hover {
+    color: var(--prism-text);
+  }
 }
 </style>

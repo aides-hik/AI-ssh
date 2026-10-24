@@ -148,12 +148,12 @@
               <button
                 class="action-btn primary"
                 @click="downloadFile(file)"
-                :title="file.type === 'directory' ? '下载文件夹' : '下载文件'"
+                :data-prism-tooltip="file.type === 'directory' ? '下载文件夹' : '下载文件'"
               >
                 <i class="bi bi-download"></i>
                 <span>下载</span>
               </button>
-              <button class="action-btn danger" @click="deleteFile(file)" title="删除">
+              <button class="action-btn danger" @click="deleteFile(file)" data-prism-tooltip="删除">
                 <i class="bi bi-trash"></i>
                 <span>删除</span>
               </button>
@@ -188,7 +188,7 @@
           v-if="hasActiveUploads"
           class="upload-progress-indicator"
           @click="showUploadManager = true"
-          title="点击查看上传详情"
+          data-prism-tooltip="点击查看上传详情"
         >
           <i class="bi bi-upload"></i>
           <div class="progress-info">
@@ -219,7 +219,7 @@
           v-if="hasActiveDownloads"
           class="download-progress-indicator"
           @click="showDownloadManager = true"
-          title="点击查看下载详情"
+          data-prism-tooltip="点击查看下载详情"
         >
           <i class="bi bi-download"></i>
           <div class="progress-info">
@@ -249,7 +249,7 @@
       class="create-folder-overlay"
       @click.self="cancelCreateFolder"
     >
-      <div class="create-folder-dialog">
+      <div class="create-folder-dialog" role="dialog" aria-modal="true" aria-label="新建文件夹">
         <div class="modal-header">
           <h3>新建文件夹</h3>
           <button class="close-btn" @click="cancelCreateFolder">
@@ -287,7 +287,7 @@
       class="download-manager-overlay"
       @click.self="showDownloadManager = false"
     >
-      <div class="download-manager-modal">
+      <div class="download-manager-modal" role="dialog" aria-modal="true" aria-label="下载管理器">
         <div class="modal-header">
           <h3>下载管理器</h3>
           <button class="close-btn" @click="showDownloadManager = false">
@@ -342,7 +342,7 @@
                   v-if="task.status === 'downloading' || task.status === 'pending'"
                   class="task-btn cancel"
                   @click="cancelDownload(task.id)"
-                  title="取消下载"
+                  data-prism-tooltip="取消下载" aria-label="取消下载"
                 >
                   <i class="bi bi-x-lg"></i>
                 </button>
@@ -350,7 +350,7 @@
                   v-else
                   class="task-btn remove"
                   @click="removeDownloadTask(task.id)"
-                  title="移除"
+                  data-prism-tooltip="移除" aria-label="移除"
                 >
                   <i class="bi bi-trash"></i>
                 </button>
@@ -377,7 +377,7 @@
       class="upload-manager-overlay"
       @click.self="showUploadManager = false"
     >
-      <div class="upload-manager-modal">
+      <div class="upload-manager-modal" role="dialog" aria-modal="true" aria-label="上传管理器">
         <div class="modal-header">
           <h3>上传管理器</h3>
           <button class="close-btn" @click="showUploadManager = false">
@@ -425,7 +425,7 @@
                   v-if="task.status === 'uploading' || task.status === 'pending'"
                   class="task-btn cancel"
                   @click="cancelUploadTask(task.id)"
-                  title="取消上传"
+                  data-prism-tooltip="取消上传" aria-label="取消上传"
                 >
                   <i class="bi bi-x"></i>
                 </button>
@@ -433,7 +433,7 @@
                   v-else
                   class="task-btn remove"
                   @click="removeUploadTask(task.id)"
-                  title="移除"
+                  data-prism-tooltip="移除" aria-label="移除"
                 >
                   <i class="bi bi-trash"></i>
                 </button>
@@ -2188,15 +2188,20 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--vscode-bg);
+  background: transparent;
+  color: var(--prism-text);
+  font-family: var(--prism-font);
+  min-width: 0;
+  min-height: 0;
+  container: file-workspace / inline-size;
 }
 
 .file-manager-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
-  background: var(--vscode-bg-lighter);
+  padding: 12px 16px;
+  background: transparent;
   border-bottom: 1px solid var(--vscode-border);
 }
 
@@ -2216,8 +2221,8 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
-  border-radius: 3px;
+  padding: 4px 9px;
+  border-radius: 999px;
   font-size: 11px;
   font-weight: 500;
 }
@@ -2227,15 +2232,15 @@ onBeforeUnmount(() => {
 }
 
 .status-badge.connected {
-  color: var(--vscode-editorGutter-addedBackground);
-  background-color: rgba(var(--vscode-editorGutter-addedBackground-rgb, 22, 174, 96), 0.15);
-  border: 1px solid var(--vscode-editorGutter-addedBackground);
+  color: var(--prism-success);
+  background-color: var(--prism-success-bg);
+  border: 1px solid var(--prism-success);
 }
 
 .status-badge.disconnected {
-  color: var(--vscode-editorGutter-deletedBackground);
-  background-color: rgba(var(--vscode-editorGutter-deletedBackground-rgb, 239, 68, 68), 0.15);
-  border: 1px solid var(--vscode-editorGutter-deletedBackground);
+  color: var(--prism-danger);
+  background-color: var(--prism-danger-bg);
+  border: 1px solid var(--prism-danger);
 }
 
 .toolbar {
@@ -2244,7 +2249,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   padding: 12px;
   border-bottom: 1px solid var(--vscode-border);
-  background: var(--vscode-bg-light);
+  background: transparent;
 }
 
 .toolbar-left,
@@ -2258,13 +2263,15 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: var(--vscode-bg);
+  background: var(--prism-control);
   border: 1px solid var(--vscode-border);
-  border-radius: 4px;
+  border-radius: var(--prism-radius-control);
   color: var(--vscode-fg);
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
+  min-height: 34px;
+  font-family: inherit;
 }
 
 .toolbar-btn:hover:not(:disabled) {
@@ -2293,9 +2300,9 @@ onBeforeUnmount(() => {
 }
 
 .toolbar-btn.danger:hover:not(:disabled) {
-  background: var(--vscode-inputValidation-errorBackground);
-  border-color: var(--vscode-inputValidation-errorBorder);
-  color: var(--vscode-button-foreground);
+  background: var(--prism-danger-bg);
+  border-color: color-mix(in srgb, var(--prism-danger) 35%, transparent);
+  color: var(--prism-danger);
 }
 
 .path-bar {
@@ -2304,19 +2311,21 @@ onBeforeUnmount(() => {
   gap: 10px;
   padding: 12px;
   border-bottom: 1px solid var(--vscode-border);
-  background: var(--vscode-bg-light);
+  background: transparent;
 }
 
 .path-input {
   flex: 1;
   padding: 6px 12px;
-  background: var(--vscode-bg-input);
+  background: var(--prism-control);
   border: 1px solid var(--vscode-border);
-  border-radius: 4px;
+  border-radius: var(--prism-radius-control);
   color: var(--vscode-fg);
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 13px;
   outline: none;
+  min-width: 0;
+  min-height: 36px;
 }
 
 .path-input:focus {
@@ -2331,6 +2340,7 @@ onBeforeUnmount(() => {
   position: relative;
   border: 1px solid transparent;
   transition: border-color 0.2s ease;
+  min-height: 0;
 }
 
 .file-list-wrapper.drag-upload-active,
@@ -2344,8 +2354,8 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
-  color: var(--vscode-button-foreground);
+  background: color-mix(in srgb, var(--prism-surface-raised) 92%, transparent);
+  color: var(--prism-text);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2355,10 +2365,12 @@ onBeforeUnmount(() => {
   text-align: center;
   z-index: 10;
   border: 2px dashed var(--vscode-accent);
+  backdrop-filter: blur(12px);
+  border-radius: var(--prism-radius-control);
 }
 
 .file-drop-overlay.download {
-  background: rgba(var(--vscode-accent-rgb, 0, 122, 204), 0.15);
+  background: var(--prism-info-bg);
   color: var(--vscode-fg);
 }
 
@@ -2372,7 +2384,7 @@ onBeforeUnmount(() => {
   padding: 6px 12px;
   background: var(--vscode-badge-background);
   border: 1px solid var(--vscode-accent);
-  border-radius: 4px;
+  border-radius: var(--prism-radius-small);
   color: var(--vscode-badge-foreground);
   font-size: 13px;
   font-weight: 500;
@@ -2381,16 +2393,16 @@ onBeforeUnmount(() => {
 
 .file-list-header {
   display: grid;
-  grid-template-columns: 40px 1fr 100px 150px 100px;
+  grid-template-columns: 32px minmax(0, 1fr) 90px 136px 132px;
   gap: 12px;
-  padding: 6px 12px;
-  background: var(--vscode-bg-lighter);
+  padding: 10px 16px;
+  background: color-mix(in srgb, var(--prism-control) 58%, transparent);
   border-bottom: 1px solid var(--vscode-border);
   font-size: 11px;
   font-weight: 600;
   color: var(--vscode-fg-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .file-list {
@@ -2398,6 +2410,8 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--vscode-border) transparent;
+  min-height: 0;
+  background: color-mix(in srgb, var(--prism-surface-raised) 68%, transparent);
 }
 
 .file-list::-webkit-scrollbar {
@@ -2410,7 +2424,7 @@ onBeforeUnmount(() => {
 
 .file-list::-webkit-scrollbar-thumb {
   background: var(--vscode-border);
-  border-radius: 4px;
+  border-radius: var(--prism-radius-small);
 }
 
 .empty-state {
@@ -2444,15 +2458,16 @@ onBeforeUnmount(() => {
 
 .file-item {
   display: grid;
-  grid-template-columns: 40px 1fr 100px 132px 132px;
+  grid-template-columns: 32px minmax(0, 1fr) 90px 136px 132px;
   gap: 12px;
-  padding: 4px 12px;
+  padding: 8px 16px;
   cursor: pointer;
   transition: background 0.1s ease;
+  min-height: 44px;
 }
 
 .file-item:hover {
-  background: var(--vscode-bg-lighter);
+  background: var(--vscode-list-hoverBackground);
 }
 
 .file-item.selected {
@@ -2461,7 +2476,7 @@ onBeforeUnmount(() => {
 
 /* 分隔线样式 - 使用更细的线条 */
 .file-item:not(:last-child) {
-  border-bottom: 1px solid rgba(var(--vscode-border-rgb, 128, 128, 128), 0.1);
+  border-bottom: 1px solid var(--vscode-border-subtle);
 }
 
 /* 返回上级目录样式 */
@@ -2522,11 +2537,12 @@ onBeforeUnmount(() => {
   align-items: center;
   font-size: 12px;
   color: var(--vscode-fg-muted);
+  opacity: 1;
 }
 
 .file-col-actions {
   gap: 6px;
-  opacity: 0;
+  opacity: 1;
   transition: opacity 0.15s ease;
 }
 
@@ -2535,18 +2551,18 @@ onBeforeUnmount(() => {
 }
 
 .action-btn {
-  min-width: 24px;
-  height: 24px;
+  min-width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 3px;
+  border-radius: var(--prism-radius-small);
   cursor: pointer;
   color: var(--vscode-fg-muted);
-  transition: all 0.15s ease;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
   font-size: 12px;
 }
 
@@ -2558,28 +2574,28 @@ onBeforeUnmount(() => {
 
 .action-btn.primary {
   padding: 0 8px;
-  background: rgba(var(--vscode-accent-rgb, 59, 130, 246), 0.12);
-  border: 1px solid rgba(var(--vscode-accent-rgb, 59, 130, 246), 0.35);
+  background: var(--prism-info-bg);
+  border: 1px solid color-mix(in srgb, var(--vscode-accent) 35%, transparent);
   color: var(--vscode-accent);
 }
 
 .action-btn.primary:hover {
-  background: rgba(var(--vscode-accent-rgb, 59, 130, 246), 0.18);
+  background: color-mix(in srgb, var(--vscode-accent) 18%, transparent);
   border-color: var(--vscode-accent);
   color: var(--vscode-accent);
 }
 
 .action-btn.danger {
   padding: 0 8px;
-  background: rgba(var(--vscode-editorGutter-deletedBackground-rgb, 239, 68, 68), 0.12);
-  border: 1px solid var(--vscode-editorGutter-deletedBackground);
-  color: var(--vscode-editorGutter-deletedBackground);
+  background: var(--prism-danger-bg);
+  border: 1px solid var(--prism-danger);
+  color: var(--prism-danger);
 }
 
 .action-btn.danger:hover {
-  background: var(--vscode-editorGutter-deletedBackground);
-  border-color: var(--vscode-editorGutter-deletedBackground);
-  color: #fff;
+  background: var(--prism-danger);
+  border-color: var(--prism-danger);
+  color: var(--prism-surface-raised);
 }
 
 .status-bar {
@@ -2588,7 +2604,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   padding: 8px 12px;
   border-top: 1px solid var(--vscode-border);
-  background: var(--vscode-bg-lighter);
+  background: transparent;
   font-size: 12px;
   color: var(--vscode-fg-muted);
 }
@@ -2605,18 +2621,20 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px;
   padding: 4px 12px;
-  background: var(--vscode-bg);
+  background: var(--prism-control);
   border: 1px solid var(--vscode-accent);
-  border-radius: 12px;
+  border-radius: var(--prism-radius-control);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
   min-width: 200px;
+  border-color: var(--prism-border);
+  color: var(--prism-text);
 }
 
 .download-progress-indicator:hover {
   background: var(--vscode-bg-lighter);
   transform: scale(1.02);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: none;
 }
 
 .download-progress-indicator i {
@@ -2674,15 +2692,15 @@ onBeforeUnmount(() => {
 .download-progress-indicator .progress-bar {
   width: 100%;
   height: 3px;
-  background: rgba(var(--vscode-accent-rgb, 0, 122, 204), 0.2);
-  border-radius: 2px;
+  background: color-mix(in srgb, var(--vscode-accent) 20%, transparent);
+  border-radius: var(--prism-radius-small);
   overflow: hidden;
 }
 
 .download-progress-indicator .progress-fill {
   height: 100%;
   background: var(--vscode-accent);
-  transition: width 0.3s ease;
+  transition: none;
 }
 
 .host-info {
@@ -2696,22 +2714,27 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--prism-overlay, color-mix(in srgb, var(--liquid-canvas) 42%, transparent));
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 10001;
   animation: fadeIn 0.2s ease;
+  backdrop-filter: blur(10px);
+  padding: 20px;
 }
 
 .create-folder-dialog {
-  background: var(--vscode-bg);
-  border: 1px solid var(--vscode-border);
-  border-radius: 8px;
+  background: var(--prism-surface);
+  border: 1px solid var(--liquid-rim);
+  border-radius: var(--prism-radius-dialog);
   width: 90%;
   max-width: 400px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--prism-shadow-raised);
   animation: slideUp 0.3s ease;
+  backdrop-filter: blur(28px) saturate(1.3);
+  overflow: hidden;
+  max-height: calc(100dvh - 40px);
 }
 
 .create-folder-dialog .modal-header {
@@ -2720,7 +2743,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid var(--vscode-border);
-  background: var(--vscode-bg-lighter);
+  background: transparent;
 }
 
 .create-folder-dialog .modal-header h3 {
@@ -2737,14 +2760,15 @@ onBeforeUnmount(() => {
 .folder-name-input {
   width: 100%;
   padding: 10px 12px;
-  background: var(--vscode-input-bg);
+  background: var(--prism-control);
   border: 1px solid var(--vscode-border);
-  border-radius: 4px;
+  border-radius: var(--prism-radius-control);
   color: var(--vscode-fg);
   font-size: 14px;
   font-family: inherit;
   outline: none;
   transition: border-color 0.2s;
+  min-height: 38px;
 }
 
 .folder-name-input:focus {
@@ -2761,18 +2785,18 @@ onBeforeUnmount(() => {
   gap: 12px;
   padding: 16px 20px;
   border-top: 1px solid var(--vscode-border);
-  background: var(--vscode-bg-lighter);
+  background: transparent;
 }
 
 .btn-cancel,
 .btn-confirm {
   padding: 8px 16px;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--prism-radius-small);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
 }
 
 .btn-cancel {
@@ -2786,15 +2810,15 @@ onBeforeUnmount(() => {
 }
 
 .btn-confirm {
-  background: var(--vscode-button-bg);
-  color: var(--vscode-button-fg);
+  background: var(--vscode-accent);
+  color: var(--vscode-button-foreground);
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 .btn-confirm:hover:not(:disabled) {
-  background: var(--vscode-button-hover-bg);
+  background: var(--vscode-accent-hover);
 }
 
 .btn-confirm:disabled {
@@ -2808,20 +2832,21 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  background: var(--vscode-badge-background);
+  background: var(--prism-control);
   border: 1px solid var(--vscode-accent);
-  border-radius: 4px;
-  color: var(--vscode-badge-foreground);
+  border-radius: var(--prism-radius-control);
+  color: var(--prism-text);
   font-size: 13px;
   font-weight: 500;
   margin-right: 8px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
+  border-color: var(--prism-border);
 }
 
 .upload-progress-indicator:hover {
-  background: var(--vscode-accent);
-  color: var(--vscode-button-foreground);
+  background: var(--vscode-list-hoverBackground);
+  border-color: var(--vscode-accent);
 }
 
 .upload-progress-indicator i {
@@ -2844,7 +2869,7 @@ onBeforeUnmount(() => {
 
 .upload-progress-indicator .upload-count {
   font-weight: 600;
-  color: var(--vscode-accent);
+  color: var(--prism-text);
 }
 
 .upload-progress-indicator .current-file {
@@ -2864,14 +2889,14 @@ onBeforeUnmount(() => {
 .upload-progress-indicator .progress-bar {
   height: 3px;
   background: var(--vscode-bg);
-  border-radius: 2px;
+  border-radius: var(--prism-radius-small);
   overflow: hidden;
 }
 
 .upload-progress-indicator .progress-fill {
   height: 100%;
   background: var(--vscode-accent);
-  transition: width 0.15s ease;
+  transition: none;
 }
 
 /* 线性进度条样式 - 平滑过渡 */
@@ -2879,7 +2904,7 @@ onBeforeUnmount(() => {
 .task-item.downloading .task-progress-bar .progress-fill,
 .upload-progress-indicator .progress-fill,
 .download-progress-indicator .progress-fill {
-  transition: width 0.3s ease-out;
+  transition: none;
 }
 
 /* 上传管理器弹窗 */
@@ -2889,25 +2914,29 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--prism-overlay, color-mix(in srgb, var(--liquid-canvas) 42%, transparent));
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 10000;
   animation: fadeIn 0.2s ease;
+  backdrop-filter: blur(10px);
+  padding: 20px;
 }
 
 .upload-manager-modal {
-  background: var(--vscode-bg);
-  border: 1px solid var(--vscode-border);
-  border-radius: 8px;
+  background: var(--prism-surface);
+  border: 1px solid var(--liquid-rim);
+  border-radius: var(--prism-radius-dialog);
   width: 90%;
   max-width: 700px;
-  max-height: 80vh;
+  max-height: calc(100dvh - 40px);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--prism-shadow-raised);
   animation: slideUp 0.3s ease;
+  backdrop-filter: blur(28px) saturate(1.3);
+  overflow: hidden;
 }
 
 .upload-manager-modal .modal-header {
@@ -2916,7 +2945,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid var(--vscode-border);
-  background: var(--vscode-bg-lighter);
+  background: transparent;
 }
 
 .upload-manager-modal .modal-header h3 {
@@ -2933,25 +2962,29 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--prism-overlay, color-mix(in srgb, var(--liquid-canvas) 42%, transparent));
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 10000;
   animation: fadeIn 0.2s ease;
+  backdrop-filter: blur(10px);
+  padding: 20px;
 }
 
 .download-manager-modal {
-  background: var(--vscode-bg);
-  border: 1px solid var(--vscode-border);
-  border-radius: 8px;
+  background: var(--prism-surface);
+  border: 1px solid var(--liquid-rim);
+  border-radius: var(--prism-radius-dialog);
   width: 90%;
   max-width: 700px;
-  max-height: 80vh;
+  max-height: calc(100dvh - 40px);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--prism-shadow-raised);
   animation: slideUp 0.3s ease;
+  backdrop-filter: blur(28px) saturate(1.3);
+  overflow: hidden;
 }
 
 .download-manager-modal .modal-header {
@@ -2960,7 +2993,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid var(--vscode-border);
-  background: var(--vscode-bg-lighter);
+  background: transparent;
 }
 
 .download-manager-modal .modal-header h3 {
@@ -2971,17 +3004,17 @@ onBeforeUnmount(() => {
 }
 
 .close-btn {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--prism-radius-small);
   cursor: pointer;
   color: var(--vscode-fg-muted);
-  transition: all 0.15s ease;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
 }
 
 .close-btn:hover {
@@ -3020,10 +3053,10 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   gap: 12px;
   padding: 12px;
-  background: var(--vscode-bg-lighter);
+  background: var(--prism-control);
   border: 1px solid var(--vscode-border);
-  border-radius: 6px;
-  transition: all 0.2s ease;
+  border-radius: var(--prism-radius-control);
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
 }
 
 .task-item:hover {
@@ -3046,22 +3079,22 @@ onBeforeUnmount(() => {
 }
 
 .task-item.downloading .task-icon {
-  background: rgba(var(--vscode-accent-rgb, 0, 122, 204), 0.1);
+  background: var(--prism-info-bg);
   color: var(--vscode-accent);
 }
 
 .task-item.completed .task-icon {
-  background: rgba(13, 188, 121, 0.1);
-  color: #0dbc79;
+  background: var(--prism-success-bg);
+  color: var(--prism-success);
 }
 
 .task-item.error .task-icon {
-  background: rgba(205, 49, 49, 0.1);
+  background: var(--prism-danger-bg);
   color: var(--vscode-error);
 }
 
 .task-item.cancelled .task-icon {
-  background: rgba(128, 128, 128, 0.1);
+  background: color-mix(in srgb, var(--prism-muted) 10%, transparent);
   color: var(--vscode-fg-muted);
 }
 
@@ -3095,8 +3128,8 @@ onBeforeUnmount(() => {
 
 .task-type {
   padding: 2px 6px;
-  background: rgba(var(--vscode-accent-rgb, 0, 122, 204), 0.1);
-  border-radius: 3px;
+  background: var(--prism-info-bg);
+  border-radius: var(--prism-radius-small);
   color: var(--vscode-accent);
 }
 
@@ -3105,7 +3138,7 @@ onBeforeUnmount(() => {
 }
 
 .task-status.success {
-  color: #0dbc79;
+  color: var(--prism-success);
 }
 
 .task-status.error {
@@ -3118,8 +3151,8 @@ onBeforeUnmount(() => {
 
 .task-progress-bar {
   height: 3px;
-  background: rgba(var(--vscode-accent-rgb, 0, 122, 204), 0.2);
-  border-radius: 2px;
+  background: color-mix(in srgb, var(--vscode-accent) 20%, transparent);
+  border-radius: var(--prism-radius-small);
   overflow: hidden;
   margin-top: 6px;
 }
@@ -3127,7 +3160,7 @@ onBeforeUnmount(() => {
 .task-progress-bar .progress-fill {
   height: 100%;
   background: var(--vscode-accent);
-  transition: width 0.3s ease;
+  transition: none;
 }
 
 .task-error {
@@ -3142,17 +3175,17 @@ onBeforeUnmount(() => {
 }
 
 .task-btn {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--prism-radius-small);
   cursor: pointer;
   color: var(--vscode-fg-muted);
-  transition: all 0.15s ease;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
 }
 
 .task-btn:hover {
@@ -3164,7 +3197,7 @@ onBeforeUnmount(() => {
 .task-btn.cancel:hover {
   background: var(--vscode-error);
   border-color: var(--vscode-error);
-  color: #ffffff;
+  color: var(--prism-surface-raised);
 }
 
 .modal-footer {
@@ -3172,7 +3205,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   padding: 12px 20px;
   border-top: 1px solid var(--vscode-border);
-  background: var(--vscode-bg-lighter);
+  background: transparent;
 }
 
 .footer-btn {
@@ -3182,11 +3215,11 @@ onBeforeUnmount(() => {
   padding: 6px 12px;
   background: var(--vscode-bg);
   border: 1px solid var(--vscode-border);
-  border-radius: 4px;
+  border-radius: var(--prism-radius-small);
   color: var(--vscode-fg);
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
 }
 
 .footer-btn:hover {
@@ -3201,103 +3234,44 @@ onBeforeUnmount(() => {
 .footer-btn.danger:hover {
   background: var(--vscode-error);
   border-color: var(--vscode-error);
-  color: #ffffff;
+  color: var(--prism-surface-raised);
 }
 
-/* Bootstrap Icons */
-.bi-folder-open::before {
-  content: '📂';
+
+/* Keep file tools usable when the workspace shares space with another pane. */
+.toolbar, .toolbar-left, .toolbar-right, .status-bar, .status-right { flex-wrap: wrap; }
+.toolbar-left, .toolbar-right { align-items: center; }
+.file-col-checkbox input { accent-color: var(--vscode-accent); width: 15px; height: 15px; }
+.toolbar-btn:focus-visible, .action-btn:focus-visible, .close-button:focus-visible,
+.close-btn:focus-visible, .footer-btn:focus-visible, .task-btn:focus-visible,
+.vscode-button:focus-visible, .vscode-icon-button:focus-visible, .btn-cancel:focus-visible,
+.btn-confirm:focus-visible { outline: 2px solid var(--vscode-accent); outline-offset: 2px; }
+button { touch-action: manipulation; }
+@container file-workspace (max-width: 760px) {
+  .file-list-header, .file-item { grid-template-columns: 28px minmax(0, 1fr) 76px 104px; gap: 8px; }
+  .file-col-modified { display: none; }
+  .file-col-actions { gap: 4px; }
+  .action-btn span { display: none; }
+  .action-btn { width: 32px; }
+  .connection-info { min-width: 0; flex-wrap: wrap; gap: 8px; }
+  .connection-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .host-info { display: none; }
+  .toolbar, .path-bar { padding: 10px 12px; gap: 8px; }
 }
-.bi-arrow-left::before {
-  content: '←';
+@container file-workspace (max-width: 440px) {
+  .file-list-header, .file-item { grid-template-columns: 24px minmax(0, 1fr) 74px; }
+  .file-col-size { display: none; }
+  .toolbar-btn { padding-inline: 9px; font-size: 12px; }
+  .status-bar { gap: 8px; }
 }
-.bi-arrow-up-circle::before {
-  content: '⬆';
+@media (hover: none) { .file-col-actions { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .file-manager-modal-overlay, .file-manager-modal, .create-folder-overlay, .create-folder-dialog,
+  .upload-manager-overlay, .upload-manager-modal, .download-manager-overlay, .download-manager-modal { animation: none; }
 }
-.bi-house::before {
-  content: '🏠';
-}
-.bi-arrow-clockwise::before {
-  content: '↻';
-}
-.bi-upload::before {
-  content: '⬆';
-}
-.bi-folder-plus::before {
-  content: '📁+';
-}
-.bi-download::before {
-  content: '⬇';
-}
-.bi-trash::before {
-  content: '🗑';
-}
-.bi-x::before {
-  content: '✕';
-}
-.bi-x-lg::before {
-  content: '✕';
-  font-size: 10px;
-  font-weight: bold;
-}
-.bi-folder::before {
-  content: '📁';
-}
-.bi-folder-fill::before {
-  content: '📁';
-}
-.bi-file-text::before {
-  content: '📄';
-}
-.bi-file-pdf::before {
-  content: '📕';
-}
-.bi-file-word::before {
-  content: '📘';
-}
-.bi-file-excel::before {
-  content: '📗';
-}
-.bi-file-ppt::before {
-  content: '📙';
-}
-.bi-file-zip::before {
-  content: '📦';
-}
-.bi-file-image::before {
-  content: '🖼';
-}
-.bi-file-music::before {
-  content: '🎵';
-}
-.bi-file-play::before {
-  content: '🎬';
-}
-.bi-file-earmark::before {
-  content: '📄';
-}
-.bi-circle-fill::before {
-  content: '●';
-}
-.bi-arrow-down-circle::before {
-  content: '⬇';
-}
-.bi-check-circle::before {
-  content: '✓';
-}
-.bi-x-circle::before {
-  content: '✕';
-}
-.bi-dash-circle::before {
-  content: '—';
-}
-.bi-clock::before {
-  content: '⏱';
-}
-.bi-inbox::before {
-  content: '📥';
-}
-.bi-check-all::before {
-  content: '✓✓';
+@media (max-width: 600px) {
+  .create-folder-overlay, .upload-manager-overlay, .download-manager-overlay { padding: 12px; }
+  .create-folder-dialog, .upload-manager-modal, .download-manager-modal { width: 100%; max-height: calc(100dvh - 24px); }
+  .task-details { flex-wrap: wrap; gap: 6px 10px; }
 }
 </style>

@@ -1,148 +1,77 @@
 <template>
-  <div class="global-modals">
-    <!-- 确认对话框 -->
-    <transition name="modal">
-      <div
-        v-if="confirmModal.visible"
-        class="modal-overlay fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-        @click.self="confirmModal.visible = false"
-      >
-        <div class="modal-content bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
-          <div class="modal-header mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-              {{ confirmModal.title || '确认操作' }}
-            </h3>
-          </div>
-
-          <div class="modal-body mb-6">
-            <p class="text-gray-600 dark:text-gray-300">
-              {{ confirmModal.message }}
-            </p>
-          </div>
-
-          <div class="modal-footer flex justify-end gap-3">
-            <button
-              @click="handleConfirmCancel"
-              class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-            >
-              {{ confirmModal.cancelText || '取消' }}
-            </button>
-            <button
-              @click="handleConfirmOk"
-              :class="[
-                'px-4 py-2 rounded text-white transition-colors',
-                confirmModal.type === 'danger' 
-                  ? 'bg-red-600 hover:bg-red-700' 
-                  : 'bg-blue-600 hover:bg-blue-700'
-              ]"
-            >
-              {{ confirmModal.okText || '确定' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-    <!-- 信息对话框 -->
-    <transition name="modal">
-      <div
-        v-if="alertModal.visible"
-        class="modal-overlay fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-        @click.self="alertModal.visible = false"
-      >
-        <div class="modal-content bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
-          <div class="modal-header mb-4 flex items-center gap-3">
-            <div 
-              :class="[
-                'w-8 h-8 rounded-full flex items-center justify-center',
-                alertModal.type === 'success' ? 'bg-green-100 text-green-600' :
-                alertModal.type === 'error' ? 'bg-red-100 text-red-600' :
-                alertModal.type === 'warning' ? 'bg-yellow-100 text-yellow-600' :
-                'bg-blue-100 text-blue-600'
-              ]"
-            >
-              <span class="text-lg">
-                {{ 
-                  alertModal.type === 'success' ? '✓' :
-                  alertModal.type === 'error' ? '✕' :
-                  alertModal.type === 'warning' ? '⚠' : 'ℹ'
-                }}
-              </span>
-            </div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-              {{ alertModal.title || '提示' }}
-            </h3>
-          </div>
-
-          <div class="modal-body mb-6">
-            <p class="text-gray-600 dark:text-gray-300">
-              {{ alertModal.message }}
-            </p>
-          </div>
-
-          <div class="modal-footer flex justify-end">
-            <button
-              @click="handleAlertOk"
-              class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-            >
-              {{ alertModal.okText || '确定' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-    <!-- 输入对话框 -->
-    <transition name="modal">
-      <div
-        v-if="promptModal.visible"
-        class="modal-overlay fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-        @click.self="promptModal.visible = false"
-      >
-        <div class="modal-content bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
-          <div class="modal-header mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-              {{ promptModal.title || '输入信息' }}
-            </h3>
-          </div>
-
-          <div class="modal-body mb-6">
-            <p class="text-gray-600 dark:text-gray-300 mb-3">
-              {{ promptModal.message }}
-            </p>
+  <Teleport to="body">
+    <Transition name="prism-dialog-motion">
+      <div v-if="activeKind" class="modal-overlay prism-dialog-overlay" @click.self="handleCancel">
+        <form
+          ref="dialogRef"
+          class="global-modal prism-dialog"
+          role="dialog"
+          aria-modal="true"
+          :aria-labelledby="`${id}-title`"
+          :aria-describedby="`${id}-message`"
+          tabindex="-1"
+          novalidate
+          @submit.prevent="handleOk"
+        >
+          <header class="prism-dialog__header">
+            <span class="prism-status-icon" :data-type="statusType" aria-hidden="true"
+              ><i class="bi" :class="statusIcon"></i
+            ></span>
+            <h3 :id="`${id}-title`" class="prism-dialog__title">{{ activeModal.title }}</h3>
+          </header>
+          <div class="prism-dialog__body">
+            <p :id="`${id}-message`" class="prism-dialog__message">{{ activeModal.message }}</p>
             <input
+              v-if="activeKind === 'prompt'"
+              ref="promptInput"
+              :id="`${id}-input`"
               v-model="promptModal.inputValue"
               :type="promptModal.inputType || 'text'"
               :placeholder="promptModal.placeholder"
-              class="form-input-full"
-              @keyup.enter="handlePromptOk"
-              @keyup.escape="handlePromptCancel"
-              ref="promptInput"
+              :aria-label="promptModal.title"
+              :aria-describedby="`${id}-message${promptError ? ` ${id}-input-error` : ''}`"
+              :aria-invalid="promptError ? 'true' : undefined"
+              class="prism-field"
+              @compositionstart="isComposing = true"
+              @compositionend="isComposing = false"
+              @input="promptError && validatePrompt()"
             />
-          </div>
-
-          <div class="modal-footer flex justify-end gap-3">
-            <button
-              @click="handlePromptCancel"
-              class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+            <p
+              v-if="activeKind === 'prompt' && promptError"
+              :id="`${id}-input-error`"
+              class="prism-field-error"
+              role="status"
             >
-              {{ promptModal.cancelText || '取消' }}
+              {{ promptError }}
+            </p>
+          </div>
+          <footer class="prism-dialog__footer">
+            <button
+              v-if="activeKind !== 'alert'"
+              ref="cancelButton"
+              type="button"
+              class="prism-button"
+              @click="handleCancel"
+            >
+              {{ cancelText }}
             </button>
             <button
-              @click="handlePromptOk"
-              class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+              type="submit"
+              class="prism-button"
+              :class="statusType === 'danger' ? 'prism-button--danger' : 'prism-button--primary'"
             >
-              {{ promptModal.okText || '确定' }}
+              {{ activeModal.okText }}
             </button>
-          </div>
-        </div>
+          </footer>
+        </form>
       </div>
-    </transition>
-  </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, nextTick } from 'vue'
+import { ref, reactive, nextTick, computed, useId } from 'vue'
+import { useDialogFocus } from '@/composables/useDialogFocus'
 
 // 扩展Window接口以包含$modal属性
 declare global {
@@ -214,6 +143,13 @@ const promptModal = reactive({
 })
 
 const promptInput = ref<HTMLInputElement>()
+const isComposing = ref(false)
+const promptError = ref('')
+const validatePrompt = () => {
+  const input = promptInput.value
+  promptError.value = input && !input.checkValidity() ? input.validationMessage : ''
+  return !promptError.value
+}
 
 // 确认对话框处理函数
 const handleConfirmOk = () => {
@@ -240,6 +176,10 @@ const handleAlertOk = () => {
 
 // 输入对话框处理函数
 const handlePromptOk = () => {
+  if (!validatePrompt()) {
+    promptInput.value?.focus()
+    return
+  }
   const value = promptModal.inputValue
   promptModal.visible = false
   promptModal.inputValue = ''
@@ -249,6 +189,7 @@ const handlePromptOk = () => {
 }
 
 const handlePromptCancel = () => {
+  promptError.value = ''
   promptModal.visible = false
   promptModal.inputValue = ''
   if (promptModal.onCancel) {
@@ -306,6 +247,7 @@ const showPrompt = (options: {
   onOk?: (value: string) => void
   onCancel?: () => void
 }) => {
+  promptError.value = ''
   Object.assign(promptModal, {
     visible: true,
     title: options.title || '输入信息',
@@ -340,24 +282,61 @@ if (typeof window !== 'undefined') {
     showPrompt
   }
 }
+
+const id = useId()
+const dialogRef = ref<HTMLElement | null>(null)
+const cancelButton = ref<HTMLButtonElement | null>(null)
+const activeKind = computed(() =>
+  promptModal.visible
+    ? 'prompt'
+    : alertModal.visible
+      ? 'alert'
+      : confirmModal.visible
+        ? 'confirm'
+        : ''
+)
+const activeModal = computed(() =>
+  activeKind.value === 'prompt'
+    ? promptModal
+    : activeKind.value === 'alert'
+      ? alertModal
+      : confirmModal
+)
+const statusType = computed(() =>
+  activeKind.value === 'alert'
+    ? alertModal.type
+    : activeKind.value === 'confirm'
+      ? confirmModal.type
+      : 'info'
+)
+const statusIcon = computed(
+  () =>
+    ({
+      info: 'bi-info-circle',
+      success: 'bi-check-circle',
+      error: 'bi-exclamation-octagon',
+      danger: 'bi-exclamation-octagon',
+      warning: 'bi-exclamation-triangle'
+    })[statusType.value]
+)
+const cancelText = computed(() =>
+  activeKind.value === 'prompt' ? promptModal.cancelText : confirmModal.cancelText
+)
+function handleOk() {
+  if (isComposing.value) return
+  if (activeKind.value === 'prompt') handlePromptOk()
+  else if (activeKind.value === 'alert') handleAlertOk()
+  else handleConfirmOk()
+}
+function handleCancel() {
+  if (activeKind.value === 'prompt') handlePromptCancel()
+  else if (activeKind.value === 'alert') handleAlertOk()
+  else handleConfirmCancel()
+}
+useDialogFocus(
+  () => activeKind.value,
+  dialogRef,
+  handleCancel,
+  () => (activeKind.value === 'prompt' ? promptInput.value : cancelButton.value)
+)
 </script>
-
-<style scoped>
-.modal-enter-active, .modal-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.modal-enter-from, .modal-leave-to {
-  opacity: 0;
-}
-
-.modal-content {
-  transform: scale(1);
-  transition: transform 0.3s ease;
-}
-
-.modal-enter-from .modal-content,
-.modal-leave-to .modal-content {
-  transform: scale(0.9);
-}
-</style>

@@ -67,6 +67,7 @@ test('DeepSeek uses thinking toggle and low high max rather than invented medium
   assert.deepEqual(buildReasoningRequest(deepseek, current, 'medium').body, {})
   assert.deepEqual(getReasoningCapability(provider, current).options, ['default'])
   assert.deepEqual(getReasoningCapability(deepseek, model('deepseek-reasoner')).options, ['default'])
+  assert.deepEqual(getReasoningCapability(deepseek, model('deepseek-flash', { reasoning: { protocol: 'deepseek', supportedEfforts: ['low', 'high', 'max'], supportsToggle: true } })).options, ['default', 'none', 'low', 'high', 'max'])
 })
 
 test('Qwen budget presets only apply to confirmed models and eligible dated snapshots', () => {
@@ -98,7 +99,17 @@ test('explicit toggle-only support works without inventing effort levels; malfor
   const malformed = model('fixture', { reasoning: JSON.parse('{"protocol":"openai","supportedEfforts":123}') })
   assert.deepEqual(buildReasoningRequest(provider, malformed, 'high').body, {})
   const nativeClaude = { ...provider, endpoint: 'https://api.anthropic.com/v1' }
-  assert.equal(getReasoningCapability(nativeClaude, model('claude-opus-4-7')).reason, 'interface')
+  assert.equal(getReasoningCapability(nativeClaude, model('claude-opus-4-7')).adapter, 'anthropic')
+})
+
+test('native Claude adapts effort and budget by family without leaking native fields into gateways', () => {
+  const nativeClaude = { ...provider, id: 'anthropic', endpoint: 'https://api.anthropic.com/v1' }
+  assert.deepEqual(buildReasoningRequest(nativeClaude, model('claude-opus-5-5'), 'max').body, { output_config: { effort: 'max' } })
+  assert.deepEqual(buildReasoningRequest(nativeClaude, model('claude-opus-4-7'), 'high').body, { output_config: { effort: 'high' }, thinking: { type: 'adaptive' } })
+  assert.deepEqual(buildReasoningRequest(nativeClaude, model('claude-sonnet-4-5'), 'low').body, { thinking: { type: 'enabled', budget_tokens: 1024 } })
+  assert.deepEqual(buildReasoningRequest(nativeClaude, model('claude-sonnet-4-5'), 'none').body, { thinking: { type: 'disabled' } })
+  assert.deepEqual(buildReasoningRequest(provider, model('claude-sonnet-4-5'), 'high').body, {})
+  assert.deepEqual(getReasoningCapability(nativeClaude, model('claude-opus-5-5')).options, ['default', 'low', 'medium', 'high', 'xhigh', 'max'])
 })
 
 test('API capability parsing keeps supported enums, deduplicates levels, and handles old responses', () => {

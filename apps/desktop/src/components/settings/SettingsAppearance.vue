@@ -1,5 +1,5 @@
 <template>
-  <section :id="'section-appearance'" class="setting-section">
+  <section :id="'section-appearance'" class="setting-section prism-settings-section">
     <h2 class="section-title">
       <i class="bi bi-palette"></i>
       {{ $t('settings.appearanceTitle') }}
@@ -13,9 +13,14 @@
         <p class="setting-hint">{{ $t('settings.themeModeHint') }}</p>
       </div>
       <div class="setting-right">
-        <select :value="selectedThemeMode" @change="onThemeModeChange" class="form-select">
-          <option 
-            v-for="themeOption in availableThemes" 
+        <select
+          :aria-label="$t('settings.themeMode')"
+          :value="selectedThemeMode"
+          @change="onThemeModeChange"
+          class="form-select"
+        >
+          <option
+            v-for="themeOption in availableThemes"
             :key="themeOption.value"
             :value="themeOption.value"
           >
@@ -32,16 +37,13 @@
         <p class="setting-hint">{{ $t('settings.colorSchemeHint') }}</p>
       </div>
       <div class="setting-right">
-        <select 
-          :value="selectedColorScheme" 
-          @change="onColorSchemeChange" 
+        <select
+          :aria-label="$t('settings.colorScheme')"
+          :value="selectedColorScheme"
+          @change="onColorSchemeChange"
           class="form-select"
         >
-          <option 
-            v-for="scheme in availableColorSchemes" 
-            :key="scheme.value"
-            :value="scheme.value"
-          >
+          <option v-for="scheme in availableColorSchemes" :key="scheme.value" :value="scheme.value">
             {{ scheme.label }}
           </option>
         </select>
@@ -55,7 +57,12 @@
         <p class="setting-hint">{{ $t('settings.fontSizeHint') }}</p>
       </div>
       <div class="setting-right">
-        <select :value="fontSize" @change="onFontSizeChange" class="form-select">
+        <select
+          :aria-label="$t('settings.fontSize')"
+          :value="fontSize"
+          @change="onFontSizeChange"
+          class="form-select"
+        >
           <option value="small">{{ $t('settings.sizeSmall') }}</option>
           <option value="medium">{{ $t('settings.sizeMedium') }}</option>
           <option value="large">{{ $t('settings.sizeLarge') }}</option>
@@ -106,7 +113,8 @@ const onThemeModeChange = (e: Event) => {
 }
 
 const onColorSchemeChange = (e: Event) => {
-  const value = (e.target as HTMLSelectElement).value as 'blue' | 'green' | 'purple' | 'orange' | 'red'
+  const value = (e.target as HTMLSelectElement).value as
+    'blue' | 'green' | 'purple' | 'orange' | 'red'
   emit('color-scheme-change', value)
 }
 
@@ -115,61 +123,3 @@ const onFontSizeChange = (e: Event) => {
   emit('font-size-change', value)
 }
 </script>
-
-<style scoped>
-.setting-row {
-  display: flex;
-  gap: 32px;
-  padding: 20px 0;
-  border-bottom: 1px solid var(--vscode-border);
-}
-
-.setting-row:last-child {
-  border-bottom: none;
-}
-
-.setting-left {
-  flex: 1;
-  min-width: 0;
-}
-
-.setting-right {
-  flex-shrink: 0;
-  width: 300px;
-}
-
-.setting-label {
-  display: block;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--vscode-fg);
-  margin-bottom: 4px;
-}
-
-.setting-hint {
-  font-size: 12px;
-  color: var(--vscode-fg-muted);
-  margin: 0;
-  line-height: 1.5;
-}
-
-.form-select {
-  width: 100%;
-  background: var(--vscode-input-bg);
-  border: 1px solid var(--vscode-border);
-  border-radius: 2px;
-  color: var(--vscode-fg);
-  font-size: 14px;
-  outline: none;
-  cursor: pointer;
-  transition: border-color 0.2s;
-}
-
-.form-select:hover {
-  border-color: var(--vscode-fg-muted);
-}
-
-.form-select:focus {
-  border-color: var(--vscode-accent);
-}
-</style>

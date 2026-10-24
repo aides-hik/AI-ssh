@@ -1,5 +1,5 @@
 <template>
-  <section :id="'section-ai-assistant'" class="setting-section">
+  <section :id="'section-ai-assistant'" class="setting-section prism-settings-section">
     <h2 class="section-title">
       <i class="bi bi-chat-dots"></i>
       {{ $t('settings.aiAssistantTitle') }}
@@ -12,7 +12,11 @@
         <label class="setting-label">{{ $t('settings.defaultModel') }}</label>
       </div>
       <div class="setting-right">
-        <select v-model="defaultModel" class="form-select">
+        <select
+          :aria-label="$t('settings.defaultModel')"
+          v-model="defaultModel"
+          class="form-select"
+        >
           <option value="gpt-4">{{ $t('settings.modelGpt4') }}</option>
           <option value="gpt-3.5">{{ $t('settings.modelGpt35') }}</option>
           <option value="claude">{{ $t('settings.modelClaude') }}</option>
@@ -27,7 +31,15 @@
         <p class="setting-hint">{{ $t('settings.temperatureHint') }}</p>
       </div>
       <div class="setting-right">
-        <input v-model.number="temperature" type="range" class="form-range" min="0" max="1" step="0.1" />
+        <input
+          :aria-label="$t('settings.temperature')"
+          v-model.number="temperature"
+          type="range"
+          class="form-range"
+          min="0"
+          max="1"
+          step="0.1"
+        />
         <span>{{ temperature.toFixed(1) }}</span>
       </div>
     </div>
@@ -38,7 +50,14 @@
         <label class="setting-label">{{ $t('settings.maxTokens') }}</label>
       </div>
       <div class="setting-right">
-        <input v-model.number="maxTokens" type="number" class="form-input" min="100" max="4000" />
+        <input
+          :aria-label="$t('settings.maxTokens')"
+          v-model.number="maxTokens"
+          type="number"
+          class="form-input"
+          min="100"
+          max="4000"
+        />
       </div>
     </div>
   </section>
@@ -53,5 +72,5 @@ const maxTokens = ref<number>(2000)
 </script>
 
 <style scoped>
-/* 样式从父组件继承 */
+/* Section layout and controls are shared in settings-foundation.css. */
 </style>

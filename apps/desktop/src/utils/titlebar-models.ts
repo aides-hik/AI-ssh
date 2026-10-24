@@ -29,7 +29,7 @@ export function buildTitleBarModels(providers: ProviderLike[]): TitleBarModelOpt
   const models: TitleBarModelOption[] = []
 
   for (const provider of providers) {
-    if (isRetiredManagedProvider(provider)) continue
+    if (isRetiredManagedProvider(provider) || provider.config?.catalogStatus === 'unsupported') continue
     const isManagedProvider = !!provider.config?.managedByApp
     const hasUsableAccess = !!provider.apiKey || provider.id === 'ollama'
     if (!provider.enabled || (!hasUsableAccess && !isManagedProvider)) {

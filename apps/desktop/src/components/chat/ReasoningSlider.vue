@@ -96,7 +96,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', outside))
       :aria-expanded="open"
       :aria-controls="id"
       :aria-label="`${title}：${currentLabel}`"
-      :title="adjustable ? title : hint"
+      :data-prism-tooltip="adjustable ? title : hint"
       @click="toggle"
     >
       <span>{{ chinese ? '选择推理强度' : 'Reasoning effort' }}</span>
@@ -106,14 +106,14 @@ onUnmounted(() => document.removeEventListener('pointerdown', outside))
     <div v-if="open" :id="id" class="oc-reasoning-popover" role="group" :aria-label="title">
       <div class="oc-reasoning-heading">
         <span class="oc-reasoning-current" aria-live="polite">{{ currentLabel }}</span>
-        <span class="oc-reasoning-model" :title="modelLabel">{{ modelLabel }}</span>
+        <span class="oc-reasoning-model" :data-prism-tooltip="modelLabel">{{ modelLabel }}</span>
       </div>
       <button
         class="oc-reasoning-reset"
         type="button"
         :disabled="disabled || !adjustable || selected === 'default'"
         :aria-label="chinese ? '恢复默认推理强度' : 'Reset reasoning effort to default'"
-        :title="chinese ? '恢复默认' : 'Reset to default'"
+        :data-prism-tooltip="chinese ? '恢复默认' : 'Reset to default'"
         @click="reset"
       >
         <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4.5 9a8 8 0 1 1-.2 5M4.5 4.5V9H9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
@@ -134,7 +134,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', outside))
           :aria-label="title"
           :aria-valuetext="currentLabel"
           :aria-describedby="`${id}-hint`"
-          :title="hint"
+          :data-prism-tooltip="hint"
           @input="update"
         >
       </div>
@@ -190,12 +190,12 @@ onUnmounted(() => document.removeEventListener('pointerdown', outside))
   width: min(384px, 100%);
   box-sizing: border-box;
   padding: 17px 18px 16px;
-  border: 1px solid var(--chat-border);
-  border-radius: 22px;
-  background: color-mix(in srgb, var(--background-base) 96%, transparent);
-  backdrop-filter: blur(18px);
+  border: 1px solid var(--liquid-rim);
+  border-radius: var(--prism-radius-panel);
+  background: var(--prism-surface);
+  backdrop-filter: blur(24px) saturate(1.3);
   color: var(--vscode-fg);
-  box-shadow: 0 10px 24px #0000000d, 0 2px 5px #00000003;
+  box-shadow: var(--prism-shadow);
   font-size: 12px;
   transform-origin: bottom right;
 }

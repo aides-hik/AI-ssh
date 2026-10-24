@@ -6,13 +6,25 @@ import { fileURLToPath } from 'node:url'
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const settingsViewPath = join(currentDir, 'SettingsView.vue')
+const providerSettingsPath = join(
+  currentDir,
+  '..',
+  'components',
+  'settings',
+  'SettingsAiProviders.vue'
+)
 const platformProvidersPath = join(currentDir, '..', 'types', 'ai-providers.platforms.ts')
 
 test('settings view only shows delete action for custom models and marks added models', async () => {
   const source = await readFile(settingsViewPath, 'utf8')
+  const providerSettings = await readFile(providerSettingsPath, 'utf8')
 
-  assert.match(source, /v-if="model\.isCustom === true \|\| provider\.id === 'custom-openai'"/)
-  assert.match(source, /@click(?:\.stop)?="removeCustomModel\(provider\.id, model\.id\)"/)
+  assert.match(
+    providerSettings,
+    /v-if="model\.isCustom === true \|\| selected\.id === 'custom-openai'"/
+  )
+  assert.match(providerSettings, /@click="emit\('remove', selected\.id, model\.id\)"/)
+  assert.match(source, /@remove="removeCustomModel"/)
   assert.match(source, /isCustom: true/)
   assert.match(source, /provider\.id !== 'custom-openai' && model\.isCustom !== true/)
   assert.match(source, /const removeCustomModel = async \(providerId: string, modelId: string\) =>/)

@@ -1,0 +1,569 @@
+/* Prism chrome. Terminal output, code and model branding keep their own semantics. */
+:root {
+  --prism-font: 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --prism-surface: var(--liquid-panel);
+  --prism-surface-raised: var(--liquid-panel-solid);
+  --prism-surface-floating: color-mix(in srgb, var(--liquid-panel-solid) 88%, transparent);
+  --prism-control: var(--vscode-bg-input);
+  --prism-border: var(--vscode-border);
+  --prism-text: var(--vscode-fg);
+  --prism-muted: var(--vscode-fg-muted);
+  --prism-danger: #bb3346;
+  --prism-success: #18764f;
+  --prism-warning: #92600b;
+  --prism-info: var(--vscode-accent);
+  --prism-scrim: #16294338;
+  --prism-overlay: var(--prism-scrim);
+  --prism-danger-bg: color-mix(in srgb, var(--prism-danger) 10%, transparent);
+  --prism-success-bg: color-mix(in srgb, var(--prism-success) 10%, transparent);
+  --prism-warning-bg: color-mix(in srgb, var(--prism-warning) 10%, transparent);
+  --prism-info-bg: color-mix(in srgb, var(--prism-info) 10%, transparent);
+  --prism-radius-small: 6px;
+  --prism-radius-control: 10px;
+  --prism-radius-row: 12px;
+  --prism-radius-panel: 18px;
+  --prism-radius-dialog: 24px;
+  --prism-shadow: inset 0 1px 0 var(--liquid-inner-light), 0 12px 32px -20px var(--liquid-shadow);
+  --prism-shadow-raised:
+    inset 0 1px 0 var(--liquid-inner-light), 0 24px 64px -22px var(--liquid-shadow);
+  --prism-duration: 150ms;
+  --prism-z-dialog: 10000;
+  --prism-z-nested-dialog: 10100;
+  --prism-z-confirm: 10200;
+  --prism-z-notification: 11000;
+  --prism-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Compatibility aliases for extracted controls. */
+  --vscode-input-bg: var(--prism-control);
+  --vscode-focus-border: var(--vscode-accent);
+  --vscode-error: var(--prism-danger);
+  --vscode-warning: var(--prism-warning);
+  --vscode-success: var(--prism-success);
+}
+:root.light,
+:root.light-modern {
+  color-scheme: light;
+  --vscode-error: var(--prism-danger);
+  --vscode-warning: var(--prism-warning);
+  --vscode-success: var(--prism-success);
+}
+:root.dark,
+:root.dark-modern {
+  color-scheme: dark;
+  --prism-danger: #ff9aa7;
+  --prism-success: #7ad8ad;
+  --prism-warning: #ecc16d;
+  --prism-scrim: #040e206b;
+  --vscode-error: var(--prism-danger);
+  --vscode-warning: var(--prism-warning);
+  --vscode-success: var(--prism-success);
+}
+
+body {
+  font-family: var(--prism-font);
+}
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+button:disabled,
+[role='button'][aria-disabled='true'] {
+  cursor: not-allowed;
+}
+input:is([type='checkbox'], [type='radio'], [type='range']) {
+  accent-color: var(--vscode-accent);
+}
+/* Tailwind Forms draws these controls itself; accent-color alone does not theme
+   its fixed white fill or blue focus ring. Keep its accessible check/dot SVGs. */
+input:is([type='checkbox'], [type='radio']) {
+  color: var(--vscode-accent);
+  background-color: var(--prism-control);
+  border-color: color-mix(in srgb, var(--prism-muted) 55%, var(--prism-border));
+  box-shadow: none;
+}
+input[type='checkbox'] {
+  border-radius: 4px;
+}
+input:is([type='checkbox'], [type='radio']):focus {
+  --tw-ring-offset-width: 0px;
+  --tw-ring-offset-shadow: 0 0 #0000;
+  --tw-ring-shadow: 0 0 #0000;
+  box-shadow: none;
+}
+input:is([type='checkbox'], [type='radio']):checked,
+input[type='checkbox']:indeterminate {
+  color: var(--vscode-accent);
+  background-color: var(--vscode-accent);
+  border-color: transparent;
+}
+input:is([type='checkbox'], [type='radio']):disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+@media (hover: hover) and (pointer: fine) {
+  input:is([type='checkbox'], [type='radio']):not(:disabled):hover {
+    border-color: var(--vscode-accent);
+  }
+}
+@media (forced-colors: active) {
+  input:is([type='checkbox'], [type='radio']) {
+    appearance: auto;
+    background-image: none;
+    forced-color-adjust: auto;
+  }
+}
+input:is([type='checkbox'], [type='radio'], [type='range']):focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 3px;
+}
+
+/* Style the expanded picker as well as its trigger. Keep native select values,
+   change events, keyboard navigation and top-layer/viewport positioning. */
+@supports (appearance: base-select) and selector(select::picker(select)) {
+  select:not([multiple]):not([size]),
+  select:not([multiple]):not([size])::picker(select) {
+    appearance: base-select;
+  }
+
+  select:not([multiple]):not([size]) {
+    align-items: center;
+    gap: 10px;
+    height: auto;
+    min-width: 0;
+    background-image: none;
+    text-align: start;
+  }
+  select:not([multiple]):not([size]):disabled {
+    background-image: none;
+  }
+  select:not([multiple]):not([size])::picker-icon {
+    content: '';
+    flex: 0 0 auto;
+    width: 7px;
+    height: 7px;
+    margin-inline-start: auto;
+    margin-inline-end: 2px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    color: var(--prism-muted);
+    transform: translateY(-2px) rotate(45deg);
+    transition: transform 150ms var(--prism-ease);
+  }
+  select:not([multiple]):not([size]):open::picker-icon {
+    transform: translateY(2px) rotate(225deg);
+  }
+  select:not([multiple]):not([size])::picker(select) {
+    min-inline-size: anchor-size(self-inline);
+    max-inline-size: calc(100dvw - 24px);
+    max-block-size: min(360px, calc(100dvh - 24px));
+    margin-block: 6px;
+    padding: 6px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border: 1px solid var(--liquid-rim);
+    border-radius: var(--prism-radius-row);
+    background: var(--prism-surface-floating);
+    color: var(--prism-text);
+    box-shadow: var(--prism-shadow-raised);
+    backdrop-filter: blur(24px) saturate(145%);
+    font: 400 13px/1.6 var(--prism-font);
+    scrollbar-width: thin;
+    scrollbar-color: var(--prism-border) transparent;
+    opacity: 0;
+    transition:
+      opacity 120ms ease-out,
+      display 120ms allow-discrete,
+      overlay 120ms allow-discrete;
+  }
+  select:not([multiple]):not([size]):open::picker(select) {
+    opacity: 1;
+  }
+  @starting-style {
+    select:not([multiple]):not([size]):open::picker(select) {
+      opacity: 0;
+    }
+  }
+  select:not([multiple]):not([size]) option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 36px;
+    padding: 8px 10px;
+    border: 1px solid transparent;
+    border-radius: var(--prism-radius-small);
+    background: transparent;
+    color: var(--prism-text);
+    font: inherit;
+    line-height: 1.6;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+  select:not([multiple]):not([size]) option:checked {
+    border-color: var(--liquid-rim);
+    background: var(--liquid-selected);
+    font-weight: 550;
+  }
+  select:not([multiple]):not([size]) option:is(:hover, :focus-visible) {
+    outline: none;
+    border-color: color-mix(in srgb, var(--vscode-accent) 40%, transparent);
+    background: var(--vscode-list-hoverBackground);
+  }
+  select:not([multiple]):not([size]) option:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  select:not([multiple]):not([size]) option::checkmark {
+    flex: 0 0 auto;
+    color: var(--vscode-accent);
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    select:not([multiple]):not([size])::picker(select) {
+      background: var(--prism-surface-raised);
+      backdrop-filter: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    select:not([multiple]):not([size])::picker-icon,
+    select:not([multiple]):not([size])::picker(select) {
+      transition: none;
+    }
+  }
+  html:is([data-motion='off'], [data-transitions='off'])
+    select:not([multiple]):not([size])::picker-icon,
+  html:is([data-motion='off'], [data-transitions='off'])
+    select:not([multiple]):not([size])::picker(select) {
+    transition: none;
+  }
+}
+
+.prism-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 15px;
+  border: 1px solid var(--prism-border);
+  border-radius: var(--prism-radius-control);
+  background: var(--prism-control);
+  color: var(--prism-text);
+  font: 500 13px/1.5 var(--prism-font);
+  text-decoration: none;
+  touch-action: manipulation;
+  transition:
+    background-color var(--prism-duration) ease,
+    border-color var(--prism-duration) ease,
+    color var(--prism-duration) ease,
+    box-shadow var(--prism-duration) ease;
+}
+.prism-button--primary {
+  background: var(--vscode-accent);
+  border-color: transparent;
+  color: #fff;
+}
+.prism-button--danger {
+  background: var(--prism-danger);
+  border-color: transparent;
+  color: var(--prism-surface-raised);
+}
+.prism-button--quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--prism-muted);
+}
+.prism-button--icon {
+  width: 34px;
+  min-height: 34px;
+  padding: 0;
+  flex: 0 0 auto;
+}
+.prism-button:disabled {
+  opacity: 0.5;
+}
+.prism-button:focus-visible,
+.prism-menu-item:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 2px;
+}
+.prism-field {
+  display: block;
+  width: 100%;
+  min-height: 38px;
+  height: auto;
+  padding: 9px 12px;
+  background: var(--prism-control);
+  border: 1px solid var(--prism-border);
+  border-radius: var(--prism-radius-control);
+  color: var(--prism-text);
+  font: 13px/1.5 var(--prism-font);
+  transition:
+    border-color var(--prism-duration) ease,
+    box-shadow var(--prism-duration) ease;
+}
+.prism-field::placeholder {
+  color: var(--prism-muted);
+}
+.prism-field:focus {
+  outline: none;
+  border-color: var(--vscode-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--vscode-accent) 16%, transparent);
+}
+.prism-field:disabled {
+  opacity: 0.5;
+}
+.prism-field[aria-invalid='true'] {
+  border-color: var(--prism-danger);
+}
+input[aria-invalid='true']:not(:disabled),
+textarea[aria-invalid='true']:not(:disabled),
+select[aria-invalid='true']:not(:disabled) {
+  border-color: var(--prism-danger);
+}
+.prism-field-error {
+  margin: 6px 0 0;
+  color: var(--prism-danger);
+  font: 400 12px/1.7 var(--prism-font);
+  overflow-wrap: anywhere;
+}
+
+.prism-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--prism-z-confirm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--prism-scrim);
+  backdrop-filter: blur(6px);
+  font-family: var(--prism-font);
+  color: var(--prism-text);
+}
+.prism-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(480px, 100%);
+  max-height: calc(100dvh - 48px);
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--liquid-rim);
+  border-radius: var(--prism-radius-dialog);
+  background: var(--prism-surface-floating);
+  backdrop-filter: blur(24px) saturate(140%);
+  box-shadow: var(--prism-shadow-raised);
+  outline: none;
+}
+.prism-dialog__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 24px 0;
+  flex: 0 0 auto;
+}
+.prism-dialog__title {
+  margin: 0;
+  font: 620 18px/1.5 var(--prism-font);
+  color: var(--prism-text);
+  overflow-wrap: anywhere;
+}
+.prism-dialog__body {
+  padding: 20px 24px 24px;
+  overflow: auto;
+  min-height: 0;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.prism-dialog__message {
+  margin: 0;
+  color: var(--prism-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.prism-dialog__body .prism-field {
+  margin-top: 16px;
+}
+.prism-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid var(--prism-border);
+  flex: 0 0 auto;
+}
+.prism-status-icon {
+  --status-color: var(--prism-info);
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: var(--prism-radius-row);
+  background: color-mix(in srgb, var(--status-color) 12%, transparent);
+  color: var(--status-color);
+  font-size: 18px;
+}
+.prism-status-icon[data-type='danger'],
+.prism-status-icon[data-type='error'] {
+  --status-color: var(--prism-danger);
+}
+.prism-status-icon[data-type='warning'] {
+  --status-color: var(--prism-warning);
+}
+.prism-status-icon[data-type='success'] {
+  --status-color: var(--prism-success);
+}
+
+.prism-menu {
+  padding: 6px;
+  background: var(--prism-surface-floating);
+  backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid var(--liquid-rim);
+  border-radius: var(--prism-radius-panel);
+  box-shadow: var(--prism-shadow-raised);
+  color: var(--prism-text);
+  font: 13px/1.5 var(--prism-font);
+}
+.prism-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--prism-radius-control);
+  background: transparent;
+  color: var(--prism-text);
+  text-align: left;
+  font: inherit;
+  touch-action: manipulation;
+  transition:
+    background-color var(--prism-duration) ease,
+    color var(--prism-duration) ease;
+}
+.prism-menu-item:disabled {
+  color: var(--prism-muted);
+  opacity: 0.5;
+}
+.prism-menu-item[data-danger='true'] {
+  color: var(--prism-danger);
+}
+.prism-menu-divider {
+  height: 1px;
+  margin: 5px 8px;
+  background: var(--prism-border);
+}
+.prism-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 24px;
+  color: var(--prism-muted);
+  text-align: center;
+  line-height: 1.8;
+}
+
+/* Overlay and surface share a single, interruptible entrance. */
+.prism-dialog-motion-enter-active,
+.prism-dialog-motion-leave-active {
+  transition: opacity 180ms var(--prism-ease);
+}
+.prism-dialog-motion-enter-active .prism-dialog,
+.prism-dialog-motion-leave-active .prism-dialog {
+  transition: transform 180ms var(--prism-ease);
+}
+.prism-dialog-motion-enter-from,
+.prism-dialog-motion-leave-to {
+  opacity: 0;
+}
+.prism-dialog-motion-enter-from .prism-dialog,
+.prism-dialog-motion-leave-to .prism-dialog {
+  transform: translateY(8px) scale(0.98);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .prism-button:not(:disabled):hover {
+    background: var(--vscode-list-hoverBackground);
+    border-color: color-mix(in srgb, var(--prism-muted) 45%, var(--prism-border));
+  }
+  .prism-button--primary:not(:disabled):hover {
+    background: var(--vscode-accent-hover);
+    border-color: transparent;
+  }
+  .prism-button--danger:not(:disabled):hover {
+    background: color-mix(in srgb, var(--prism-danger) 85%, var(--prism-text));
+    border-color: transparent;
+  }
+  .prism-menu-item:not(:disabled):hover,
+  .prism-menu-item:focus-visible {
+    background: var(--vscode-list-hoverBackground);
+  }
+  .prism-menu-item[data-danger='true']:not(:disabled):hover {
+    background: color-mix(in srgb, var(--prism-danger) 12%, transparent);
+  }
+}
+@media (max-width: 540px) {
+  .prism-dialog-overlay {
+    padding: 16px;
+  }
+  .prism-dialog {
+    max-height: calc(100dvh - 32px);
+  }
+  .prism-dialog__header {
+    padding: 20px 20px 0;
+  }
+  .prism-dialog__body {
+    padding: 16px 20px 20px;
+  }
+  .prism-dialog__footer {
+    padding: 14px 20px 18px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .prism-dialog-motion-enter-active,
+  .prism-dialog-motion-leave-active {
+    transition-duration: 80ms;
+  }
+  .prism-dialog-motion-enter-active .prism-dialog,
+  .prism-dialog-motion-leave-active .prism-dialog {
+    transition: none;
+    transform: none;
+  }
+}
+html[data-motion='off']
+  :is(
+    .prism-button,
+    .prism-field,
+    .prism-menu-item,
+    .prism-dialog-motion-enter-active,
+    .prism-dialog-motion-leave-active,
+    .prism-dialog
+  ),
+html[data-transitions='off']
+  :is(
+    .prism-button,
+    .prism-field,
+    .prism-menu-item,
+    .prism-dialog-motion-enter-active,
+    .prism-dialog-motion-leave-active,
+    .prism-dialog
+  ) {
+  transition: none;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .prism-dialog-overlay {
+    backdrop-filter: none;
+  }
+  .prism-dialog,
+  .prism-menu {
+    background: var(--prism-surface-raised);
+    backdrop-filter: none;
+  }
+}

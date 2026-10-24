@@ -1,0 +1,139 @@
+/* Monaco owns widget geometry, keyboard behavior, editor pixels and syntax colors.
+   These selectors apply Prism materials only to its auxiliary UI, including body portals. */
+.monaco-editor.prism-editor
+  :is(.find-widget, .suggest-widget, .suggest-details, .monaco-hover, .monaco-resizable-hover),
+.monaco-editor.prism-editor .parameter-hints-widget,
+.monaco-hover.workbench-hover,
+.monaco-component.monaco-menu-container,
+.monaco-editor .quick-input-widget {
+  border-radius: var(--prism-radius-row);
+  box-shadow: var(--prism-shadow-raised);
+  backdrop-filter: blur(24px) saturate(140%);
+  font-family: var(--prism-font);
+}
+
+/* Find-toggle help is rendered by Monaco's hover service outside the editor. */
+.monaco-hover.workbench-hover {
+  border: 1px solid var(--liquid-rim);
+  background: var(--prism-surface-floating);
+  color: var(--prism-text);
+}
+.monaco-hover.workbench-hover.compact.with-pointer {
+  border-radius: var(--prism-radius-row);
+}
+
+.monaco-component.monaco-menu-container {
+  border-radius: var(--prism-radius-panel);
+  background: var(--prism-surface-floating);
+  color: var(--prism-text);
+}
+.monaco-component.monaco-menu-container .monaco-menu {
+  border-radius: inherit;
+  background: transparent;
+}
+.monaco-component.monaco-menu-container .monaco-action-bar.vertical .action-item {
+  border-radius: var(--prism-radius-control);
+}
+.monaco-component.monaco-menu-container .monaco-action-bar.vertical .action-menu-item {
+  border-radius: inherit;
+}
+.monaco-component.monaco-menu-container
+  .monaco-action-bar.vertical
+  .action-item.focused:not(.disabled) {
+  outline: 1px solid var(--vscode-accent);
+  outline-offset: -2px;
+}
+.monaco-component.monaco-menu-container .monaco-action-bar.vertical .action-item.disabled {
+  opacity: 0.5;
+}
+
+.monaco-editor.prism-editor .find-widget {
+  border-color: var(--liquid-rim);
+}
+.monaco-editor.prism-editor .monaco-inputbox,
+.monaco-editor .quick-input-widget .monaco-inputbox {
+  border-radius: var(--prism-radius-small);
+}
+.monaco-editor.prism-editor .monaco-inputbox > .ibwrapper > .input,
+.monaco-editor .quick-input-widget .monaco-inputbox > .ibwrapper > .input {
+  /* The global form reset must not enlarge Monaco's measured input or mirror. */
+  min-height: 0;
+  height: 100%;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+  transition: none;
+}
+.monaco-editor.prism-editor .find-widget .monaco-inputbox.synthetic-focus,
+.monaco-editor .quick-input-widget .monaco-inputbox.synthetic-focus {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: -2px;
+}
+.monaco-editor.prism-editor .find-widget :is(.button, .monaco-custom-toggle) {
+  border-radius: var(--prism-radius-small);
+}
+.monaco-editor.prism-editor .find-widget :is(.button, .monaco-custom-toggle):focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: -2px;
+}
+.monaco-editor.prism-editor .find-widget .button.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.monaco-component .monaco-inputbox-message {
+  border-radius: var(--prism-radius-small);
+  box-shadow: var(--prism-shadow);
+  font-family: var(--prism-font);
+}
+.monaco-editor.prism-editor :is(.suggest-widget, .suggest-details, .monaco-hover) .monaco-list-row,
+.monaco-editor .quick-input-widget .monaco-list-row {
+  border-radius: var(--prism-radius-small);
+}
+.monaco-editor.prism-editor .monaco-resizable-hover > .monaco-hover {
+  box-shadow: none;
+}
+.monaco-editor .quick-input-widget {
+  overflow: hidden;
+  border: 1px solid var(--liquid-rim);
+  border-radius: var(--prism-radius-panel);
+}
+.monaco-editor .quick-input-widget .quick-input-header {
+  cursor: default;
+}
+.monaco-component .monaco-keybinding-key {
+  border-radius: var(--prism-radius-small);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .monaco-editor.prism-editor
+    :is(.find-widget, .suggest-widget, .suggest-details, .monaco-hover, .monaco-resizable-hover),
+  .monaco-component.monaco-menu-container,
+  .monaco-hover.workbench-hover,
+  .monaco-editor .quick-input-widget {
+    background-color: var(--prism-surface-raised);
+    backdrop-filter: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .monaco-editor.prism-editor .find-widget,
+  .monaco-component.monaco-menu-container,
+  .monaco-hover.workbench-hover,
+  .monaco-editor .quick-input-widget {
+    animation: none;
+    transition: none;
+  }
+}
+html:is([data-motion='off'], [data-transitions='off']) .monaco-editor.prism-editor .find-widget,
+html:is([data-motion='off'], [data-transitions='off']) .monaco-component.monaco-menu-container,
+html:is([data-motion='off'], [data-transitions='off']) .monaco-hover.workbench-hover,
+html:is([data-motion='off'], [data-transitions='off']) .monaco-editor .quick-input-widget {
+  animation: none;
+  transition: none;
+}
+:host-context(html:is([data-motion='off'], [data-transitions='off']))
+  .monaco-component.monaco-menu-container {
+  animation: none;
+  transition: none;
+}

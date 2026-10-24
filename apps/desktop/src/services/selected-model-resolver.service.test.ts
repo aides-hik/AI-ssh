@@ -40,3 +40,18 @@ test('ID-only model selections preserve the current user-supplied endpoint', () 
   assert.equal(selected?.provider?.endpoint, 'http://127.0.0.1:8080/v1')
   assert.equal(selected?.provider?.apiKey, 'own-key')
 })
+
+test('full snapshots resolve current settings and cannot restore stale credentials or sampling defaults', () => {
+  const model = {
+    id: 'my-model', name: 'Current', providerId: 'custom-openai', contextWindow: 4096,
+    capabilities: { text: true, image: false, functionCall: true, vision: false },
+    requestConfig: { maxTokens: 2048 }
+  }
+  const current = { id: 'custom-openai', name: 'Own', enabled: true, apiKey: 'new-fixture', endpoint: 'https://new.fixture.invalid/v1', models: [model] }
+  const snapshot = { provider: { ...current, apiKey: 'old-fixture' }, model: { ...model, requestConfig: { maxTokens: 100 } } }
+  const selected = resolveSelectedModel(JSON.stringify(snapshot), [current])
+  assert.equal(selected?.provider?.apiKey, 'new-fixture')
+  assert.equal(selected?.model?.requestConfig?.maxTokens, 2048)
+  assert.equal(resolveSelectedModel(JSON.stringify(snapshot), [{ ...current, enabled: false }]), null)
+  assert.equal(resolveSelectedModel(JSON.stringify(snapshot), [{ ...current, models: [] }]), null)
+})

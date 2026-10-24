@@ -55,6 +55,7 @@
 }
 .oc-chat .oc-messages.is-empty {
   display: flex;
+  padding-block: 12px;
 }
 .oc-chat .oc-empty {
   align-items: stretch;
@@ -209,8 +210,8 @@
 }
 .oc-chat .oc-collapse-button {
   order: 2;
-  width: 25px;
-  height: 25px;
+  width: 28px;
+  height: 28px;
   transition:
     color 120ms,
     background-color 120ms;
@@ -248,7 +249,7 @@
   padding: 12px 14px;
   border: 1px solid var(--chat-border);
   border-radius: 9px;
-  background: var(--surface-inset-base);
+  background: var(--prism-surface-raised);
   color: var(--text-base);
   font: 12px/1.75 var(--font-family-mono);
   white-space: pre;
@@ -263,7 +264,7 @@
 }
 .oc-chat :is(.oc-markdown, .oc-response-content, .oc-tool-output-content) :not(pre) > code {
   padding: 2px 5px;
-  border-radius: 4px;
+  border-radius: var(--prism-radius-small);
   background: var(--surface-base-hover);
   color: var(--text-base);
   font: 12px/1.6 var(--font-family-mono);
@@ -368,11 +369,13 @@
   border: 1px solid var(--chat-border);
   border-radius: 999px;
   white-space: nowrap;
-  background: var(--background-base);
+  background: var(--prism-surface);
   color: var(--text-base);
-  box-shadow: 0 3px 12px #0002;
+  box-shadow: var(--prism-shadow);
   font: 12px/1.5 var(--font-family-sans);
   cursor: pointer;
+  border-color: var(--liquid-rim);
+  backdrop-filter: blur(20px);
 }
 .oc-chat .oc-session-status {
   flex: none;
@@ -500,22 +503,22 @@
 }
 .oc-chat .oc-action-menu-popover {
   bottom: calc(100% + 7px);
-  border-color: var(--chat-border);
-  background: var(--background-base);
+  border-color: var(--liquid-rim);
+  background: var(--prism-surface);
 }
 .oc-chat .oc-send-button {
-  width: 31px;
-  height: 31px;
+  width: 32px;
+  height: 32px;
   border-radius: 9px;
   background: var(--vscode-accent);
-  color: #fff;
+  color: var(--vscode-button-foreground);
   transition:
     background-color 120ms,
     opacity 120ms;
 }
 .oc-chat .oc-send-button:hover:not(:disabled) {
   background: var(--vscode-accent-hover, var(--vscode-accent));
-  color: #fff;
+  color: var(--vscode-button-foreground);
 }
 .oc-chat .oc-send-button:disabled {
   opacity: 0.35;
@@ -651,4 +654,33 @@ html[data-motion='off'] .oc-chat *,
 html[data-transitions='off'] .oc-chat * {
   animation: none !important;
   transition: none !important;
+}
+
+.oc-chat :is(.oc-markdown, .oc-response-content, .oc-tool-output-content) pre .hljs {
+  background: transparent;
+  color: inherit;
+}
+:root:is(.light, .light-modern) .oc-chat :is(.hljs-keyword, .hljs-selector-tag, .hljs-literal) {
+  color: #9d2660;
+}
+:root:is(.light, .light-modern)
+  .oc-chat
+  :is(.hljs-title, .hljs-function, .hljs-section, .hljs-name) {
+  color: #6350a8;
+}
+:root:is(.light, .light-modern)
+  .oc-chat
+  :is(.hljs-string, .hljs-regexp, .hljs-addition, .hljs-meta .hljs-string) {
+  color: #096348;
+}
+:root:is(.light, .light-modern)
+  .oc-chat
+  :is(.hljs-number, .hljs-symbol, .hljs-bullet, .hljs-attr, .hljs-variable) {
+  color: #155aa3;
+}
+:root:is(.light, .light-modern) .oc-chat :is(.hljs-comment, .hljs-quote) {
+  color: var(--prism-muted);
+}
+:root:is(.light, .light-modern) .oc-chat .hljs-deletion {
+  color: var(--prism-danger);
 }

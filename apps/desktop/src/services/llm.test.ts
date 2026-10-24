@@ -36,7 +36,7 @@ for (const fixture of [
   { model: 'gpt-5', selection: 'high', effort: 'high', temperature: undefined },
   { model: 'gpt-5', selection: 'default', effort: undefined, temperature: undefined },
   { model: 'o3', selection: 'xhigh', effort: undefined, temperature: undefined },
-  { model: 'gpt-4.1', selection: 'high', effort: undefined, temperature: 0.3 }
+  { model: 'gpt-4.1', selection: 'high', effort: undefined, temperature: undefined }
 ] satisfies Array<{ model: string; selection: ReasoningSelection; effort: string | undefined; temperature: number | undefined }>) {
   test(`terminal HTTP body validates ${fixture.model} ${fixture.selection} and sampling support`, async context => {
     let endpoint: unknown
@@ -77,6 +77,25 @@ test('Responses-only models use /responses even with the provider default effort
   assert.equal(request.store, false)
   assert.deepEqual(request.include, ['reasoning.encrypted_content'])
   assert.equal(chunks.find(chunk => chunk.type === 'text')?.content, 'answer')
+})
+
+test('terminal generation uses model defaults, output limits and excludes tools for text-only models', async context => {
+  let request: Record<string, unknown> = {}
+  context.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+    request = JSON.parse(String(init.body))
+    return streamResponse([{ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] }])
+  })
+  const current = model('gpt-5')
+  current.parameters = { maxOutputTokens: 16000 }
+  current.requestConfig = { temperature: 0.9, topP: 0.8, maxTokens: 50000, reasoning: 'high' }
+  current.capabilities.functionCall = false
+  const tool = { id: 'read_file', init: async () => { throw new Error('Text-only model must not initialize tools') } }
+  await Array.fromAsync(createLLMSession(provider(), current, [tool], '').stream([]))
+  assert.equal(request.max_completion_tokens, 16000)
+  assert.equal(request.reasoning_effort, 'high')
+  assert.equal(request.temperature, undefined)
+  assert.equal(request.top_p, undefined)
+  assert.equal(request.tools, undefined)
 })
 
 for (const id of ['gpt-5', 'gpt-6-astra']) {
@@ -171,6 +190,7 @@ test('Responses preserves UTF-8 deltas split at every byte and renders refusal t
 })
 
 for (const fixture of [
+  { base: 'https://generativelanguage.googleapis.com', model: 'gemini-2.5-pro', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', sentModel: 'gemini-2.5-pro' },
   { base: 'https://generativelanguage.googleapis.com/v1beta', model: 'models/gemini-2.5-pro', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', sentModel: 'gemini-2.5-pro' },
   { base: 'https://generativelanguage.googleapis.com/v1/', model: 'models/gemini-2.5-pro', endpoint: 'https://generativelanguage.googleapis.com/v1/openai/chat/completions', sentModel: 'gemini-2.5-pro' },
   { base: 'https://generativelanguage.googleapis.com/v1beta/openai/', model: 'gemini-2.5-pro', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', sentModel: 'gemini-2.5-pro' },

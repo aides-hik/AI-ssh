@@ -7,7 +7,7 @@
         <span
           v-if="connectionStatus === 'connected'"
           class="status-badge connected clickable"
-          title="点击断开连接"
+          data-prism-tooltip="点击断开连接"
           @click="handleConnectionStatusClick"
         >
           <i class="bi bi-circle-fill"></i> 已连接
@@ -21,7 +21,7 @@
         <span
           v-else
           class="status-badge disconnected clickable"
-          title="点击重新连接"
+          data-prism-tooltip="点击重新连接"
           @click="handleConnectionStatusClick"
         >
           <i class="bi bi-circle-fill"></i> 已断开
@@ -74,7 +74,7 @@
               v-for="shortcut in shortcutCommands"
               :key="shortcut.id"
               class="context-menu-item submenu-item"
-              :title="shortcut.command"
+              :data-prism-tooltip="shortcut.command"
               @click="handleRunShortcutFromMenu(shortcut.id, shortcut.command)"
             >
               <i class="bi bi-terminal"></i>
@@ -123,7 +123,7 @@
       class="modal-overlay"
       @click.self="showServerEnvDocEditor = false"
     >
-      <div class="modal-content server-env-doc-modal">
+      <div class="modal-content server-env-doc-modal" role="dialog" aria-modal="true" aria-label="服务器环境文档">
         <ServerEnvDocEditor
           v-if="currentConnectionId"
           :connection-id="currentConnectionId"
@@ -160,7 +160,7 @@
             <button
               type="button"
               class="btn-icon ai-panel-collapse"
-              title="收起AI助手"
+              data-prism-tooltip="收起AI助手"
               aria-label="收起 AI 助手，展开终端"
               :aria-controls="aiPanelId"
               :aria-expanded="!isAIAssistantMinimized"
@@ -187,7 +187,7 @@
         ref="aiLauncher"
         type="button"
         class="ai-assistant-floating-toggle"
-        title="展开AI助手"
+        data-prism-tooltip="展开AI助手"
         aria-label="展开 AI 助手"
         :aria-controls="aiPanelId"
         :aria-expanded="!isAIAssistantMinimized"
@@ -1527,10 +1527,12 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background-color: var(--vscode-bg);
+  background-color: transparent;
   min-width: 0;
   min-height: 0;
   container-type: inline-size;
+  color: var(--prism-text);
+  font-family: var(--prism-font);
 }
 
 .terminal-main {
@@ -1544,10 +1546,10 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 24px;
+  min-height: 30px;
   padding: 0 12px;
   border-top: 1px solid var(--vscode-border-subtle);
-  background: var(--vscode-bg-lighter);
+  background: transparent;
   color: var(--vscode-fg-muted);
   font-size: 12px;
 }
@@ -1568,19 +1570,19 @@ onBeforeUnmount(() => {
 }
 
 .status-pill.active {
-  color: #d7ba7d;
+  color: var(--prism-warning);
 }
 
 .status-pill.syncing {
-  color: #4fc1ff;
+  color: var(--prism-info);
 }
 
 .status-pill.synced {
-  color: #23d18b;
+  color: var(--prism-success);
 }
 
 .status-pill.error {
-  color: #f48771;
+  color: var(--prism-danger);
 }
 
 .status-time {
@@ -1592,8 +1594,8 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
-  background-color: var(--vscode-bg-lighter);
+  padding: 10px 16px;
+  background-color: transparent;
   border-bottom: 1px solid var(--vscode-border-subtle);
 }
 
@@ -1618,8 +1620,8 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
-  border-radius: 3px;
+  padding: 4px 9px;
+  border-radius: 999px;
   font-size: 11px;
   font-weight: 500;
   flex-shrink: 0;
@@ -1644,21 +1646,21 @@ onBeforeUnmount(() => {
 }
 
 .status-badge.connected {
-  color: var(--vscode-editorGutter-addedBackground);
-  background-color: rgba(var(--vscode-editorGutter-addedBackground-rgb, 22, 174, 96), 0.15);
-  border: 1px solid var(--vscode-editorGutter-addedBackground);
+  color: var(--prism-success);
+  background-color: var(--prism-success-bg);
+  border: 1px solid var(--prism-success);
 }
 
 .status-badge.connecting {
-  color: var(--vscode-editorGutter-modifiedBackground);
-  background-color: rgba(var(--vscode-editorGutter-modifiedBackground-rgb, 234, 179, 8), 0.15);
-  border: 1px solid var(--vscode-editorGutter-modifiedBackground);
+  color: var(--prism-warning);
+  background-color: var(--prism-warning-bg);
+  border: 1px solid var(--prism-warning);
 }
 
 .status-badge.disconnected {
-  color: var(--vscode-editorGutter-deletedBackground);
-  background-color: rgba(var(--vscode-editorGutter-deletedBackground-rgb, 239, 68, 68), 0.15);
-  border: 1px solid var(--vscode-editorGutter-deletedBackground);
+  color: var(--prism-danger);
+  background-color: var(--prism-danger-bg);
+  border: 1px solid var(--prism-danger);
 }
 
 .terminal-actions {
@@ -1670,20 +1672,20 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   background: transparent;
   border: none;
   color: var(--vscode-fg-muted);
   cursor: pointer;
-  border-radius: 3px;
+  border-radius: var(--prism-radius-control);
   transition:
     background-color 120ms ease-out,
     color 120ms ease-out;
 }
 
 .btn-icon:hover {
-  background-color: var(--vscode-hover);
+  background-color: var(--vscode-list-hoverBackground);
   color: var(--vscode-fg);
 }
 
@@ -1724,7 +1726,7 @@ onBeforeUnmount(() => {
   min-width: 320px;
   min-height: 0;
   border-left: 1px solid var(--vscode-border);
-  background-color: var(--vscode-bg);
+  background-color: var(--prism-surface-raised);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -1739,6 +1741,8 @@ onBeforeUnmount(() => {
   gap: 10px;
   padding: 7px 10px 7px 13px;
   border-bottom: 1px solid var(--vscode-border);
+  background: var(--prism-surface);
+  backdrop-filter: blur(20px);
 }
 
 .ai-panel-heading {
@@ -1772,7 +1776,7 @@ onBeforeUnmount(() => {
 
 .ai-panel-collapse {
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: var(--prism-radius-control);
   touch-action: manipulation;
 }
 
@@ -1823,23 +1827,24 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   padding: 9px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--liquid-rim);
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(230, 236, 244, 0.92) 100%);
-  color: #111827;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.34);
+  background: var(--prism-surface);
+  color: var(--prism-text);
+  box-shadow: var(--prism-shadow);
   cursor: pointer;
   z-index: 3;
   transition:
     transform 0.15s ease,
     box-shadow 0.15s ease,
     background-color 0.15s ease;
+  backdrop-filter: blur(20px) saturate(1.3);
 }
 
 .ai-assistant-floating-toggle:hover {
-  transform: translateY(-1px);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 1) 0%, rgba(241, 245, 249, 0.96) 100%);
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.38);
+  transform: none;
+  background: var(--liquid-selected);
+  box-shadow: var(--prism-shadow);
 }
 
 .ai-floating-toggle-label {
@@ -1854,44 +1859,53 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--prism-overlay, color-mix(in srgb, var(--liquid-canvas) 42%, transparent));
   z-index: 10000;
   display: flex;
   align-items: center;
   justify-content: center;
+  backdrop-filter: blur(10px);
+  padding: 20px;
 }
 
 .server-env-doc-modal {
   width: 90%;
   max-width: 1200px;
   height: 85%;
-  background: var(--vscode-editor-background);
+  background: var(--prism-surface);
+  border: 1px solid var(--liquid-rim);
+  border-radius: var(--prism-radius-dialog);
+  box-shadow: var(--prism-shadow-raised);
+  overflow: hidden;
+  max-height: calc(100dvh - 40px);
 }
 
 /* 右键菜单样式 */
 .context-menu {
   position: fixed;
-  background-color: var(--vscode-bg-light);
-  border: 1px solid var(--vscode-border);
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  background-color: var(--prism-surface);
+  border: 1px solid var(--liquid-rim);
+  border-radius: 14px;
+  box-shadow: var(--prism-shadow);
   z-index: 9999;
   min-width: 180px;
   max-width: min(240px, calc(100vw - 24px));
-  padding: 4px;
+  padding: 6px;
+  backdrop-filter: blur(24px) saturate(1.3);
 }
 
 .context-menu-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
+  padding: 7px 10px;
   cursor: pointer;
   color: var(--vscode-fg);
-  font-size: 0.875rem;
-  border-radius: 6px;
-  transition: all 0.15s ease;
+  font-size: 13px;
+  border-radius: var(--prism-radius-control);
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
   user-select: none;
+  min-height: 34px;
 }
 
 .context-menu-item.has-submenu {
@@ -1911,12 +1925,13 @@ onBeforeUnmount(() => {
   left: calc(100% - 6px);
   min-width: 220px;
   max-width: 320px;
-  padding: 4px;
-  border-radius: 8px;
-  border: 1px solid var(--vscode-border);
-  background-color: var(--vscode-bg-light);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid var(--liquid-rim);
+  background-color: var(--prism-surface);
+  box-shadow: var(--prism-shadow);
   z-index: 10000;
+  backdrop-filter: blur(24px) saturate(1.3);
 }
 
 .submenu-item {
@@ -1942,12 +1957,12 @@ onBeforeUnmount(() => {
 }
 
 .context-menu-item:hover {
-  background: var(--vscode-accent);
-  color: var(--vscode-button-foreground);
+  background: var(--vscode-list-hoverBackground);
+  color: var(--prism-text);
 }
 
 .context-menu-item:hover i {
-  color: var(--vscode-button-foreground);
+  color: var(--vscode-accent);
 }
 
 .context-menu-item i {
@@ -1971,4 +1986,17 @@ onBeforeUnmount(() => {
 }
 
 /* xterm 6 manages viewport scrolling through its own scrollable element. */
+@container (max-width: 520px) {
+  .terminal-header { padding-inline: 12px; }
+  .connection-info { gap: 8px; }
+  .terminal-status-left { flex-wrap: wrap; gap: 4px 8px; }
+  .status-time { display: none; }
+}
+@media (max-width: 600px) {
+  .modal-overlay { padding: 12px; }
+  .server-env-doc-modal { width: 100%; height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-assistant-floating-toggle { transition: background-color 100ms, color 100ms; }
+}
 </style>

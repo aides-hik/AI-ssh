@@ -52,41 +52,51 @@
     <AppTitleBar v-if="!isFullscreen" @open-settings="openSettings" />
 
     <div class="liquid-workbench">
-      <button
-        v-if="showSidebar"
-        class="sidebar-scrim"
-        aria-label="收起连接列表"
-        @click="showSidebar = false"
-      ></button>
-      <LiquidSurface
-        v-show="showSidebar"
-        as="aside"
-        id="connection-sidebar"
-        class="vscode-sidebar liquid-sidebar"
-        :style="{ width: sidebarWidth + 'px' }"
-        :radius="22"
-        :strength="32"
-        :blur="7"
-        :interactive="false"
-        :motion="theme.animations.value"
-        aria-label="SSH 连接"
-      >
-        <AppSidebar :active-view="activeView" />
-      </LiquidSurface>
+      <Transition name="sidebar-scrim">
+        <button
+          v-if="showSidebar"
+          type="button"
+          class="sidebar-scrim"
+          aria-label="收起连接列表"
+          @click="showSidebar = false"
+        ></button>
+      </Transition>
       <div
-        v-if="showSidebar"
-        class="vscode-splitter vscode-splitter-vertical"
-        role="separator"
-        aria-label="调整连接列表宽度"
-        aria-orientation="vertical"
-        :aria-valuenow="sidebarWidth"
-        :aria-valuemin="200"
-        :aria-valuemax="600"
-        tabindex="0"
-        @keydown.left.prevent="sidebarWidth = Math.max(200, sidebarWidth - 20)"
-        @keydown.right.prevent="sidebarWidth = Math.min(600, sidebarWidth + 20)"
-        @mousedown="startLeftResize"
-      ></div>
+        ref="sidebarRegion"
+        class="liquid-sidebar-region"
+        :data-open="showSidebar"
+        :data-resizing="isResizing"
+        :style="{ '--sidebar-width': sidebarWidth + 'px' }"
+        :inert="!showSidebar"
+        :aria-hidden="!showSidebar || undefined"
+      >
+        <LiquidSurface
+          as="aside"
+          id="connection-sidebar"
+          class="vscode-sidebar liquid-sidebar"
+          :radius="22"
+          :strength="32"
+          :blur="7"
+          :interactive="false"
+          :motion="theme.animations.value"
+          aria-label="SSH 连接"
+        >
+          <AppSidebar :active-view="activeView" />
+        </LiquidSurface>
+        <div
+          class="vscode-splitter vscode-splitter-vertical"
+          role="separator"
+          aria-label="调整连接列表宽度"
+          aria-orientation="vertical"
+          :aria-valuenow="sidebarWidth"
+          :aria-valuemin="200"
+          :aria-valuemax="600"
+          tabindex="0"
+          @keydown.left.prevent="sidebarWidth = Math.max(200, sidebarWidth - 20)"
+          @keydown.right.prevent="sidebarWidth = Math.min(600, sidebarWidth + 20)"
+          @mousedown="startLeftResize"
+        ></div>
+      </div>
 
       <div class="liquid-editor">
         <LiquidSurface
@@ -97,10 +107,11 @@
           :interactive="false"
         >
           <button
+            ref="sidebarToggle"
             class="sidebar-toggle liquid-icon-button"
             :aria-expanded="showSidebar"
             aria-controls="connection-sidebar"
-            :title="showSidebar ? '收起连接列表 (Ctrl+B)' : '展开连接列表 (Ctrl+B)'"
+            :data-prism-tooltip="showSidebar ? '收起连接列表 (Ctrl+B)' : '展开连接列表 (Ctrl+B)'"
             aria-label="切换连接列表"
             @click="showSidebar = !showSidebar"
           >
@@ -143,7 +154,7 @@
           </div>
           <button
             class="liquid-icon-button liquid-add-connection"
-            title="新建连接"
+            data-prism-tooltip="新建连接"
             aria-label="新建连接"
             @click="createConnection"
           >
@@ -191,7 +202,7 @@
           :class="{ active: route.path === '/terminal' }"
           :aria-current="route.path === '/terminal' ? 'page' : undefined"
           :disabled="!sessionTab"
-          :title="sessionTab ? '终端' : '连接服务器后使用终端'"
+          :data-prism-tooltip="sessionTab ? '终端' : '连接服务器后使用终端'"
           @click="openSessionView('terminal')"
         >
           <i class="bi bi-terminal" aria-hidden="true"></i><span>终端</span>
@@ -202,7 +213,7 @@
           :class="{ active: route.path === '/file-manager' }"
           :aria-current="route.path === '/file-manager' ? 'page' : undefined"
           :disabled="!sessionTab"
-          :title="sessionTab ? '文件管理' : '连接服务器后管理文件'"
+          :data-prism-tooltip="sessionTab ? '文件管理' : '连接服务器后管理文件'"
           @click="openSessionView('file-manager')"
         >
           <i class="bi bi-folder2" aria-hidden="true"></i><span>文件</span>
@@ -222,6 +233,7 @@
     </footer>
     <GlobalModals />
     <NotificationContainer />
+    <PrismTooltip />
   </div>
 </template>
 
@@ -238,6 +250,7 @@ import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppStatusBar from '@/components/layout/AppStatusBar.vue'
 import GlobalModals from '@/components/common/GlobalModals.vue'
 import NotificationContainer from '@/components/common/NotificationContainer.vue'
+import PrismTooltip from '@/components/common/PrismTooltip.vue'
 import LiquidSurface from '@/components/common/LiquidSurface.vue'
 import { clearRetiredAccountSession } from '@/utils/standalone-providers'
 
@@ -253,6 +266,8 @@ const { t: $t } = useI18n()
 // 响应式数据
 const isFullscreen = ref(false)
 const showSidebar = ref(true)
+const sidebarRegion = ref<HTMLElement | null>(null)
+const sidebarToggle = ref<HTMLButtonElement | null>(null)
 const activeView = ref('ssh')
 const activeTab = ref('ssh')
 const lastSessionTabId = ref('')
@@ -577,6 +592,22 @@ const stopResize = () => {
   document.removeEventListener('mousemove', handlePanelResize)
   document.removeEventListener('mouseup', stopResize)
 }
+
+watch(
+  showSidebar,
+  open => {
+    if (open) return
+    stopResize()
+    // Restore focus before the collapsing controls become inert, including Ctrl+B from search.
+    if (
+      sidebarRegion.value?.contains(document.activeElement) ||
+      document.activeElement?.classList.contains('sidebar-scrim')
+    ) {
+      sidebarToggle.value?.focus({ preventScroll: true })
+    }
+  },
+  { flush: 'sync' }
+)
 
 // 键盘快捷键处理
 const handleKeydown = (event: KeyboardEvent) => {

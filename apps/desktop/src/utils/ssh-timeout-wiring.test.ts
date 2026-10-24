@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { testProviderConnection } from '../services/ai-test.service'
+import type { AIProvider } from '../types/ai-providers.types'
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const srcDir = join(currentDir, '..')
@@ -13,7 +15,6 @@ const terminalViewPath = join(srcDir, 'views', 'TerminalView.vue')
 const sshCommandServicePath = join(srcDir, 'services', 'ssh', 'ssh-command.service.ts')
 const desktopMainPath = join(desktopDir, 'electron', 'main', 'index.ts')
 const desktopHtmlPath = join(desktopDir, 'index.html')
-const aiTestServicePath = join(srcDir, 'services', 'ai-test.service.ts')
 
 test('ssh timeout defaults to 10 seconds in settings UI', async () => {
   const source = await readFile(settingsViewPath, 'utf8')
@@ -90,9 +91,17 @@ test('desktop CSP allows all http and https connect targets', async () => {
   assert.match(htmlSource, /connect-src 'self' http: https: ws: wss:/)
 })
 
-test('openai-compatible provider tests use unified chat completions endpoint', async () => {
-  const source = await readFile(aiTestServicePath, 'utf8')
-
-  assert.doesNotMatch(source, /\$\{provider\.endpoint\}\/v1\/chat\/completions/)
-  assert.match(source, /\$\{provider\.endpoint\}\/chat\/completions/)
+test('compatible connection probes use the configured base URL without duplicating v1', async context => {
+  let observedEndpoint: unknown
+  context.mock.method(globalThis, 'fetch', async (url: unknown) => {
+    observedEndpoint = url
+    return new Response(JSON.stringify({ model: 'fixture-model', choices: [{ message: { content: 'OK' }, finish_reason: 'stop' }] }))
+  })
+  const provider: AIProvider = {
+    id: 'custom-openai', name: 'Fixture', description: '', icon: '', website: '',
+    endpoint: 'https://fixture.invalid/v1/', apiKey: 'fixture-only', enabled: true, isDefault: false, models: []
+  }
+  const result = await testProviderConnection(provider, 'fixture-model')
+  assert.equal(result.success, true)
+  assert.equal(observedEndpoint, 'https://fixture.invalid/v1/chat/completions')
 })

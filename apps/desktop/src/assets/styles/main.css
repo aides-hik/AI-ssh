@@ -112,11 +112,15 @@ pre,
   color: white;
 }
 
-/* Bootstrap 组件暗色主题适配 */
+/* Shared fallback controls; specialized terminal/editor controls override locally. */
 .btn {
-  border-radius: 2px;
+  border-radius: var(--prism-radius-control);
   font-weight: 500;
-  transition: all 0.15s ease-in-out;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .btn-primary {
@@ -140,27 +144,31 @@ input[type='url'],
 input[type='tel'],
 textarea {
   background-color: var(--vscode-bg-input);
-  border: 1px solid transparent;
+  border: 1px solid var(--vscode-border);
   color: var(--vscode-fg);
   font-size: 13px;
-  height: 26px;
-  padding: 3px 8px;
-  border-radius: 2px;
-  transition: all 0.15s ease;
+  height: 34px;
+  padding: 6px 10px;
+  border-radius: var(--prism-radius-control);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
 }
 
 /* Select 元素单独处理 - 避免内容显示不全 */
 select {
   background-color: var(--vscode-bg-input);
-  border: 1px solid transparent;
+  border: 1px solid var(--vscode-border);
   color: var(--vscode-fg);
   font-size: 13px;
-  min-height: 26px;
-  height: 26px;
+  min-height: 34px;
+  height: 34px;
   padding: 0 8px;
   line-height: normal;
-  border-radius: 2px;
-  transition: all 0.15s ease;
+  border-radius: var(--prism-radius-control);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
   cursor: pointer;
   /* 使用浏览器原生下拉箭头 */
 }
@@ -181,17 +189,19 @@ select option {
 .form-multiselect {
   padding: 0 12px;
   background-color: var(--vscode-bg-input);
-  border: 1px solid transparent;
+  border: 1px solid var(--vscode-border);
   color: var(--vscode-fg);
   font-size: 13px;
-  border-radius: 2px;
-  transition: all 0.15s ease;
+  border-radius: var(--prism-radius-control);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .form-input,
 .form-select,
 .form-multiselect {
-  height: 26px;
+  height: 34px;
 }
 
 .form-textarea {
@@ -323,8 +333,9 @@ select.success:focus {
 }
 
 .modal-content {
-  background-color: var(--vscode-bg-light);
-  border-color: var(--vscode-border);
+  background-color: var(--prism-surface-raised);
+  border-color: var(--liquid-rim);
+  border-radius: var(--prism-radius-dialog);
 }
 
 .modal-header {
@@ -336,8 +347,10 @@ select.success:focus {
 }
 
 .dropdown-menu {
-  background-color: var(--vscode-bg-light);
-  border-color: var(--vscode-border);
+  background-color: var(--prism-surface-raised);
+  border-color: var(--liquid-rim);
+  border-radius: var(--prism-radius-panel);
+  box-shadow: var(--prism-shadow-raised);
 }
 
 .dropdown-item {
@@ -425,7 +438,9 @@ select.success:focus {
 /* 通知动画 */
 .notification-enter-active,
 .notification-leave-active {
-  transition: all 0.3s ease;
+  transition:
+    opacity 180ms ease,
+    transform 180ms var(--prism-ease);
 }
 
 .notification-enter-from {
@@ -440,7 +455,9 @@ select.success:focus {
 
 .slide-up-enter-active,
 .slide-up-leave-active {
-  transition: all 0.3s ease-out;
+  transition:
+    opacity 180ms ease,
+    transform 180ms var(--prism-ease);
 }
 
 .slide-up-enter-from {
@@ -474,7 +491,7 @@ select.success:focus {
 .code-block {
   background: var(--vscode-bg-lighter);
   border: 1px solid var(--vscode-border);
-  border-radius: 2px;
+  border-radius: var(--prism-radius-control);
   padding: 12px;
   font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
   font-size: 13px;
@@ -485,7 +502,7 @@ select.success:focus {
 .code-inline {
   background: var(--vscode-bg-lighter);
   border: 1px solid var(--vscode-border);
-  border-radius: 2px;
+  border-radius: var(--prism-radius-small);
   padding: 2px 4px;
   font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
   font-size: 0.9em;

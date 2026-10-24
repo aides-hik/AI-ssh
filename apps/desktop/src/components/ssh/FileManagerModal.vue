@@ -1,13 +1,13 @@
 <template>
   <div v-if="visible" class="file-manager-modal-overlay" @click.self="handleClose">
-    <div class="file-manager-modal">
+    <div class="file-manager-modal" role="dialog" aria-modal="true" aria-label="文件管理">
       <!-- 标题栏 -->
       <div class="modal-header">
         <div class="modal-title">
           <i class="bi bi-folder-open"></i>
           <span>文件管理 - {{ connection?.name }}</span>
         </div>
-        <button class="close-button" @click="handleClose">
+        <button class="close-button" @click="handleClose" aria-label="关闭文件管理">
           <i class="bi bi-x"></i>
         </button>
       </div>
@@ -130,14 +130,14 @@
                 v-if="file.type === 'file'" 
                 class="action-btn" 
                 @click="downloadFile(file)"
-                title="下载"
+                data-prism-tooltip="下载" aria-label="下载"
               >
                 <i class="bi bi-download"></i>
               </button>
               <button 
                 class="action-btn danger" 
                 @click="deleteFile(file)"
-                title="删除"
+                data-prism-tooltip="删除" aria-label="删除"
               >
                 <i class="bi bi-trash"></i>
               </button>
@@ -160,10 +160,10 @@
     
     <!-- 输入对话框 -->
     <div v-if="showInputDialog" class="input-dialog-overlay" @click.self="closeInputDialog">
-      <div class="input-dialog">
+      <div class="input-dialog" role="dialog" aria-modal="true" :aria-label="inputDialogTitle">
         <div class="input-dialog-header">
           <h3 class="text-sm font-medium text-vscode-fg">{{ inputDialogTitle }}</h3>
-          <button @click="closeInputDialog" class="vscode-icon-button">
+          <button @click="closeInputDialog" class="vscode-icon-button" aria-label="关闭输入对话框">
             <i class="bi bi-x"></i>
           </button>
         </div>
@@ -234,23 +234,6 @@ const isAllSelected = computed(() => {
   return files.value.length > 0 && selectedFiles.value.length === files.value.length
 })
 
-// 监听连接变化，加载文件列表
-watch(() => props.connection, (newConnection) => {
-  if (newConnection && props.visible) {
-    currentPath.value = '/'
-    loadFiles()
-  }
-}, { immediate: true })
-
-watch(() => props.visible, (visible) => {
-  if (visible && props.connection) {
-    loadFiles()
-  } else {
-    // 关闭时清空选择
-    selectedFiles.value = []
-  }
-})
-
 // 加载文件列表
 const loadFiles = async () => {
   if (!props.connection || !window.electronAPI) {
@@ -275,6 +258,23 @@ const loadFiles = async () => {
     loading.value = false
   }
 }
+
+// 在加载函数初始化后注册即时监听，支持直接以已打开状态挂载。
+watch(() => props.connection, (newConnection) => {
+  if (newConnection && props.visible) {
+    currentPath.value = '/'
+    loadFiles()
+  }
+}, { immediate: true })
+
+watch(() => props.visible, (visible) => {
+  if (visible && props.connection) {
+    loadFiles()
+  } else {
+    // 关闭时清空选择
+    selectedFiles.value = []
+  }
+})
 
 // 文件操作
 const handleFileClick = (file: FileItem) => {
@@ -627,12 +627,14 @@ const handleClose = () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--prism-overlay, color-mix(in srgb, var(--liquid-canvas) 42%, transparent));
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
   animation: fadeIn 0.2s ease;
+  backdrop-filter: blur(10px);
+  padding: 20px;
 }
 
 @keyframes fadeIn {
@@ -641,16 +643,23 @@ const handleClose = () => {
 }
 
 .file-manager-modal {
-  background: var(--vscode-bg);
-  border: 1px solid var(--vscode-border);
-  border-radius: 8px;
+  background: var(--prism-surface);
+  border: 1px solid var(--liquid-rim);
+  border-radius: var(--prism-radius-dialog);
   width: 90%;
   max-width: 1200px;
   height: 80vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--prism-shadow-raised);
   animation: slideUp 0.3s ease;
+  backdrop-filter: blur(28px) saturate(1.3);
+  overflow: hidden;
+  max-height: calc(100dvh - 40px);
+  min-width: 0;
+  color: var(--prism-text);
+  font-family: var(--prism-font);
+  container: file-workspace / inline-size;
 }
 
 @keyframes slideUp {
@@ -670,7 +679,7 @@ const handleClose = () => {
   justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid var(--vscode-border);
-  background: var(--vscode-bg-light);
+  background: transparent;
 }
 
 .modal-title {
@@ -690,10 +699,10 @@ const handleClose = () => {
   justify-content: center;
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--prism-radius-small);
   cursor: pointer;
   color: var(--vscode-fg-muted);
-  transition: all 0.15s ease;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
 }
 
 .close-button:hover {
@@ -707,7 +716,7 @@ const handleClose = () => {
   justify-content: space-between;
   padding: 12px 20px;
   border-bottom: 1px solid var(--vscode-border);
-  background: var(--vscode-bg-light);
+  background: transparent;
 }
 
 .toolbar-left,
@@ -721,13 +730,15 @@ const handleClose = () => {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: var(--vscode-bg);
+  background: var(--prism-control);
   border: 1px solid var(--vscode-border);
-  border-radius: 4px;
+  border-radius: var(--prism-radius-control);
   color: var(--vscode-fg);
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
+  min-height: 34px;
+  font-family: inherit;
 }
 
 .toolbar-btn:hover:not(:disabled) {
@@ -758,7 +769,7 @@ const handleClose = () => {
 .toolbar-btn.danger:hover:not(:disabled) {
   background: var(--vscode-error);
   border-color: var(--vscode-error);
-  color: #ffffff;
+  color: var(--prism-surface-raised);
 }
 
 .path-bar {
@@ -767,19 +778,21 @@ const handleClose = () => {
   gap: 10px;
   padding: 12px 20px;
   border-bottom: 1px solid var(--vscode-border);
-  background: var(--vscode-bg-light);
+  background: transparent;
 }
 
 .path-input {
   flex: 1;
   padding: 6px 12px;
-  background: var(--vscode-bg-input);
+  background: var(--prism-control);
   border: 1px solid var(--vscode-border);
-  border-radius: 4px;
+  border-radius: var(--prism-radius-control);
   color: var(--vscode-fg);
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 13px;
   outline: none;
+  min-width: 0;
+  min-height: 36px;
 }
 
 .path-input:focus {
@@ -798,8 +811,10 @@ const handleClose = () => {
   align-items: center;
   justify-content: space-between;
   padding: 10px 20px;
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
+  background: var(--prism-info-bg);
+  color: var(--vscode-accent);
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .selected-info {
@@ -814,16 +829,16 @@ const handleClose = () => {
 
 .file-list-header {
   display: grid;
-  grid-template-columns: 40px 1fr 100px 150px 100px;
+  grid-template-columns: 32px minmax(0, 1fr) 90px 136px 132px;
   gap: 12px;
-  padding: 10px 20px;
-  background: var(--vscode-bg-lighter);
+  padding: 10px 16px;
+  background: color-mix(in srgb, var(--prism-control) 58%, transparent);
   border-bottom: 1px solid var(--vscode-border);
   font-size: 12px;
   font-weight: 600;
   color: var(--vscode-fg-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .file-list {
@@ -831,6 +846,8 @@ const handleClose = () => {
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--vscode-border) transparent;
+  min-height: 0;
+  background: color-mix(in srgb, var(--prism-surface-raised) 68%, transparent);
 }
 
 .file-list::-webkit-scrollbar {
@@ -843,7 +860,7 @@ const handleClose = () => {
 
 .file-list::-webkit-scrollbar-thumb {
   background: var(--vscode-border);
-  border-radius: 4px;
+  border-radius: var(--prism-radius-small);
 }
 
 .loading-state,
@@ -877,16 +894,17 @@ const handleClose = () => {
 
 .file-item {
   display: grid;
-  grid-template-columns: 40px 1fr 100px 150px 100px;
+  grid-template-columns: 32px minmax(0, 1fr) 90px 136px 132px;
   gap: 12px;
-  padding: 10px 20px;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--vscode-border);
   cursor: pointer;
   transition: background 0.1s ease;
+  min-height: 44px;
 }
 
 .file-item:hover {
-  background: var(--vscode-bg-lighter);
+  background: var(--vscode-list-hoverBackground);
 }
 
 .file-item.selected {
@@ -925,11 +943,12 @@ const handleClose = () => {
   display: flex;
   align-items: center;
   font-size: 13px;
+  opacity: 1;
 }
 
 .file-col-actions {
   gap: 6px;
-  opacity: 0;
+  opacity: 1;
   transition: opacity 0.15s ease;
 }
 
@@ -939,16 +958,17 @@ const handleClose = () => {
 
 .action-btn {
   width: 28px;
-  height: 28px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--prism-radius-small);
   cursor: pointer;
   color: var(--vscode-fg-muted);
-  transition: all 0.15s ease;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
+  min-width: 30px;
 }
 
 .action-btn:hover {
@@ -958,8 +978,8 @@ const handleClose = () => {
 }
 
 .action-btn.danger:hover {
-  background: var(--vscode-inputValidation-errorBackground);
-  border-color: var(--vscode-inputValidation-errorBorder);
+  background: var(--prism-danger-bg);
+  border-color: color-mix(in srgb, var(--prism-danger) 35%, transparent);
   color: var(--vscode-button-foreground);
 }
 
@@ -969,32 +989,12 @@ const handleClose = () => {
   justify-content: space-between;
   padding: 8px 20px;
   border-top: 1px solid var(--vscode-border);
-  background: var(--vscode-bg-light);
+  background: transparent;
   font-size: 12px;
   color: var(--vscode-fg-muted);
 }
 
-/* Bootstrap Icons */
-.bi-folder-open::before { content: "📂"; }
-.bi-x::before { content: "✕"; font-weight: bold; }
-.bi-arrow-left::before { content: "←"; }
-.bi-house::before { content: "🏠"; }
-.bi-arrow-clockwise::before { content: "↻"; }
-.bi-upload::before { content: "⬆"; }
-.bi-folder-plus::before { content: "📁+"; }
-.bi-download::before { content: "⬇"; }
-.bi-trash::before { content: "🗑"; }
-.bi-folder-fill::before { content: "📁"; }
-.bi-file-text::before { content: "📄"; }
-.bi-file-pdf::before { content: "📕"; }
-.bi-file-word::before { content: "📘"; }
-.bi-file-excel::before { content: "📗"; }
-.bi-file-ppt::before { content: "📙"; }
-.bi-file-zip::before { content: "📦"; }
-.bi-file-image::before { content: "🖼"; }
-.bi-file-music::before { content: "🎵"; }
-.bi-file-play::before { content: "🎬"; }
-.bi-file-earmark::before { content: "📄"; }
+
 
 /* 输入对话框样式 */
 .input-dialog-overlay {
@@ -1003,20 +1003,24 @@ const handleClose = () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--prism-overlay, color-mix(in srgb, var(--liquid-canvas) 42%, transparent));
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2000;
+  z-index: 10001;
+  backdrop-filter: blur(10px);
+  padding: 20px;
 }
 
 .input-dialog {
-  background: var(--vscode-bg-light);
-  border: 1px solid var(--vscode-border);
-  border-radius: 4px;
+  background: var(--prism-surface);
+  border: 1px solid var(--liquid-rim);
+  border-radius: var(--prism-radius-dialog);
   width: 400px;
   max-width: 90vw;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--prism-shadow-raised);
+  backdrop-filter: blur(28px) saturate(1.3);
+  overflow: hidden;
 }
 
 .input-dialog-header {
@@ -1042,12 +1046,13 @@ const handleClose = () => {
 .form-input-full {
   width: 100%;
   padding: 8px 12px;
-  background: var(--vscode-input-bg);
+  background: var(--prism-control);
   border: 1px solid var(--vscode-border);
-  border-radius: 4px;
+  border-radius: var(--prism-radius-control);
   color: var(--vscode-fg);
   font-size: 13px;
   outline: none;
+  min-height: 38px;
 }
 
 .form-input-full:focus {
@@ -1055,12 +1060,12 @@ const handleClose = () => {
 }
 
 .vscode-icon-button {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 0.25rem;
+  border-radius: var(--prism-radius-control);
   transition: color 0.15s ease;
   color: var(--vscode-fg-muted);
   cursor: pointer;
@@ -1077,11 +1082,12 @@ const handleClose = () => {
   padding: 6px 12px;
   font-size: 13px;
   border: 1px solid var(--vscode-border);
-  border-radius: 2px;
+  border-radius: var(--prism-radius-control);
   background: var(--vscode-bg-light);
   color: var(--vscode-fg);
   cursor: pointer;
-  transition: all 0.1s ease;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
+  min-height: 36px;
 }
 
 .vscode-button:hover {
@@ -1098,6 +1104,42 @@ const handleClose = () => {
 .vscode-button.primary:hover {
   background: var(--vscode-accent-hover);
   border-color: var(--vscode-accent-hover);
+}
+/* Keep file tools usable when the workspace shares space with another pane. */
+.toolbar, .toolbar-left, .toolbar-right, .status-bar, .status-right { flex-wrap: wrap; }
+.toolbar-left, .toolbar-right { align-items: center; }
+.file-col-checkbox input { accent-color: var(--vscode-accent); width: 15px; height: 15px; }
+.toolbar-btn:focus-visible, .action-btn:focus-visible, .close-button:focus-visible,
+.close-btn:focus-visible, .footer-btn:focus-visible, .task-btn:focus-visible,
+.vscode-button:focus-visible, .vscode-icon-button:focus-visible, .btn-cancel:focus-visible,
+.btn-confirm:focus-visible { outline: 2px solid var(--vscode-accent); outline-offset: 2px; }
+button { touch-action: manipulation; }
+@container file-workspace (max-width: 760px) {
+  .file-list-header, .file-item { grid-template-columns: 28px minmax(0, 1fr) 76px 104px; gap: 8px; }
+  .file-col-modified { display: none; }
+  .file-col-actions { gap: 4px; }
+  .action-btn span { display: none; }
+  .action-btn { width: 32px; }
+  .connection-info { min-width: 0; flex-wrap: wrap; gap: 8px; }
+  .connection-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .host-info { display: none; }
+  .toolbar, .path-bar { padding: 10px 12px; gap: 8px; }
+}
+@container file-workspace (max-width: 440px) {
+  .file-list-header, .file-item { grid-template-columns: 24px minmax(0, 1fr) 74px; }
+  .file-col-size { display: none; }
+  .toolbar-btn { padding-inline: 9px; font-size: 12px; }
+  .status-bar { gap: 8px; }
+}
+@media (hover: none) { .file-col-actions { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .file-manager-modal-overlay, .file-manager-modal, .create-folder-overlay, .create-folder-dialog,
+  .upload-manager-overlay, .upload-manager-modal, .download-manager-overlay, .download-manager-modal { animation: none; }
+}
+@media (max-width: 600px) {
+  .file-manager-modal-overlay { padding: 12px; }
+  .file-manager-modal { width: 100%; height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); }
+  .modal-header { padding: 12px 16px; }
 }
 </style>
 

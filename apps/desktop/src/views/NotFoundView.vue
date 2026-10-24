@@ -1,106 +1,113 @@
 <template>
-  <div class="not-found-view flex items-center justify-center min-h-screen p-6">
-    <div class="text-center max-w-md">
-      <!-- 404 图标 -->
-      <div class="mb-8">
-        <div class="text-8xl font-bold text-gray-300 dark:text-gray-600">
-          404
-        </div>
-        <div class="text-2xl text-gray-500 dark:text-gray-400 mt-2">
-          页面未找到
-        </div>
-      </div>
-      
-      <!-- 错误信息 -->
-      <div class="mb-8">
-        <p class="text-gray-600 dark:text-gray-300 mb-4">
-          抱歉，您访问的页面不存在或已被移动。
-        </p>
-        <p class="text-gray-500 dark:text-gray-400 text-sm">
-          请检查 URL 地址是否正确，或使用导航菜单返回主页。
-        </p>
-      </div>
-      
-      <!-- 操作按钮 -->
-      <div class="space-y-3">
-        <button
-          @click="goHome"
-          class="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-        >
-          返回首页
+  <div class="not-found-view">
+    <section class="not-found-panel" aria-labelledby="not-found-title">
+      <span class="not-found-icon" aria-hidden="true"><i class="bi bi-signpost-split" /></span>
+      <p class="not-found-code">404</p>
+      <h1 id="not-found-title">页面未找到</h1>
+      <p class="not-found-description">这个页面不存在或已被移动。检查地址，或返回工作台继续。</p>
+      <div class="not-found-actions">
+        <button type="button" @click="goHome" class="prism-button prism-button--primary">
+          返回工作台
         </button>
-        
-        <button
-          @click="goBack"
-          class="w-full px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+        <button type="button" @click="goBack" class="prism-button">返回上一页</button>
+      </div>
+      <nav class="not-found-links" aria-label="常用页面">
+        <router-link to="/ssh"
+          ><i class="bi bi-hdd-network" aria-hidden="true" />SSH 工作台</router-link
         >
-          返回上一页
-        </button>
-      </div>
-      
-      <!-- 建议链接 -->
-      <div class="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
-        <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
-          您可能想要访问：
-        </p>
-        <div class="space-y-2">
-          <router-link
-            to="/chat"
-            class="block text-blue-600 hover:text-blue-700 text-sm"
-          >
-            AI 对话
-          </router-link>
-          <router-link
-            to="/ssh"
-            class="block text-blue-600 hover:text-blue-700 text-sm"
-          >
-            SSH 连接
-          </router-link>
-          <router-link
-            to="/connections"
-            class="block text-blue-600 hover:text-blue-700 text-sm"
-          >
-            连接管理
-          </router-link>
-          <router-link
-            to="/settings"
-            class="block text-blue-600 hover:text-blue-700 text-sm"
-          >
-            设置
-          </router-link>
-        </div>
-      </div>
-    </div>
+        <router-link to="/settings"
+          ><i class="bi bi-sliders2" aria-hidden="true" />设置</router-link
+        >
+      </nav>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-
 const router = useRouter()
-
 const goHome = () => {
   router.push('/')
 }
-
 const goBack = () => {
-  if (typeof window !== 'undefined' && window.history.length > 1) {
-    router.back()
-  } else {
-    router.push('/')
-  }
+  if (typeof window !== 'undefined' && window.history.length > 1) router.back()
+  else router.push('/')
 }
 </script>
 
 <style scoped>
 .not-found-view {
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+  color: var(--prism-text);
+  font-family: var(--prism-font);
 }
-
-@media (prefers-color-scheme: dark) {
-  .not-found-view {
-    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+.not-found-panel {
+  width: min(480px, 100%);
+  padding: clamp(26px, 5vw, 44px);
+  text-align: center;
+  border: 1px solid var(--liquid-rim);
+  border-radius: var(--prism-radius-panel);
+  background: var(--prism-surface);
+  box-shadow: var(--prism-shadow);
+  backdrop-filter: blur(22px) saturate(140%);
+}
+.not-found-icon {
+  font-size: 34px;
+  color: var(--vscode-accent);
+}
+.not-found-code {
+  margin: 18px 0 4px;
+  font-size: 13px;
+  color: var(--prism-muted);
+}
+.not-found-panel h1 {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0;
+}
+.not-found-description {
+  color: var(--prism-muted);
+  margin: 14px 0 26px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.not-found-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.not-found-links {
+  margin-top: 28px;
+  padding-top: 22px;
+  border-top: 1px solid var(--prism-border);
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+.not-found-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--vscode-accent);
+  text-decoration: none;
+  font-size: 12px;
+}
+.not-found-links a:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: 5px;
+  border-radius: var(--prism-radius-small);
+}
+@media (hover: hover) and (pointer: fine) {
+  .not-found-links a:hover {
+    text-decoration: underline;
+    text-underline-offset: 4px;
   }
 }
 </style>

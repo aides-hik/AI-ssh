@@ -87,7 +87,7 @@ const reasoningSelection = computed<ReasoningSelection>({
   get() {
     const { currentProvider, currentModel } = props
     if (!currentProvider || !currentModel) return 'default'
-    return normalizeReasoningSelection(reasoningCapability.value, reasoningPreferences.value[reasoningPreferenceKey(currentProvider, currentModel)])
+    return normalizeReasoningSelection(reasoningCapability.value, reasoningPreferences.value[reasoningPreferenceKey(currentProvider, currentModel)] ?? currentModel.requestConfig?.reasoning)
   },
   set(value) {
     const { currentProvider, currentModel } = props
@@ -1735,7 +1735,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
       <i class="bi bi-hdd-network" aria-hidden="true"></i>
       <div class="oc-context-copy">
         <span class="oc-context-label">{{ props.connectionId ? ui.context : ui.noConnection }}</span>
-        <span v-if="props.connectionId" class="oc-context-host" :title="`${currentConnectionDisplay.username}@${currentConnectionDisplay.host}:${currentConnectionDisplay.port}`">
+        <span v-if="props.connectionId" class="oc-context-host" :data-prism-tooltip="`${currentConnectionDisplay.username}@${currentConnectionDisplay.host}:${currentConnectionDisplay.port}`">
           {{ cachedConnection ? `${currentConnectionDisplay.username}@${currentConnectionDisplay.host}` : currentConnectionDisplay.name }}
         </span>
       </div>
@@ -1801,7 +1801,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                 type="button"
                 :aria-label="ui.details"
                 :aria-expanded="!isCollapsed(msg)"
-                :title="ui.details"
+                :data-prism-tooltip="ui.details"
                 @click="toggleTurn(getTurnId(msg))"
               >
                 <svg
@@ -1842,7 +1842,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                     class="oc-copy-button"
                     type="button"
                     @click="copyToClipboard(msg.content, msg.id)"
-                    :title="copiedId === msg.id ? ui.copied : ui.copy"
+                    :data-prism-tooltip="copiedId === msg.id ? ui.copied : ui.copy"
                     :aria-label="copiedId === msg.id ? ui.copied : ui.copy"
                   >
                     <svg
@@ -2319,7 +2319,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                         class="oc-copy-button"
                         type="button"
                         @click="copyResponse(block.text)"
-                        :title="responseCopied ? ui.copied : ui.copy"
+                        :data-prism-tooltip="responseCopied ? ui.copied : ui.copy"
                         :aria-label="responseCopied ? ui.copied : ui.copy"
                       >
                         <svg
@@ -2380,7 +2380,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
           @click="toggleSessionStatusExpanded"
           :aria-expanded="sessionStatusExpanded"
           :aria-label="sessionStatusExpanded ? '收起会话状态' : '展开会话状态'"
-          :title="sessionStatusExpanded ? '收起会话状态' : '展开会话状态'"
+          :data-prism-tooltip="sessionStatusExpanded ? '收起会话状态' : '展开会话状态'"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -2474,7 +2474,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
       </div>
       <div class="oc-input-actions">
         <div class="oc-input-actions-left">
-          <span class="oc-composer-model" :class="{ 'is-unconfigured': !hasModel }" :title="modelLabel">
+          <span class="oc-composer-model" :class="{ 'is-unconfigured': !hasModel }" :data-prism-tooltip="modelLabel">
             <i class="bi bi-cpu" aria-hidden="true"></i><span>{{ modelLabel }}</span>
           </span>
           <div
@@ -2487,7 +2487,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
               class="oc-action-button"
               type="button"
               :aria-expanded="serverEnvMenuOpen"
-              :title="ui.environment"
+              :data-prism-tooltip="ui.environment"
               :aria-label="ui.environment"
               @click="serverEnvMenuOpen = !serverEnvMenuOpen"
             >
@@ -2518,7 +2518,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
             class="oc-send-button"
             type="button"
             :disabled="!inputMessage.trim()"
-            :title="ui.send"
+            :data-prism-tooltip="ui.send"
             :aria-label="ui.send"
             @click="handleSendMessage"
           >
@@ -2529,7 +2529,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
             class="oc-send-button oc-stop-button"
             type="button"
             :class="{ 'is-stopping': isStopping }"
-            :title="isStopping ? ui.stopping : ui.stop"
+            :data-prism-tooltip="isStopping ? ui.stopping : ui.stop"
             :aria-label="isStopping ? ui.stopping : ui.stop"
             :disabled="isStopping"
             @click="handleStop"
@@ -2549,15 +2549,15 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 @import 'highlight.js/styles/github-dark.css';
 
 .oc-chat {
-  --background-base: var(--liquid-panel-solid, var(--vscode-bg));
+  --background-base: var(--prism-surface-raised);
   --background-weak: var(--vscode-bg-light);
   --text-base: var(--vscode-fg);
   --text-strong: var(--vscode-fg);
   --text-weak: var(--vscode-fg-muted);
-  --surface-base: var(--vscode-bg-light);
+  --surface-base: var(--prism-control);
   --surface-base-hover: var(--vscode-bg-lighter);
   --surface-inset-base: var(--vscode-bg-input);
-  --surface-raised-base: var(--vscode-bg-light);
+  --surface-raised-base: var(--prism-surface);
   --surface-interactive-weak: color-mix(in srgb, var(--vscode-accent) 12%, transparent);
   --text-interactive-base: var(--vscode-accent);
   --text-success-base: var(--vscode-success);
@@ -2565,8 +2565,8 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   --surface-success-weak: color-mix(in srgb, var(--vscode-success) 12%, transparent);
   --text-critical-base: var(--vscode-error);
   --surface-critical-base: var(--vscode-error);
-  --text-on-critical-base: #fff;
-  --font-family-sans: 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --text-on-critical-base: var(--vscode-button-foreground);
+  --font-family-sans: var(--prism-font);
   --font-family-mono: 'Cascadia Code', Consolas, monospace;
   display: flex;
   flex-direction: column;
@@ -2593,8 +2593,8 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   margin-bottom: 12px;
   padding: 10px 12px;
   border-radius: 10px;
-  background: rgba(77, 170, 252, 0.08);
-  border: 1px solid rgba(77, 170, 252, 0.18);
+  background: var(--prism-info-bg);
+  border: 1px solid color-mix(in srgb, var(--prism-info) 22%, transparent);
 }
 
 .oc-connection-banner-main {
@@ -2631,7 +2631,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 .oc-connection-banner-id {
   padding: 2px 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--prism-text) 8%, transparent);
   color: var(--text-base);
   font-size: 11px;
   font-family: 'Consolas', 'Monaco', monospace;
@@ -2677,7 +2677,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   color: var(--text-base);
   background: var(--surface-inset-base);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--prism-radius-small);
   font-family: inherit;
   font-size: 11px;
 }
@@ -2751,8 +2751,8 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   background: transparent;
   color: var(--text-weak);
   cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.15s ease;
+  border-radius: var(--prism-radius-small);
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
 }
 
 .oc-collapse-button:hover {
@@ -2835,14 +2835,14 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   border: none;
   background: transparent;
   color: var(--text-weak);
   cursor: pointer;
-  border-radius: 6px;
-  transition: all 0.15s ease;
+  border-radius: var(--prism-radius-control);
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
   opacity: 0;
   margin-top: 2px;
 }
@@ -2871,7 +2871,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 .oc-markdown pre {
   background: var(--surface-inset-base);
   padding: 10px 14px;
-  border-radius: 8px;
+  border-radius: var(--prism-radius-control);
   overflow-x: auto;
   margin: 10px 0;
   font-family: var(--font-family-mono);
@@ -2883,7 +2883,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   font-size: 12px;
   background: var(--surface-inset-base);
   padding: 2px 5px;
-  border-radius: 4px;
+  border-radius: var(--prism-radius-small);
 }
 .oc-markdown pre code {
   background: transparent;
@@ -2904,7 +2904,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   margin-bottom: 8px;
   border: 1px solid var(--surface-base);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--prism-text) 2%, transparent);
 }
 
 .oc-analysis-block summary {
@@ -2947,7 +2947,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   align-items: center;
   gap: 8px;
   padding: 5px 8px;
-  border-radius: 6px;
+  border-radius: var(--prism-radius-control);
   transition: background 0.15s ease;
 }
 .oc-todo-item:hover {
@@ -2982,7 +2982,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   border: 1px solid var(--surface-base);
   border-radius: 10px;
   overflow: hidden;
-  transition: all 0.15s ease;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
 }
 .oc-tool.expanded {
   border-color: var(--surface-raised-base);
@@ -3133,7 +3133,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 .oc-tool-output-content {
   background: var(--surface-inset-base);
   padding: 10px;
-  border-radius: 6px;
+  border-radius: var(--prism-radius-control);
   margin: 6px 0 0;
   font-family: var(--font-family-mono);
   font-size: 11px;
@@ -3230,7 +3230,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   color: var(--text-on-critical-base);
   padding: 10px 14px;
   margin: 0 16px 8px;
-  border-radius: 8px;
+  border-radius: var(--prism-radius-control);
   font-size: 12px;
 }
 .oc-error-icon {
@@ -3244,9 +3244,9 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   gap: 10px;
   margin: 0 16px 8px;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--prism-radius-control);
+  background: color-mix(in srgb, var(--prism-text) 3%, transparent);
+  border: 1px solid var(--prism-border);
   color: var(--text-weak);
   font-size: 12px;
 }
@@ -3262,7 +3262,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 }
 
 .oc-session-status.is-stopped {
-  color: #f1b24a;
+  color: var(--prism-warning);
 }
 
 .oc-session-status.is-error {
@@ -3302,7 +3302,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   height: 8px;
   border-radius: 999px;
   background: currentColor;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--prism-text) 5%, transparent);
 }
 
 .oc-session-status-main {
@@ -3316,19 +3316,19 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   border: none;
   background: transparent;
   color: currentColor;
-  border-radius: 6px;
+  border-radius: var(--prism-radius-control);
   cursor: pointer;
   flex-shrink: 0;
   opacity: 0.8;
 }
 
 .oc-session-toggle:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--prism-text) 8%, transparent);
   opacity: 1;
 }
 
@@ -3349,7 +3349,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 .oc-session-metric-badge {
   padding: 4px 8px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--prism-text) 6%, transparent);
   color: var(--text-weak);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
@@ -3366,9 +3366,9 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   flex-direction: column;
   gap: 6px;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(241, 178, 74, 0.08);
-  border: 1px solid rgba(241, 178, 74, 0.2);
+  border-radius: var(--prism-radius-control);
+  background: var(--prism-warning-bg);
+  border: 1px solid color-mix(in srgb, var(--prism-warning) 24%, transparent);
 }
 
 .oc-session-interruption-title {
@@ -3387,8 +3387,8 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 
 .oc-session-interruption-preview {
   padding: 8px 10px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--prism-radius-control);
+  background: color-mix(in srgb, var(--prism-text) 4%, transparent);
 }
 
 .oc-debug-panel {
@@ -3396,7 +3396,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   flex-direction: column;
   gap: 8px;
   padding-top: 4px;
-  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  border-top: 1px dashed var(--prism-border);
 }
 
 .oc-debug-panel-title {
@@ -3416,8 +3416,8 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   flex-direction: column;
   gap: 2px;
   padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--prism-radius-control);
+  background: color-mix(in srgb, var(--prism-text) 4%, transparent);
 }
 
 .oc-debug-fact-label {
@@ -3445,23 +3445,23 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 .oc-debug-chain-item {
   padding: 4px 8px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--prism-text) 5%, transparent);
   color: var(--text-base);
   font-size: 11px;
 }
 
 .oc-debug-chain-item.is-completed {
-  background: rgba(74, 201, 126, 0.12);
+  background: var(--prism-success-bg);
   color: var(--text-success-base);
 }
 
 .oc-debug-chain-item.is-running {
-  background: rgba(77, 170, 252, 0.12);
+  background: var(--prism-info-bg);
   color: var(--text-interactive-base);
 }
 
 .oc-debug-chain-item.is-error {
-  background: rgba(255, 107, 107, 0.12);
+  background: var(--prism-danger-bg);
   color: var(--text-critical-base);
 }
 
@@ -3552,14 +3552,14 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
+  height: 32px;
   padding: 0 10px;
   border: none;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  border-radius: var(--prism-radius-control);
+  background: color-mix(in srgb, var(--prism-text) 6%, transparent);
   color: var(--text-weak);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
 }
 
 .oc-action-menu-popover {
@@ -3568,14 +3568,15 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   bottom: 100%;
   min-width: 132px;
   padding: 6px;
-  border-radius: 10px;
-  background: rgba(27, 27, 27, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
+  border-radius: 14px;
+  background: var(--prism-surface);
+  border: 1px solid var(--liquid-rim);
+  box-shadow: var(--prism-shadow);
   display: flex;
   flex-direction: column;
   gap: 2px;
   z-index: 20;
+  backdrop-filter: blur(24px) saturate(1.3);
 }
 
 .oc-action-menu-item {
@@ -3586,7 +3587,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   min-height: 32px;
   padding: 0 10px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--prism-radius-control);
   background: transparent;
   color: var(--text-base);
   font-size: 12px;
@@ -3595,7 +3596,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 }
 
 .oc-action-menu-item:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--prism-text) 6%, transparent);
 }
 
 .oc-action-menu-item i {
@@ -3604,7 +3605,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 }
 
 .oc-action-button:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: color-mix(in srgb, var(--prism-text) 12%, transparent);
   color: var(--text-base);
 }
 
@@ -3633,17 +3634,17 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   opacity: 1;
 }
 .oc-send-button {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border: none;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  border-radius: var(--prism-radius-control);
+  background: color-mix(in srgb, var(--prism-text) 6%, transparent);
   color: var(--text-base);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s ease;
+  transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
   flex-shrink: 0;
 }
 .oc-send-button:hover:not(:disabled) {
@@ -3662,22 +3663,22 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 .oc-btn-spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: var(--vscode-button-foreground);
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
 }
 .oc-stop-button {
-  background: rgba(239, 68, 68, 0.14);
-  color: #ffb4b4;
+  background: var(--prism-danger-bg);
+  color: var(--prism-danger);
 }
 .oc-stop-button.is-stopping {
   gap: 6px;
   min-width: 92px;
 }
 .oc-stop-button:hover {
-  background: rgba(239, 68, 68, 0.22);
-  color: #ffd0d0;
+  background: color-mix(in srgb, var(--prism-danger) 20%, transparent);
+  color: var(--prism-danger);
 }
 .oc-stop-button:disabled {
   opacity: 0.8;

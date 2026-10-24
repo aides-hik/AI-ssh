@@ -66,3 +66,12 @@ test('unmanaged provider explicit unsupported reasoning flag survives saving', (
   const saved = JSON.parse(JSON.stringify(mergeProviderForSave(providerWithReasoning(false))))
   assert.equal(saved.models[0].reasoning, false)
 })
+
+test('model capability metadata and user generation defaults survive a settings round trip', () => {
+  const provider = providerWithReasoning(false)
+  provider.models[0].parameters = { maxOutputTokens: 64000, temperature: false }
+  provider.models[0].requestConfig = { maxTokens: 8192, reasoning: 'high' }
+  const saved = JSON.parse(JSON.stringify(mergeProviderForSave(provider)))
+  assert.deepEqual(saved.models[0].parameters, provider.models[0].parameters)
+  assert.deepEqual(saved.models[0].requestConfig, provider.models[0].requestConfig)
+})

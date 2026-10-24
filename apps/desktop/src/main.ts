@@ -7,6 +7,8 @@ import { createBootstrap } from 'bootstrap-vue-next/plugins/createBootstrap'
 // 样式导入
 import './assets/styles/main.css'
 import './assets/styles/liquid-glass.css'
+import './assets/styles/ui-foundation.css'
+import './assets/styles/settings-foundation.css'
 
 // 应用组件和路由
 import App from './App.vue'

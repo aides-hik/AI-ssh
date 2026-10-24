@@ -63,13 +63,18 @@ export const $confirm = (options: string | ConfirmOptions): Promise<boolean> => 
 
     // 创建组件实例
     let vnode: VNode | null = null
+    let settled = false
 
     const handleConfirm = () => {
+      if (settled) return
+      settled = true
       cleanup()
       resolve(true)
     }
 
     const handleCancel = () => {
+      if (settled) return
+      settled = true
       cleanup()
       resolve(false)
     }
@@ -79,7 +84,7 @@ export const $confirm = (options: string | ConfirmOptions): Promise<boolean> => 
         render(null, container)
         vnode = null
       }
-      document.body.removeChild(container)
+      container.remove()
     }
 
     // 格式化选项

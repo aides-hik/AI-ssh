@@ -1,98 +1,69 @@
 <template>
-  <div class="notification-container fixed bottom-1 right-1 z-50 space-y-2 w-full max-w-[600px]">
-    <transition-group name="notification" tag="div">
-      <div
+  <div class="notification-container" aria-label="通知">
+    <TransitionGroup name="prism-notification" tag="div" class="notification-stack">
+      <article
         v-for="notification in notifications"
         :key="notification.id"
-        :class="[
-          'notification-item w-full bg-white dark:bg-gray-800 shadow-lg rounded-lg pointer-events-auto ring-1 ring-black/5 overflow-hidden',
-          getNotificationTypeClass(notification.type)
-        ]"
+        class="notification-item"
+        :data-type="notification.type"
+        :data-paused="pausedIds.has(notification.id)"
+        :role="notification.type === 'error' ? 'alert' : 'status'"
+        aria-atomic="true"
+        @mouseenter="pauseTimer(notification.id)"
+        @mouseleave="resumeUnlessFocused(notification.id, $event)"
+        @focusin="pauseTimer(notification.id)"
+        @focusout="resumeUnlessFocused(notification.id, $event)"
       >
-        <div class="p-1">
-          <div class="flex items-center">
-            <div class="shrink-0">
-              <div
-                :class="[
-                  'w-5 h-5 rounded-full flex items-center justify-center text-white text-xs',
-                  getIconBackgroundClass(notification.type)
-                ]"
-              >
-                {{ getNotificationIcon(notification.type) }}
-              </div>
-            </div>
-
-            <div class="ml-3 w-0 flex-1">
-              <p class="text-sm text-gray-500 dark:text-gray-300 mt-1">
-                {{ notification.message }}
-              </p>
-
-              <!-- 操作按钮 -->
-              <div
-                v-if="notification.actions && notification.actions.length > 0"
-                class="mt-3 flex gap-2"
-              >
-                <button
-                  v-for="action in notification.actions"
-                  :key="action.label"
-                  @click="handleAction(notification, action)"
-                  :class="[
-                    'text-sm font-medium rounded-md px-3 py-1 transition-colors',
-                    action.type === 'primary'
-                      ? 'bg-blue-600 text-white hover:bg-blue-700'
-                      : 'text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900'
-                  ]"
-                >
-                  {{ action.label }}
-                </button>
-              </div>
-            </div>
-
-            <div class="ml-4 shrink-0 flex">
+        <div class="notification-content">
+          <span
+            class="notification-icon prism-status-icon"
+            :data-type="notification.type"
+            aria-hidden="true"
+            ><i class="bi" :class="icons[notification.type]"></i
+          ></span>
+          <div class="notification-copy">
+            <p v-if="notification.title" class="notification-title">{{ notification.title }}</p>
+            <p class="notification-message">{{ notification.message }}</p>
+            <div v-if="notification.actions?.length" class="notification-actions">
               <button
-                @click="removeNotification(notification.id)"
-                class="bg-white dark:bg-gray-800 rounded-md inline-flex text-gray-400 hover:text-gray-500 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                v-for="action in notification.actions"
+                :key="action.label"
+                class="prism-button"
+                :class="action.type === 'primary' ? 'prism-button--primary' : 'prism-button--quiet'"
+                @click="handleAction(notification, action)"
               >
-                <span class="sr-only">关闭</span>
-                <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path
-                    fill-rule="evenodd"
-                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                    clip-rule="evenodd"
-                  />
-                </svg>
+                {{ action.label }}
               </button>
             </div>
           </div>
+          <button
+            class="notification-close prism-button prism-button--quiet prism-button--icon"
+            :aria-label="`关闭${notification.title || '通知'}`"
+            @click="removeNotification(notification.id)"
+          >
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+          </button>
         </div>
-
-        <!-- 进度条 -->
         <div
-          v-if="notification.duration && notification.duration > 0"
-          class="h-1 bg-gray-200 dark:bg-gray-700"
+          v-if="!notification.persistent && notification.duration && notification.duration > 0"
+          class="notification-progress"
+          aria-hidden="true"
         >
-          <div
-            :class="['h-full transition-all ease-linear', getProgressBarClass(notification.type)]"
-            :style="{
-              width: `${getProgress(notification)}%`,
-              transitionDuration: `${notification.duration}ms`
-            }"
-          ></div>
+          <span :style="{ animationDuration: `${notification.duration}ms` }"></span>
         </div>
-      </div>
-    </transition-group>
+      </article>
+    </TransitionGroup>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 interface NotificationAction {
   label: string
   type?: 'primary' | 'secondary'
   handler: () => void
 }
-
 interface Notification {
   id: string
   type: 'success' | 'error' | 'warning' | 'info'
@@ -103,144 +74,86 @@ interface Notification {
   actions?: NotificationAction[]
   createdAt: number
 }
-
+const icons = {
+  success: 'bi-check-circle',
+  error: 'bi-exclamation-octagon',
+  warning: 'bi-exclamation-triangle',
+  info: 'bi-info-circle'
+}
 const notifications = ref<Notification[]>([])
+const pausedIds = ref(new Set<string>())
+const timers = new Map<
+  string,
+  { handle: ReturnType<typeof setTimeout> | null; remaining: number; started: number }
+>()
 let notificationId = 0
+let unsubscribe: (() => void) | undefined
 
-// 添加通知
 const addNotification = (options: Omit<Notification, 'id' | 'createdAt'>) => {
   const notification: Notification = {
-    id: `notification-${++notificationId}`,
-    createdAt: Date.now(),
+    ...options,
     duration: options.duration ?? 4000,
-    ...options
+    id: `notification-${++notificationId}`,
+    createdAt: Date.now()
   }
-
   notifications.value.push(notification)
-
-  // 自动移除（如果不是持久化通知）
   if (!notification.persistent && notification.duration && notification.duration > 0) {
-    setTimeout(() => {
-      removeNotification(notification.id)
-    }, notification.duration * 1.5)
+    timers.set(notification.id, {
+      handle: setTimeout(() => removeNotification(notification.id), notification.duration),
+      remaining: notification.duration,
+      started: Date.now()
+    })
   }
-
   return notification.id
 }
-
-// 移除通知
 const removeNotification = (id: string) => {
-  const index = notifications.value.findIndex(n => n.id === id)
-  if (index > -1) {
-    notifications.value.splice(index, 1)
-  }
+  const timer = timers.get(id)
+  if (timer?.handle) clearTimeout(timer.handle)
+  timers.delete(id)
+  pausedIds.value.delete(id)
+  notifications.value = notifications.value.filter(notification => notification.id !== id)
 }
-
-// 清空所有通知
 const clearAll = () => {
+  for (const id of timers.keys()) removeNotification(id)
   notifications.value = []
+  pausedIds.value.clear()
 }
-
-// 处理操作按钮点击
+function pauseTimer(id: string) {
+  const timer = timers.get(id)
+  if (!timer?.handle) return
+  clearTimeout(timer.handle)
+  timer.handle = null
+  timer.remaining = Math.max(0, timer.remaining - (Date.now() - timer.started))
+  pausedIds.value.add(id)
+}
+function resumeUnlessFocused(id: string, event: Event) {
+  const element = event.currentTarget as HTMLElement
+  const nextFocus = (event as FocusEvent).relatedTarget
+  if (event.type === 'focusout' && nextFocus instanceof Node && element.contains(nextFocus)) return
+  if (
+    element.matches(':hover') ||
+    (event.type !== 'focusout' && element.contains(document.activeElement))
+  )
+    return
+  const timer = timers.get(id)
+  if (!timer || timer.handle) return
+  timer.started = Date.now()
+  timer.handle = setTimeout(() => removeNotification(id), timer.remaining)
+  pausedIds.value.delete(id)
+}
 const handleAction = (notification: Notification, action: NotificationAction) => {
   action.handler()
   removeNotification(notification.id)
 }
-
-// 获取通知类型对应的样式类
-const getNotificationTypeClass = (type: string) => {
-  switch (type) {
-    case 'success':
-      return 'border-l-4 border-green-400'
-    case 'error':
-      return 'border-l-4 border-red-400'
-    case 'warning':
-      return 'border-l-4 border-yellow-400'
-    default:
-      return 'border-l-4 border-blue-400'
-  }
-}
-
-// 获取图标背景样式类
-const getIconBackgroundClass = (type: string) => {
-  switch (type) {
-    case 'success':
-      return 'bg-green-500'
-    case 'error':
-      return 'bg-red-500'
-    case 'warning':
-      return 'bg-yellow-500'
-    default:
-      return 'bg-blue-500'
-  }
-}
-
-// 获取进度条样式类
-const getProgressBarClass = (type: string) => {
-  switch (type) {
-    case 'success':
-      return 'bg-green-500'
-    case 'error':
-      return 'bg-red-500'
-    case 'warning':
-      return 'bg-yellow-500'
-    default:
-      return 'bg-blue-500'
-  }
-}
-
-// 获取通知图标
-const getNotificationIcon = (type: string) => {
-  switch (type) {
-    case 'success':
-      return '✓'
-    case 'error':
-      return '✕'
-    case 'warning':
-      return '⚠'
-    default:
-      return 'ℹ'
-  }
-}
-
-// 获取进度百分比
-const getProgress = (notification: Notification) => {
-  if (!notification.duration || notification.duration <= 0) return 0
-
-  const elapsed = Date.now() - notification.createdAt
-  const progress = Math.max(0, 100 - (elapsed / notification.duration) * 100)
-  return progress
-}
-
-// 便捷方法
-const success = (message: string, options?: Partial<Notification>) => {
-  return addNotification({ ...options, type: 'success', message })
-}
-
-const error = (message: string, options?: Partial<Notification>) => {
-  return addNotification({ ...options, type: 'error', message })
-}
-
-const warning = (message: string, options?: Partial<Notification>) => {
-  return addNotification({ ...options, type: 'warning', message })
-}
-
-const info = (message: string, options?: Partial<Notification>) => {
-  return addNotification({ ...options, type: 'info', message })
-}
-
-// 暴露给全局使用
-defineExpose({
-  addNotification,
-  removeNotification,
-  clearAll,
-  success,
-  error,
-  warning,
-  info
-})
-
-// 扩展Window接口以包含$notification属性
+const success = (message: string, options?: Partial<Notification>) =>
+  addNotification({ ...options, type: 'success', message })
+const error = (message: string, options?: Partial<Notification>) =>
+  addNotification({ ...options, type: 'error', message })
+const warning = (message: string, options?: Partial<Notification>) =>
+  addNotification({ ...options, type: 'warning', message })
+const info = (message: string, options?: Partial<Notification>) =>
+  addNotification({ ...options, type: 'info', message })
+defineExpose({ addNotification, removeNotification, clearAll, success, error, warning, info })
 declare global {
   interface Window {
     $notification: {
@@ -254,9 +167,7 @@ declare global {
     }
   }
 }
-
-// 注册到全局
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined')
   window.$notification = {
     add: addNotification,
     remove: removeNotification,
@@ -266,38 +177,175 @@ if (typeof window !== 'undefined') {
     warning,
     info
   }
-}
-
 onMounted(() => {
-  // 监听来自主进程的通知
-  if (window.electronAPI?.onNotification) {
-    window.electronAPI.onNotification((notification: any) => {
-      addNotification(notification)
-    })
-  }
+  unsubscribe = window.electronAPI?.onNotification?.(notification => addNotification(notification))
+})
+onBeforeUnmount(() => {
+  clearAll()
+  unsubscribe?.()
 })
 </script>
 
 <style scoped>
-.notification-enter-active {
-  transition: all 0.3s ease-out;
+.notification-container {
+  position: fixed;
+  z-index: var(--prism-z-notification);
+  bottom: 38px;
+  right: 22px;
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100dvh - 100px);
+  overflow-y: auto;
+  padding: 6px;
+  pointer-events: none;
+  font-family: var(--prism-font);
+  scrollbar-width: thin;
 }
-
-.notification-leave-active {
-  transition: all 0.3s ease-in;
+.notification-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-
-.notification-enter-from {
-  transform: translateY(100%);
+.notification-item {
+  --notification-color: var(--prism-info);
+  flex: 0 0 auto;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--liquid-rim);
+  border-radius: var(--prism-radius-panel);
+  background: var(--prism-surface-floating);
+  backdrop-filter: blur(24px) saturate(140%);
+  box-shadow: var(--prism-shadow-raised);
+  color: var(--prism-text);
+  pointer-events: auto;
+}
+.notification-item[data-type='success'] {
+  --notification-color: var(--prism-success);
+}
+.notification-item[data-type='error'] {
+  --notification-color: var(--prism-danger);
+}
+.notification-item[data-type='warning'] {
+  --notification-color: var(--prism-warning);
+}
+.notification-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+}
+.notification-icon {
+  width: 30px;
+  height: 30px;
+  font-size: 16px;
+  border-radius: var(--prism-radius-control);
+}
+.notification-copy {
+  flex: 1;
+  min-width: 0;
+  padding-top: 3px;
+  user-select: text;
+}
+.notification-title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 620;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.notification-message {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--prism-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.notification-close {
+  width: 30px;
+  min-height: 30px;
+  font-size: 11px;
+}
+.notification-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.notification-actions .prism-button {
+  min-height: 32px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.notification-progress {
+  height: 2px;
+  background: color-mix(in srgb, var(--notification-color) 12%, transparent);
+}
+.notification-progress span {
+  display: block;
+  height: 100%;
+  background: var(--notification-color);
+  transform-origin: left;
+  animation: notification-countdown linear forwards;
+}
+.notification-item[data-paused='true'] .notification-progress span {
+  animation-play-state: paused;
+}
+@keyframes notification-countdown {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+.prism-notification-enter-active,
+.prism-notification-leave-active {
+  transition:
+    opacity 180ms var(--prism-ease),
+    transform 180ms var(--prism-ease);
+}
+.prism-notification-enter-from,
+.prism-notification-leave-to {
   opacity: 0;
+  transform: translateY(8px);
 }
-
-.notification-leave-to {
-  transform: translateY(100%);
-  opacity: 0;
+.prism-notification-move {
+  transition: transform 180ms var(--prism-ease);
 }
-
-.notification-move {
-  transition: transform 0.3s ease;
+@media (max-width: 540px) {
+  .notification-container {
+    right: 10px;
+    bottom: 34px;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .notification-item {
+    background: var(--prism-surface-raised);
+    backdrop-filter: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .prism-notification-enter-active,
+  .prism-notification-leave-active {
+    transition: opacity 80ms ease;
+  }
+  .prism-notification-enter-from,
+  .prism-notification-leave-to {
+    transform: none;
+  }
+  .prism-notification-move {
+    transition: none;
+  }
+  .notification-progress span {
+    animation: none;
+  }
+}
+html[data-motion='off'] .notification-item,
+html[data-transitions='off'] .notification-item {
+  transition: none;
+}
+html[data-motion='off'] .notification-progress span,
+html[data-transitions='off'] .notification-progress span {
+  animation: none;
 }
 </style>

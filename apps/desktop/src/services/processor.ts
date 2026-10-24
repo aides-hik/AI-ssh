@@ -65,12 +65,14 @@ export class SessionProcessor {
       provider: { ...config.provider, config: config.provider.config ? { ...config.provider.config } : undefined },
       model: {
         ...config.model,
+        parameters: config.model.parameters ? { ...config.model.parameters } : undefined,
+        requestConfig: config.model.requestConfig ? { ...config.model.requestConfig } : undefined,
         reasoning: config.model.reasoning ? {
           ...config.model.reasoning,
           supportedEfforts: config.model.reasoning.supportedEfforts ? [...config.model.reasoning.supportedEfforts] : undefined
         } : config.model.reasoning
       },
-      reasoning: config.reasoning ?? 'default'
+      reasoning: config.reasoning ?? config.model.requestConfig?.reasoning ?? 'default'
     }
     this.messages = [...config.messages]
     this.state = {
