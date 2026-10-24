@@ -32,6 +32,7 @@ let keyboard = true
 let openTimer: ReturnType<typeof setTimeout> | undefined
 let closeTimer: ReturnType<typeof setTimeout> | undefined
 let observer: MutationObserver | undefined
+let mutationFrame = 0
 let revision = 0
 
 function triggerAt(target: EventTarget | null) {
@@ -65,6 +66,9 @@ function place() {
 function hide() {
   revision++
   clearTimers()
+  observer?.disconnect()
+  cancelAnimationFrame(mutationFrame)
+  mutationFrame = 0
   if (active) describe(active, false)
   active = null
   visible.value = false
@@ -95,6 +99,28 @@ async function show(trigger: HTMLElement) {
     tooltip.value.showPopover()
   place()
   describe(trigger, true)
+  observeTrigger()
+}
+function observeTrigger() {
+  observer?.disconnect()
+  if (!active || !observer) return
+  // Observe only the trigger's path. Streaming chat, terminal output and glass
+  // pointer highlights elsewhere must not enqueue a global observer callback.
+  for (let node: HTMLElement | null = active; node; node = node.parentElement) {
+    observer.observe(node, {
+      childList: true,
+      attributes: true,
+      attributeFilter: [
+        'data-prism-tooltip',
+        'class',
+        'style',
+        'hidden',
+        'inert',
+        'aria-hidden',
+        'open'
+      ]
+    })
+  }
 }
 function request(trigger: HTMLElement, delay: number) {
   clearTimers()
@@ -193,23 +219,36 @@ onMounted(() => {
   document.addEventListener('keydown', keyDown, true)
   document.addEventListener('scroll', scroll, true)
   window.addEventListener('resize', dismiss)
-  observer = new MutationObserver(() => {
+  observer = new MutationObserver(records => {
     if (!active) return
-    if (
-      !active.isConnected ||
-      !active.getClientRects().length ||
-      !active.dataset.prismTooltip?.trim()
-    ) {
+    if (!active.isConnected || !active.dataset.prismTooltip?.trim()) {
       dismiss()
       return
     }
-    if (content.value !== active.dataset.prismTooltip.trim()) void show(active)
-  })
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['data-prism-tooltip', 'class', 'style', 'hidden']
+    const trigger = active
+    const relevant = records.some(record =>
+      record.type === 'attributes'
+        ? record.target instanceof Element && record.target.contains(trigger)
+        : [...record.removedNodes].some(node => node === trigger || node.contains(trigger))
+    )
+    if (!relevant || mutationFrame) return
+    // A trigger may be moved while still connected. Follow its new ancestor path
+    // and defer visibility reads until the next frame, after DOM writes settle.
+    mutationFrame = requestAnimationFrame(() => {
+      mutationFrame = 0
+      if (!active) return
+      if (
+        !active.isConnected ||
+        !active.checkVisibility({ visibilityProperty: true }) ||
+        active.closest('[inert], [aria-hidden="true"]') ||
+        !active.dataset.prismTooltip?.trim()
+      ) {
+        dismiss()
+        return
+      }
+      if (content.value !== active.dataset.prismTooltip.trim()) void show(active)
+      else observeTrigger()
+    })
   })
 })
 onBeforeUnmount(() => {

@@ -334,6 +334,7 @@ const connectionInfoForDoc = computed(() => {
 const terminalContainer = ref<HTMLElement | null>(null)
 let terminalResizeObserver: ResizeObserver | null = null
 let terminalResizeFrame = 0
+let workspaceLayoutSettling = false
 let lastRemoteDimensions: { id: string; cols: number; rows: number } | null = null
 const terminal = ref<Terminal | null>(null)
 const fitAddon = ref<FitAddon | null>(null)
@@ -505,15 +506,10 @@ const initTerminal = () => {
   })
 
   // 监听窗口大小变化
-  window.addEventListener('resize', handleResize)
+  window.addEventListener('resize', queueTerminalResize)
+  window.addEventListener('workspace-layout-change', handleWorkspaceLayoutChange)
   terminalResizeObserver?.disconnect()
-  terminalResizeObserver = new ResizeObserver(() => {
-    if (terminalResizeFrame) return
-    terminalResizeFrame = requestAnimationFrame(() => {
-      terminalResizeFrame = 0
-      if (terminalContainer.value?.getClientRects().length) handleResize()
-    })
-  })
+  terminalResizeObserver = new ResizeObserver(queueTerminalResize)
   terminalResizeObserver.observe(terminalContainer.value)
 
   // 设置自动补全监听器
@@ -521,14 +517,37 @@ const initTerminal = () => {
 }
 
 // 处理窗口大小变化
+function queueTerminalResize() {
+  if (terminalResizeFrame || workspaceLayoutSettling) return
+  terminalResizeFrame = requestAnimationFrame(() => {
+    terminalResizeFrame = 0
+    if (terminalContainer.value?.getClientRects().length) handleResize()
+  })
+}
+
+function handleWorkspaceLayoutChange(event: Event) {
+  workspaceLayoutSettling = (event as CustomEvent<{ settling: boolean }>).detail.settling
+  if (workspaceLayoutSettling) {
+    if (terminalResizeFrame) cancelAnimationFrame(terminalResizeFrame)
+    terminalResizeFrame = 0
+  } else queueTerminalResize()
+}
+
 const handleResize = () => {
+  if (
+    workspaceLayoutSettling ||
+    document.querySelector('.liquid-app')?.getAttribute('data-sidebar-layout') === 'settling'
+  )
+    return
   if (fitAddon.value && terminal.value) {
     fitAddon.value.fit()
 
     // 如果已连接，同时调整 SSH 终端尺寸
     const connId = currentConnectionId.value
     if (connId && window.electronAPI && connectionStatus.value === 'connected') {
-      const dims = fitAddon.value.proposeDimensions()
+      // fit() already measures and applies the grid. Read its public result
+      // instead of forcing a second computed-style/layout measurement.
+      const dims = { cols: terminal.value.cols, rows: terminal.value.rows }
       if (dims && dims.cols && dims.rows) {
         if (
           lastRemoteDimensions?.id === connId &&
@@ -1469,7 +1488,8 @@ onBeforeUnmount(() => {
   clearAutoReconnectTimer()
 
   // 移除窗口大小监听器
-  window.removeEventListener('resize', handleResize)
+  window.removeEventListener('resize', queueTerminalResize)
+  window.removeEventListener('workspace-layout-change', handleWorkspaceLayoutChange)
   terminalResizeObserver?.disconnect()
   terminalResizeObserver = null
   if (terminalResizeFrame) cancelAnimationFrame(terminalResizeFrame)

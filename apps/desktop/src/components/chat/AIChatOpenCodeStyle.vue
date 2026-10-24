@@ -3,6 +3,7 @@ import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { marked } from 'marked'
+import { createMarkdownRenderCache } from '@/utils/markdown-render-cache'
 
 import { settingsService } from '@/services/settings.service'
 import { sshService, type SSHConnection } from '@/services/ssh.service'
@@ -1346,8 +1347,7 @@ function messageStatus(msg: DisplayMessage): { label: string; kind: string } | n
   return msg.finish === 'stop' ? { label: ui.value.done, kind: 'success' } : null
 }
 
-function renderMarkdown(text: string): string {
-  if (!text) return ''
+const renderMarkdown = createMarkdownRenderCache(text => {
   try {
     const html = marked.parse(text, {
       async: false
@@ -1356,7 +1356,7 @@ function renderMarkdown(text: string): string {
   } catch {
     return text
   }
-}
+})
 
 function getContent(msg: V2Message): string {
   return msg.parts
@@ -1836,7 +1836,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                   <div
                     v-if="msg.content"
                     class="oc-markdown oc-user-text"
-                    v-html="renderMarkdown(msg.content)"
+                    v-html="renderMarkdown(msg.content, msg.id)"
                   ></div>
                   <button
                     class="oc-copy-button"
@@ -1881,13 +1881,13 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                       <summary>分析过程</summary>
                       <div
                         class="oc-markdown oc-analysis-text"
-                        v-html="renderMarkdown(block.text)"
+                        v-html="renderMarkdown(block.text, block.id)"
                       ></div>
                     </details>
                     <div
                       v-else
                       class="oc-markdown oc-analysis-text"
-                      v-html="renderMarkdown(block.text)"
+                      v-html="renderMarkdown(block.text, block.id)"
                     ></div>
                   </div>
 
@@ -2163,7 +2163,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                             <div class="oc-tool-section-label">Plan</div>
                             <div
                               class="oc-tool-output-content"
-                              v-html="renderMarkdown(block.toolPart.state.output)"
+                              v-html="renderMarkdown(block.toolPart.state.output, block.id)"
                             ></div>
                           </div>
                           <div
@@ -2209,7 +2209,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                             <div class="oc-tool-section-label">Output</div>
                             <div
                               class="oc-tool-output-content"
-                              v-html="renderMarkdown(block.toolPart.state.output)"
+                              v-html="renderMarkdown(block.toolPart.state.output, block.id)"
                             ></div>
                           </div>
                         </div>
@@ -2349,7 +2349,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                         </svg>
                       </button>
                     </div>
-                    <div class="oc-response-content" v-html="renderMarkdown(block.text)"></div>
+                    <div class="oc-response-content" v-html="renderMarkdown(block.text, block.id)"></div>
                   </div>
                 </template>
               </template>

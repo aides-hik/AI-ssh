@@ -1,5 +1,9 @@
 <template>
-  <div class="vscode-app liquid-app" :data-motion="theme.animations.value ? 'on' : 'off'">
+  <div
+    class="vscode-app liquid-app"
+    :data-motion="theme.animations.value ? 'on' : 'off'"
+    :data-sidebar-layout="isSidebarLayoutAnimating ? 'settling' : 'stable'"
+  >
     <div class="liquid-wallpaper" aria-hidden="true">
       <svg viewBox="0 0 1400 800" preserveAspectRatio="xMidYMid slice">
         <defs>
@@ -69,6 +73,9 @@
         :style="{ '--sidebar-width': sidebarWidth + 'px' }"
         :inert="!showSidebar"
         :aria-hidden="!showSidebar || undefined"
+        @transitionrun="onSidebarLayoutTransition"
+        @transitionend="onSidebarLayoutTransition"
+        @transitioncancel="onSidebarLayoutTransition"
       >
         <LiquidSurface
           as="aside"
@@ -268,6 +275,9 @@ const isFullscreen = ref(false)
 const showSidebar = ref(true)
 const sidebarRegion = ref<HTMLElement | null>(null)
 const sidebarToggle = ref<HTMLButtonElement | null>(null)
+const isSidebarLayoutAnimating = ref(false)
+let sidebarLayoutFrame = 0
+let sidebarLayoutTimer: ReturnType<typeof setTimeout> | undefined
 const activeView = ref('ssh')
 const activeTab = ref('ssh')
 const lastSessionTabId = ref('')
@@ -285,6 +295,8 @@ const isResizing = ref(false)
 const resizeType = ref<'left' | null>(null)
 const startX = ref(0)
 const startWidth = ref(0)
+let panelResizeFrame = 0
+let pendingPanelWidth: number | undefined
 
 // 打开的标签 - 更新 name 为国际化的
 const openTabs = computed(() =>
@@ -564,6 +576,7 @@ const handleSwitchView = (event: Event) => {
 // 拖拽调整大小功能
 const startLeftResize = (event: MouseEvent) => {
   isResizing.value = true
+  finishSidebarLayoutMotion()
   resizeType.value = 'left'
   startX.value = event.clientX
   startWidth.value = sidebarWidth.value
@@ -579,13 +592,23 @@ const handlePanelResize = (event: MouseEvent) => {
   const deltaX = event.clientX - startX.value
 
   if (resizeType.value === 'left') {
-    // 左侧侧边栏调整
-    const newWidth = startWidth.value + deltaX
-    sidebarWidth.value = Math.max(200, Math.min(600, newWidth)) // 限制在200-600px之间
+    pendingPanelWidth = Math.max(200, Math.min(600, startWidth.value + deltaX))
+    // High-polling mice can deliver several moves per display frame. Commit the
+    // latest coordinate once per frame instead of rerendering the whole shell.
+    if (!panelResizeFrame) panelResizeFrame = requestAnimationFrame(commitPanelResize)
   }
 }
 
+function commitPanelResize() {
+  panelResizeFrame = 0
+  if (pendingPanelWidth !== undefined) sidebarWidth.value = pendingPanelWidth
+  pendingPanelWidth = undefined
+}
+
 const stopResize = () => {
+  if (panelResizeFrame) cancelAnimationFrame(panelResizeFrame)
+  // Mouseup may precede the next frame; retain its last requested coordinate.
+  commitPanelResize()
   isResizing.value = false
   resizeType.value = null
   document.body.classList.remove('resizing')
@@ -593,9 +616,93 @@ const stopResize = () => {
   document.removeEventListener('mouseup', stopResize)
 }
 
+function setSidebarLayoutMotion(settling: boolean) {
+  if (isSidebarLayoutAnimating.value === settling) return
+  isSidebarLayoutAnimating.value = settling
+  // Terminal reflow also resizes the remote PTY. Keep that work out of the
+  // container tween, then fit once to the final layout instead of every column.
+  window.dispatchEvent(new CustomEvent('workspace-layout-change', { detail: { settling } }))
+}
+
+function finishSidebarLayoutMotion() {
+  clearTimeout(sidebarLayoutTimer)
+  sidebarLayoutTimer = undefined
+  if (sidebarLayoutFrame) cancelAnimationFrame(sidebarLayoutFrame)
+  sidebarLayoutFrame = 0
+  setSidebarLayoutMotion(false)
+}
+
+function sidebarLayoutDuration() {
+  const region = sidebarRegion.value
+  if (!region || isResizing.value || matchMedia('(max-width: 800px)').matches) return 0
+  const style = getComputedStyle(region)
+  const properties = style.transitionProperty.split(',').map(value => value.trim())
+  const milliseconds = (value: string) =>
+    parseFloat(value) * (value.trim().endsWith('ms') ? 1 : 1000)
+  const durations = style.transitionDuration.split(',').map(milliseconds)
+  const delays = style.transitionDelay.split(',').map(milliseconds)
+  return Math.max(
+    0,
+    ...properties.map((property, index) =>
+      property === 'width' || property === 'all'
+        ? durations[index % durations.length] + delays[index % delays.length]
+        : 0
+    )
+  )
+}
+
+function beginSidebarLayoutMotion() {
+  const duration = sidebarLayoutDuration()
+  if (!duration) {
+    finishSidebarLayoutMotion()
+    return
+  }
+  clearTimeout(sidebarLayoutTimer)
+  setSidebarLayoutMotion(true)
+  // A cancelled transition, breakpoint change or animation setting change must
+  // never leave a terminal waiting indefinitely for a transitionend event.
+  sidebarLayoutTimer = setTimeout(queueSidebarLayoutEnd, duration + 80)
+}
+
+function queueSidebarLayoutEnd() {
+  if (sidebarLayoutFrame) cancelAnimationFrame(sidebarLayoutFrame)
+  sidebarLayoutFrame = requestAnimationFrame(() => {
+    sidebarLayoutFrame = 0
+    const running = sidebarRegion.value
+      ?.getAnimations()
+      .some(
+        animation =>
+          animation instanceof CSSTransition &&
+          animation.transitionProperty === 'width' &&
+          (animation.playState === 'running' || animation.pending)
+      )
+    // A rapid reverse dispatches cancel for the old tween before run for the
+    // replacement. Inspect the replacement on the next frame before settling.
+    if (running) {
+      clearTimeout(sidebarLayoutTimer)
+      sidebarLayoutTimer = setTimeout(queueSidebarLayoutEnd, 80)
+    } else finishSidebarLayoutMotion()
+  })
+}
+
+function onSidebarLayoutTransition(event: TransitionEvent) {
+  if (event.target !== sidebarRegion.value || event.propertyName !== 'width') return
+  if (event.type === 'transitionrun') beginSidebarLayoutMotion()
+  else queueSidebarLayoutEnd()
+}
+
+watch(
+  sidebarWidth,
+  () => {
+    if (showSidebar.value) beginSidebarLayoutMotion()
+  },
+  { flush: 'sync' }
+)
+
 watch(
   showSidebar,
   open => {
+    beginSidebarLayoutMotion()
     if (open) return
     stopResize()
     // Restore focus before the collapsing controls become inert, including Ctrl+B from search.
@@ -648,6 +755,7 @@ const handleKeydown = (event: KeyboardEvent) => {
 const handleResize = () => {
   // 响应式布局调整
   // 不再自动隐藏侧边栏，保持用户的选择
+  if (isSidebarLayoutAnimating.value) queueSidebarLayoutEnd()
 }
 
 onMounted(async () => {
@@ -675,6 +783,7 @@ onMounted(async () => {
 onUnmounted(async () => {
   // 清理事件监听器
   stopResize()
+  finishSidebarLayoutMotion()
   document.removeEventListener('keydown', handleKeydown)
   window.removeEventListener('resize', handleResize)
   window.removeEventListener('switch-view', handleSwitchView as EventListener)

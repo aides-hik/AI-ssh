@@ -28,7 +28,7 @@ const props = withDefaults(
 
 const attrs = useAttrs()
 const surface = ref<HTMLElement>()
-const shine = ref<HTMLElement>()
+const glow = ref<HTMLElement>()
 const filterId = `liquid-refraction-${useId().replace(/[^a-zA-Z0-9-]/g, '')}`
 const dimensions = ref({ width: 1, height: 1 })
 const displacementMap = ref('')
@@ -58,53 +58,139 @@ const backdropStyle = computed<CSSProperties>(() => {
 })
 
 let observer: ResizeObserver | undefined
-let resizeFrame = 0
+let visibilityObserver: IntersectionObserver | undefined
+let geometryTimer = 0
+let geometryIdle = 0
+let geometryRevision = 0
+let geometryFrame = 0
+let pendingWidth = 1
+let pendingHeight = 1
+let mappedGeometry = ''
+let isIntersecting = false
+let pointerFrame = 0
+let pointerX = 0
+let pointerY = 0
+let glowCleanupTimer = 0
 let motionPreference: MediaQueryList | undefined
 let pointerPreference: MediaQueryList | undefined
 
-function updateGeometry() {
-  resizeFrame = 0
+function cancelGeometry() {
+  geometryRevision++
+  clearTimeout(geometryTimer)
+  geometryTimer = 0
+  if (geometryIdle) cancelIdleCallback(geometryIdle)
+  geometryIdle = 0
+}
+
+function canUpdateGeometry() {
   const element = surface.value
-  if (!element || !supported.value) return
-  // offsetWidth/Height ignore the press transform; the optical map never chases it.
-  const width = element.offsetWidth
-  const height = element.offsetHeight
-  if (width < 1 || height < 1) return
-  dimensions.value = { width, height }
+  return (
+    props.refraction &&
+    supported.value &&
+    isIntersecting &&
+    document.visibilityState !== 'hidden' &&
+    element?.isConnected &&
+    !element.closest('[inert], [aria-hidden="true"]') &&
+    dimensions.value.width > 1 &&
+    dimensions.value.height > 1
+  )
+}
+
+async function updateOpticalMap() {
+  geometryIdle = geometryTimer = 0
+  if (!canUpdateGeometry()) return
+  const { width, height } = dimensions.value
+  const key = `${width}:${height}:${safeRadius.value}`
+  if (key === mappedGeometry) return
+  const revision = geometryRevision
   try {
-    displacementMap.value = createRefractionMap(width, height, safeRadius.value)
+    const image = await createRefractionMap(width, height, safeRadius.value)
+    if (revision !== geometryRevision || !canUpdateGeometry()) return
+    displacementMap.value = image
+    mappedGeometry = key
   } catch {
     // A restrictive Canvas policy or unavailable renderer still gets legible frost.
-    displacementMap.value = ''
-    supported.value = false
+    if (revision === geometryRevision) {
+      displacementMap.value = ''
+      supported.value = false
+    }
   }
 }
 
 function queueGeometry() {
-  if (!resizeFrame) resizeFrame = requestAnimationFrame(updateGeometry)
+  cancelGeometry()
+  if (!canUpdateGeometry()) return
+  // ResizeObserver runs on every frame of a panel/window resize. Keep the existing
+  // optical texture stretched to the current bounds, then encode only the settled
+  // shape; PNG generation must not share the animation's frame budget.
+  geometryTimer = window.setTimeout(() => {
+    geometryTimer = 0
+    if (typeof requestIdleCallback === 'function')
+      geometryIdle = requestIdleCallback(updateOpticalMap, { timeout: 150 })
+    else geometryTimer = window.setTimeout(updateOpticalMap, 0)
+  }, 100)
+}
+
+function observeGeometry(entries: ResizeObserverEntry[]) {
+  const entry = entries[0]
+  if (!entry) return
+  // Observer sizes already came from layout and ignore the button press transform.
+  // Do not synchronously read offsetWidth/Height in another animation frame.
+  const box = entry.borderBoxSize?.[0]
+  const width = Math.round(box?.inlineSize ?? entry.contentRect.width)
+  const height = Math.round(box?.blockSize ?? entry.contentRect.height)
+  if (width < 1 || height < 1) {
+    cancelGeometry()
+    return
+  }
+  pendingWidth = width
+  pendingHeight = height
+  if (geometryFrame) return
+  // Updating SVG filter attributes from the observer itself can invalidate its
+  // delivery cycle. Apply at most once in the following frame, without encoding.
+  geometryFrame = requestAnimationFrame(() => {
+    geometryFrame = 0
+    if (pendingWidth === dimensions.value.width && pendingHeight === dimensions.value.height) return
+    dimensions.value = { width: pendingWidth, height: pendingHeight }
+    queueGeometry()
+  })
 }
 
 function resetPointer() {
+  cancelAnimationFrame(pointerFrame)
+  pointerFrame = 0
   pressed.value = false
-  const highlight = shine.value
+  const highlight = glow.value
   if (highlight) {
-    highlight.style.setProperty('--liquid-pointer-x', '38%')
-    highlight.style.setProperty('--liquid-pointer-y', '12%')
-    highlight.style.setProperty('--liquid-light', '0')
+    highlight.style.opacity = '0'
+    clearTimeout(glowCleanupTimer)
+    glowCleanupTimer = window.setTimeout(() => {
+      highlight.style.willChange = ''
+      glowCleanupTimer = 0
+    }, 150)
   }
+}
+
+function updatePointer() {
+  pointerFrame = 0
+  const element = surface.value
+  const highlight = glow.value
+  if (!element || !highlight) return
+  const bounds = element.getBoundingClientRect()
+  // A fixed-size, rasterized glow moves on the compositor. Moving a gradient's
+  // centre would repaint the entire glass surface for every high-rate event.
+  highlight.style.transform = `translate3d(${pointerX - bounds.left - 180}px, ${pointerY - bounds.top - 110}px, 0)`
+  highlight.style.opacity = '1'
 }
 
 function onPointerMove(event: PointerEvent) {
   if (!props.interactive || !isMoving.value || !finePointer.value || event.pointerType === 'touch')
     return
-  const element = surface.value
-  const highlight = shine.value
-  if (!element || !highlight) return
-  const bounds = element.getBoundingClientRect()
-  // Local custom properties live on the paint-only highlight, not the slot tree.
-  highlight.style.setProperty('--liquid-pointer-x', `${event.clientX - bounds.left}px`)
-  highlight.style.setProperty('--liquid-pointer-y', `${event.clientY - bounds.top}px`)
-  highlight.style.setProperty('--liquid-light', '1')
+  pointerX = event.clientX
+  pointerY = event.clientY
+  clearTimeout(glowCleanupTimer)
+  if (glow.value) glow.value.style.willChange = 'transform, opacity'
+  if (!pointerFrame) pointerFrame = requestAnimationFrame(updatePointer)
 }
 
 function onPointerDown(event: PointerEvent) {
@@ -118,7 +204,13 @@ function onPreferencesChange() {
   resetPointer()
 }
 
+function onVisibilityChange() {
+  resetPointer()
+  queueGeometry()
+}
+
 watch(() => props.radius, queueGeometry)
+watch(() => props.refraction, queueGeometry)
 watch([() => props.motion, () => props.interactive], resetPointer)
 
 onMounted(() => {
@@ -132,20 +224,34 @@ onMounted(() => {
   supported.value =
     /(?:Chrome|Chromium|Edg)\//.test(navigator.userAgent) &&
     CSS.supports('backdrop-filter', 'url("#liquid-filter")')
-  observer = new ResizeObserver(queueGeometry)
+  observer = new ResizeObserver(observeGeometry)
   if (surface.value) observer.observe(surface.value)
+  if (typeof IntersectionObserver === 'function') {
+    visibilityObserver = new IntersectionObserver(entries => {
+      isIntersecting = entries[0]?.isIntersecting ?? false
+      if (!isIntersecting) resetPointer()
+      queueGeometry()
+    })
+    if (surface.value) visibilityObserver.observe(surface.value)
+  } else isIntersecting = true
   window.addEventListener('pointerup', resetPointer, { passive: true })
   window.addEventListener('blur', resetPointer)
+  document.addEventListener('visibilitychange', onVisibilityChange)
   queueGeometry()
 })
 
 onBeforeUnmount(() => {
   observer?.disconnect()
-  cancelAnimationFrame(resizeFrame)
+  visibilityObserver?.disconnect()
+  cancelGeometry()
+  cancelAnimationFrame(geometryFrame)
+  cancelAnimationFrame(pointerFrame)
+  clearTimeout(glowCleanupTimer)
   motionPreference?.removeEventListener('change', onPreferencesChange)
   pointerPreference?.removeEventListener('change', onPreferencesChange)
   window.removeEventListener('pointerup', resetPointer)
   window.removeEventListener('blur', resetPointer)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
 })
 </script>
 
@@ -205,7 +311,9 @@ onBeforeUnmount(() => {
       </defs>
     </svg>
     <span class="liquid-surface__backdrop" :style="backdropStyle" aria-hidden="true" />
-    <span ref="shine" class="liquid-surface__shine" aria-hidden="true" />
+    <span class="liquid-surface__shine" aria-hidden="true">
+      <span ref="glow" class="liquid-surface__glow" />
+    </span>
     <span class="liquid-surface__content"><slot /></span>
   </component>
 </template>
@@ -294,18 +402,21 @@ html.light-modern .liquid-surface {
   );
 }
 
-.liquid-surface__shine::before {
+.liquid-surface__glow {
   position: absolute;
-  inset: 0;
-  border-radius: inherit;
+  top: 0;
+  left: 0;
+  width: 360px;
+  height: 220px;
+  border-radius: 50%;
   background: radial-gradient(
-    ellipse 180px 110px at var(--liquid-pointer-x, 38%) var(--liquid-pointer-y, 12%),
+    ellipse 180px 110px at center,
     var(--liquid-highlight, var(--liquid-default-highlight)),
     transparent 78%
   );
-  opacity: var(--liquid-light, 0);
+  opacity: 0;
+  transform: translate3d(-180px, -110px, 0);
   transition: opacity 120ms ease-out;
-  content: '';
 }
 
 .liquid-surface__content {
@@ -334,7 +445,7 @@ html.light-modern .liquid-surface {
   }
 }
 
-.liquid-surface[data-motion='false'] .liquid-surface__shine::before {
+.liquid-surface[data-motion='false'] .liquid-surface__glow {
   transition: opacity 100ms ease-out;
 }
 
