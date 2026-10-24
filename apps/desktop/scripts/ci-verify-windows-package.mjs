@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 
 // Installation is restricted to disposable GitHub-hosted Windows workers.
 assert.equal(process.env.GITHUB_ACTIONS, 'true', 'Package installation verification is CI-only')
@@ -26,28 +27,109 @@ await mkdir(resultsDirectory, { recursive: true })
 
 const result = { version: packageJson.version, success: false, checks: {} }
 const log = (name, data) => writeFile(path.join(resultsDirectory, name), data)
+const execFileAsync = promisify(execFile)
 
-async function run(executable, args, name, env = process.env) {
+async function captureTimeout(pid, name, timeoutMs) {
+  const snapshot = { pid, timeoutMs }
+  try {
+    const files = await readdir(installationDirectory, { recursive: true })
+    snapshot.installation = { entries: files.length, sample: files.slice(0, 100) }
+  } catch (error) {
+    snapshot.installationError = error.message
+  }
+  try {
+    snapshot.installerTemporaryDirectories = (await readdir(path.resolve(process.env.RUNNER_TEMP)))
+      .filter(entry => /^ns.+\.tmp$/i.test(entry))
+  } catch (error) {
+    snapshot.temporaryDirectoryError = error.message
+  }
+  try {
+    // Record only the process tree created by this verifier. Command lines and
+    // environment variables may contain credentials and are intentionally omitted.
+    const { stdout } = await execFileAsync('powershell.exe', [
+      '-NoLogo', '-NoProfile', '-NonInteractive', '-Command', `
+        $verificationProcesses = @(Get-CimInstance Win32_Process);
+        $verificationIds = [System.Collections.Generic.HashSet[int]]::new();
+        [void]$verificationIds.Add(${pid});
+        do {
+          $verificationCount = $verificationIds.Count;
+          foreach ($verificationProcess in $verificationProcesses) {
+            if ($verificationIds.Contains([int]$verificationProcess.ParentProcessId)) {
+              [void]$verificationIds.Add([int]$verificationProcess.ProcessId);
+            }
+          }
+        } while ($verificationIds.Count -ne $verificationCount);
+        @{
+          processes = @($verificationProcesses | Where-Object { $verificationIds.Contains([int]$_.ProcessId) } |
+            Select-Object ProcessId, ParentProcessId, Name, ExecutablePath, KernelModeTime, UserModeTime);
+          windows = @(Get-Process | Where-Object { $verificationIds.Contains([int]$_.Id) } |
+            Select-Object Id, ProcessName, MainWindowTitle, Responding, CPU)
+        } | ConvertTo-Json -Depth 4 -Compress
+      `
+    ], { windowsHide: true, timeout: 10_000, encoding: 'utf8', maxBuffer: 1024 * 1024 })
+    snapshot.processes = JSON.parse(stdout)
+  } catch (error) {
+    snapshot.processError = error.message
+  }
+  await log(`${name}.timeout.json`, JSON.stringify(snapshot, null, 2))
+  return snapshot.processes?.processes?.map(process => Number(process.ProcessId)) || []
+}
+
+async function run(executable, args, name, { env = process.env, timeoutMs = 120_000 } = {}) {
   return await new Promise((resolve, reject) => {
     let stdout = ''
     let stderr = ''
     const child = spawn(executable, args, { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
     let timedOut = false
-    const timer = setTimeout(() => { timedOut = true; child.kill() }, 120_000)
-    child.stdout.on('data', data => { stdout += data })
-    child.stderr.on('data', data => { stderr += data })
-    child.once('error', error => { clearTimeout(timer); reject(error) })
-    child.once('close', async code => {
+    let finishing = false
+    let timeoutWork
+    async function finish(code, startupError) {
+      if (finishing) return
+      finishing = true
       clearTimeout(timer)
       try {
+        // Do not start uninstall while timeout diagnostics or process cleanup is
+        // still running, even if killing the parent emits close immediately.
+        await timeoutWork
         await Promise.all([log(`${name}.stdout.log`, stdout), log(`${name}.stderr.log`, stderr)])
-        if (timedOut) reject(new Error(`${name} timed out; see verification logs`))
+        if (timedOut) reject(new Error(`${name} timed out after ${timeoutMs}ms; see verification logs`))
+        else if (startupError) reject(startupError)
         else if (code === 0) resolve()
         else reject(new Error(`${name} exited with ${code}; see verification logs`))
       } catch (error) {
         reject(error)
       }
-    })
+    }
+    const timer = setTimeout(() => {
+      timedOut = true
+      timeoutWork = (async () => {
+        const observedPids = await captureTimeout(child.pid, name, timeoutMs)
+        const running = child.exitCode === null && child.signalCode === null
+        const ownedPids = new Set(observedPids.filter(pid => pid !== child.pid))
+        if (running) ownedPids.add(child.pid)
+        if (ownedPids.size) {
+          // NSIS can start a nested installer, PowerShell or extraction helper.
+          // Terminate the complete owned tree before inspecting or uninstalling.
+          const targets = [...ownedPids].flatMap(pid => ['/PID', String(pid)])
+          await execFileAsync('taskkill.exe', [...targets, '/T', '/F'], {
+            windowsHide: true, timeout: 10_000
+          })
+        }
+      })().catch(async error => {
+        await log(`${name}.timeout-error.log`, error.message).catch(() => {})
+      }).finally(() => {
+        if (child.exitCode === null && child.signalCode === null) child.kill()
+        // A descendant may inherit these pipes after its parent exits. A timed
+        // out verifier must settle even if the OS never emits the parent's close.
+        child.stdout.destroy()
+        child.stderr.destroy()
+      })
+      void timeoutWork.then(() => finish(null))
+    }, timeoutMs)
+    child.stdout.on('data', data => { stdout += data })
+    child.stderr.on('data', data => { stderr += data })
+    child.once('error', error => { void finish(null, error) })
+    child.once('close', code => { void finish(code) })
   })
 }
 
@@ -206,7 +288,7 @@ async function verifyApplication(executable, name) {
   assert.equal(shippedPackage.name, '@ai-ssh/desktop', 'Application package identity changed')
   assert.equal(shippedPackage.productName, undefined, 'Display branding must not override Electron runtime name')
   const runtimeResult = path.join(resultsDirectory, `${name}-runtime.json`)
-  await run(executable, [runtimeProbe, packageRoot, runtimeResult], `${name}-runtime`, { ...process.env, ELECTRON_RUN_AS_NODE: '1' })
+  await run(executable, [runtimeProbe, packageRoot, runtimeResult], `${name}-runtime`, { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } })
   const runtime = JSON.parse(await readFile(runtimeResult, 'utf8'))
   assert.equal(runtime.success, true)
   assert.equal(runtime.electron, packageJson.devDependencies.electron, 'Packaged Electron version differs from the dependency pin')
@@ -227,7 +309,7 @@ try {
   // NSIS requires /D to be last; keep this disposable install path free of spaces.
   assert.ok(!/\s/.test(installationDirectory), 'The NSIS verification directory must not contain whitespace')
   installationAttempted = true
-  await run(installer, ['/S', '/currentuser', `/D=${installationDirectory}`], 'install')
+  await run(installer, ['/S', '/currentuser', `/D=${installationDirectory}`], 'install', { timeoutMs: 300_000 })
   const installedExecutable = path.join(installationDirectory, executableName)
   assert.ok((await stat(installedExecutable)).size > 0)
   result.checks.installed = true
@@ -242,7 +324,7 @@ try {
       const entries = await readdir(installationDirectory)
       const uninstaller = entries.find(file => /^uninstall.*\.exe$/i.test(file))
       assert.ok(uninstaller, 'Installed package has no uninstaller')
-      await run(path.join(installationDirectory, uninstaller), ['/S', '/currentuser'], 'uninstall')
+      await run(path.join(installationDirectory, uninstaller), ['/S', '/currentuser'], 'uninstall', { timeoutMs: 300_000 })
       await waitForRemoval(installationDirectory)
       result.checks.uninstalled = true
     } catch (error) {
