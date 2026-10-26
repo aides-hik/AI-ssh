@@ -482,18 +482,6 @@ html.light-modern .liquid-surface {
   outline-offset: 4px;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .liquid-surface:is(button)[data-interactive='true'][data-motion='true'] {
-    transition: transform 210ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  .liquid-surface:is(button)[data-interactive='true'][data-motion='true'][data-pressed='true'],
-  .liquid-surface:is(button)[data-interactive='true'][data-motion='true']:active {
-    transform: scale(0.975, 0.96);
-    transition-duration: 0s;
-  }
-}
-
 .liquid-surface[data-motion='false'] .liquid-surface__glow {
   transition: opacity 100ms ease-out;
 }

@@ -715,6 +715,15 @@ onUnmounted(() => {
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 1px 3px #0000000d;
+  transform-origin: center;
+  scale: 1;
+  transition: scale 260ms var(--prism-press-spring, cubic-bezier(0.2, 1.65, 0.35, 1));
+}
+.is-dragging .oc-reasoning-thumb,
+.oc-reasoning-control:has(.oc-reasoning-range:not(:disabled):active) .oc-reasoning-thumb {
+  /* Keep the cap inside its clipped rail, including at either endpoint. */
+  scale: 0.97 0.9;
+  transition-duration: 0ms;
 }
 .oc-reasoning-maximum-effect {
   position: absolute;
@@ -917,6 +926,10 @@ input.oc-reasoning-range:focus-visible {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .oc-reasoning-thumb {
+    scale: 1 !important;
+    transition: none !important;
+  }
   .oc-reasoning-star,
   .oc-reasoning-flow {
     animation-play-state: paused !important;
@@ -941,6 +954,10 @@ html[data-motion='off'] .oc-reasoning-popover,
 html[data-transitions='off'] .oc-reasoning-popover {
   transition: none !important;
   transform: none !important;
+}
+html:is([data-motion='off'], [data-transitions='off']) .oc-reasoning-thumb {
+  scale: 1 !important;
+  transition: none !important;
 }
 html:is([data-motion='off'], [data-transitions='off']) :is(.oc-reasoning-star, .oc-reasoning-flow) {
   animation-play-state: paused !important;

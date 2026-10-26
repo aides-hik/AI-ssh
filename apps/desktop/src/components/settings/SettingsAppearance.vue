@@ -70,6 +70,8 @@
       </div>
     </div>
 
+    <WallpaperSettings />
+
     <!-- 语言设置 -->
     <div class="setting-row">
       <div class="setting-left">
@@ -86,6 +88,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
+import WallpaperSettings from './WallpaperSettings.vue'
 import { type ThemeMode } from '@/services/theme.service'
 
 const { t: $t } = useI18n()

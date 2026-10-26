@@ -117,6 +117,12 @@
   height: 100%;
   opacity: var(--liquid-wallpaper-opacity);
 }
+/* Photos can contain any luminance or detail. Theme-colored glass faces keep
+   navigation legible while the existing rims still refract the wallpaper. */
+.liquid-app:has(> .liquid-wallpaper[data-wallpaper='custom']) {
+  --liquid-tint: color-mix(in srgb, var(--liquid-panel-solid) 78%, transparent);
+  --liquid-window-tint: color-mix(in srgb, var(--liquid-panel-solid) 78%, transparent);
+}
 .liquid-app .vscode-titlebar {
   flex: 0 0 46px;
   height: 46px;

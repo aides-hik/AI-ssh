@@ -1136,6 +1136,7 @@ select {
   flex-shrink: 0;
   width: 32px;
   height: 19px;
+  touch-action: manipulation;
 }
 .glass-switch input {
   position: absolute;
@@ -1163,7 +1164,17 @@ select {
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 1px 3px #162c492a;
-  transition: transform 180ms var(--provider-enter-ease);
+  transform-origin: center;
+  scale: 1;
+  transition:
+    transform 260ms var(--prism-press-spring, cubic-bezier(0.2, 1.65, 0.35, 1)),
+    scale 260ms var(--prism-press-spring, cubic-bezier(0.2, 1.65, 0.35, 1));
+}
+.glass-switch:has(input:not(:disabled)):is(:active, [data-prism-press='down']) > span::after {
+  scale: 1.06 0.94;
+  transition:
+    transform 260ms var(--prism-press-spring, cubic-bezier(0.2, 1.65, 0.35, 1)),
+    scale 0ms;
 }
 .glass-switch input:checked + span {
   background: var(--vscode-accent);
@@ -1593,23 +1604,12 @@ button:disabled {
     color 140ms ease-out,
     border-color 140ms ease-out;
 }
-.provider-choice:not(:disabled):active,
-.icon-action:not(:disabled):active,
-.model-parameter-button:not(:disabled):active,
-.test-connection:not(:disabled):active,
-.text-action:not(:disabled):active {
-  transform: scale(0.98);
-  transition-duration: 0s;
-}
 @media (hover: hover) and (pointer: fine) {
   .provider-choice:not(.selected):hover {
     background: var(--vscode-list-hoverBackground);
   }
   .test-connection:not(:disabled):hover {
     transform: translateY(-1px);
-  }
-  .test-connection:not(:disabled):active {
-    transform: scale(0.98);
   }
   .icon-action:hover:not(:disabled) {
     color: var(--vscode-accent);
@@ -1744,6 +1744,9 @@ select:focus-visible,
   .spinning {
     animation-play-state: paused;
   }
+  .glass-switch > span::after {
+    scale: 1 !important;
+  }
 }
 html[data-motion='off'] .ai-settings *,
 html[data-motion='off'] .ai-settings *::before,
@@ -1752,6 +1755,12 @@ html[data-transitions='off'] .ai-settings *,
 html[data-transitions='off'] .ai-settings *::before,
 html[data-transitions='off'] .ai-settings *::after {
   transition: none !important;
+}
+html:is([data-motion='off'], [data-transitions='off']) .glass-switch > span {
+  transition: background-color 80ms ease-out, border-color 80ms ease-out !important;
+}
+html:is([data-motion='off'], [data-transitions='off']) .glass-switch > span::after {
+  scale: 1 !important;
 }
 html[data-motion='off'] .ai-settings .spinning,
 html[data-transitions='off'] .ai-settings .spinning {

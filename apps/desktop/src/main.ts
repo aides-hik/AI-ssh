@@ -10,6 +10,7 @@ import './assets/styles/liquid-glass.css'
 import './assets/styles/ui-foundation.css'
 import './assets/styles/typography.css'
 import './assets/styles/settings-foundation.css'
+import './assets/styles/interaction-feedback.css'
 
 // 应用组件和路由
 import App from './App.vue'
@@ -20,6 +21,7 @@ import DialogPlugin from './plugins/dialog'
 
 // 国际化
 import i18n from './locales'
+import { installPressFeedback } from './services/press-feedback'
 
 // 创建应用实例
 const app = createApp(App)
@@ -48,3 +50,6 @@ app.use(DialogPlugin)
 
 // 挂载应用
 app.mount('#app')
+
+const disposePressFeedback = installPressFeedback()
+if (import.meta.hot) import.meta.hot.dispose(disposePressFeedback)

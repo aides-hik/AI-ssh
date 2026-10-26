@@ -1989,13 +1989,6 @@ onBeforeUnmount(() => {
   }
 }
 
-.dialog-close:active,
-.btn-cancel:active,
-.btn-confirm:active {
-  transform: scale(0.98);
-  transition-duration: 0ms;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .model-dialog-enter-active,
   .model-dialog-leave-active {

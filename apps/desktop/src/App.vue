@@ -4,54 +4,7 @@
     :data-motion="theme.animations.value ? 'on' : 'off'"
     :data-sidebar-layout="isSidebarLayoutAnimating ? 'settling' : 'stable'"
   >
-    <div class="liquid-wallpaper" aria-hidden="true">
-      <svg viewBox="0 0 1400 800" preserveAspectRatio="xMidYMid slice">
-        <defs>
-          <linearGradient id="app-flow-blue" x1="0" x2="1" y1="0" y2="1">
-            <stop stop-color="#d3e0f4" />
-            <stop offset=".48" stop-color="#649be8" />
-            <stop offset="1" stop-color="#dcf7f5" />
-          </linearGradient>
-          <linearGradient id="app-flow-pink" x1="0" x2="1">
-            <stop stop-color="#bdd2f0" />
-            <stop offset="1" stop-color="#f2dae7" />
-          </linearGradient>
-        </defs>
-        <path
-          d="M-140 710C125 810 168 370 478 445S882 971 1588 499"
-          fill="none"
-          stroke="url(#app-flow-blue)"
-          stroke-width="160"
-        />
-        <path
-          d="M-120 585C128 691 170 293 474 370S884 890 1580 419"
-          fill="none"
-          stroke="#fff"
-          stroke-opacity=".68"
-          stroke-width="3"
-        />
-        <path
-          d="M522-230C1155-162 617 226 1009 268S1390 66 1635 176"
-          fill="none"
-          stroke="url(#app-flow-pink)"
-          stroke-width="145"
-        />
-        <path
-          d="M553-165C1152-90 667 174 1007 205S1386 9 1616 113"
-          fill="none"
-          stroke="#fff"
-          stroke-opacity=".75"
-          stroke-width="2"
-        />
-        <path
-          d="M-55 743C222 834 211 410 490 494S916 1010 1512 601"
-          fill="none"
-          stroke="#effaff"
-          stroke-opacity=".7"
-          stroke-width="2"
-        />
-      </svg>
-    </div>
+    <WallpaperBackground />
 
     <AppTitleBar v-if="!isFullscreen" />
 
@@ -208,6 +161,7 @@ import { useApp } from '@/composables/useApp'
 import { useTheme } from '@/composables/useTheme'
 import { useUpdateClient } from '@/services/update-client'
 import AppTitleBar from '@/components/layout/AppTitleBar.vue'
+import WallpaperBackground from '@/components/layout/WallpaperBackground.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppStatusBar from '@/components/layout/AppStatusBar.vue'
 import WorkspaceDock from '@/components/layout/WorkspaceDock.vue'

@@ -316,7 +316,7 @@ function restoreFieldInteraction(element: Element) {
   --parameter-motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --parameter-label-shift: 3px;
   --parameter-hover-scale: 1.06;
-  --parameter-press-scale: 0.96;
+  --parameter-press-scale: 1.06 0.92;
   --parameter-reset-turn: -28deg;
   padding: 14px;
   margin-top: 12px;
@@ -441,10 +441,15 @@ function restoreFieldInteraction(element: Element) {
   border-radius: 50%;
   background: linear-gradient(#fff, #f5f8ff);
   box-shadow: 0 2px 7px color-mix(in srgb, var(--liquid-shadow) 45%, transparent);
-  transition: transform var(--parameter-motion-duration) var(--parameter-motion-ease);
+  transform-origin: center;
+  scale: 1;
+  transition:
+    transform 260ms var(--prism-press-spring, cubic-bezier(0.2, 1.65, 0.35, 1)),
+    scale 260ms var(--prism-press-spring, cubic-bezier(0.2, 1.65, 0.35, 1));
 }
 .reasoning-range:not(:disabled):active::-webkit-slider-thumb {
-  transform: scale(var(--parameter-press-scale));
+  transform: scale(1);
+  scale: var(--parameter-press-scale);
   transition-duration: 0ms;
 }
 .reasoning-range:disabled {
@@ -563,6 +568,10 @@ input:focus-visible {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .reasoning-range::-webkit-slider-thumb {
+    scale: 1 !important;
+    transition: none !important;
+  }
   .model-parameters {
     --parameter-motion-duration: 80ms;
     --parameter-exit-duration: 80ms;
@@ -580,5 +589,9 @@ html[data-transitions='off'] .model-parameters {
   --parameter-hover-scale: 1;
   --parameter-press-scale: 1;
   --parameter-reset-turn: 0deg;
+}
+html:is([data-motion='off'], [data-transitions='off']) .reasoning-range::-webkit-slider-thumb {
+  scale: 1 !important;
+  transition: none !important;
 }
 </style>

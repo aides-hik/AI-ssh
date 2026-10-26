@@ -1,0 +1,64 @@
+/* Press feedback owns only the independent scale property. Component transforms
+   continue to position dock items, menus, icons and moving selection indicators. */
+:root {
+  --prism-press-spring: cubic-bezier(0.2, 1.65, 0.35, 1);
+  --prism-press-duration: 280ms;
+}
+
+:where(button, a[href], summary, [role='button'], [role='tab'], [role='menuitem'],
+  .tree-node-content, .file-item, .context-menu-item, .command-item, .autocomplete-item,
+  .upload-progress-indicator, .download-progress-indicator, .status-badge.clickable,
+  .toggle-switch, .glass-switch, .oc-target-option) {
+  touch-action: manipulation;
+}
+
+/* Keep a quiet painted response even when spatial motion is disabled. No
+   permanent compositor layers or looping effects are created for idle controls. */
+[data-prism-press='down'] {
+  opacity: 0.86 !important;
+}
+
+/* Native ranges keep their full hit area and follow the pointer directly. Only
+   the thumb has a short release spring; custom reasoning sliders own theirs. */
+input[type='range']:not(.oc-reasoning-range, .reasoning-range)::-webkit-slider-thumb {
+  transition: scale 240ms var(--prism-press-spring);
+}
+input[type='range']:not(.oc-reasoning-range, .reasoning-range):not(:disabled):active::-webkit-slider-thumb {
+  scale: 1.06 0.94;
+  transition-duration: 0s;
+}
+input[type='range']:not(.oc-reasoning-range, .reasoning-range)::-moz-range-thumb {
+  transition: scale 240ms var(--prism-press-spring);
+}
+input[type='range']:not(.oc-reasoning-range, .reasoning-range):not(:disabled):active::-moz-range-thumb {
+  scale: 1.06 0.94;
+  transition-duration: 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  input[type='range']:not(.oc-reasoning-range, .reasoning-range)::-webkit-slider-thumb {
+    scale: none !important;
+    transition: none !important;
+  }
+  input[type='range']:not(.oc-reasoning-range, .reasoning-range)::-moz-range-thumb {
+    scale: none !important;
+    transition: none !important;
+  }
+}
+html:is([data-motion='off'], [data-transitions='off'])
+  input[type='range']:not(.oc-reasoning-range, .reasoning-range)::-webkit-slider-thumb {
+  scale: none !important;
+  transition: none !important;
+}
+html:is([data-motion='off'], [data-transitions='off'])
+  input[type='range']:not(.oc-reasoning-range, .reasoning-range)::-moz-range-thumb {
+  scale: none !important;
+  transition: none !important;
+}
+
+@media (forced-colors: active) {
+  [data-prism-press='down'] {
+    outline: 1px solid Highlight;
+    outline-offset: -2px;
+  }
+}

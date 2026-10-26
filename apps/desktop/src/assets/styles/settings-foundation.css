@@ -307,7 +307,17 @@
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 1px 3px color-mix(in srgb, var(--liquid-shadow) 38%, transparent);
-  transition: transform 180ms var(--prism-ease);
+  transform-origin: center;
+  scale: 1;
+  transition:
+    transform 260ms var(--prism-press-spring, cubic-bezier(0.2, 1.65, 0.35, 1)),
+    scale 260ms var(--prism-press-spring, cubic-bezier(0.2, 1.65, 0.35, 1));
+}
+.prism-settings-section .toggle-switch:has(input:not(:disabled)):is(:active, [data-prism-press='down']) .toggle-slider::before {
+  scale: 1.06 0.94;
+  transition:
+    transform 260ms var(--prism-press-spring, cubic-bezier(0.2, 1.65, 0.35, 1)),
+    scale 0ms;
 }
 .prism-settings-section .toggle-switch input:checked + .toggle-slider {
   background: var(--vscode-accent);
@@ -530,19 +540,25 @@
     transition-property: opacity;
   }
   .prism-settings-section .toggle-slider::before {
-    transition: none;
+    transition: none !important;
+    scale: 1 !important;
   }
   .prism-settings .rotating {
     animation: none;
   }
 }
 html[data-motion='off'] .prism-settings .notification,
-html[data-transitions='off'] .prism-settings .notification,
+html[data-transitions='off'] .prism-settings .notification {
+  transition: none;
+}
 html[data-motion='off'] .prism-settings-section .toggle-slider,
-html[data-transitions='off'] .prism-settings-section .toggle-slider,
+html[data-transitions='off'] .prism-settings-section .toggle-slider {
+  transition: background-color 80ms ease-out, border-color 80ms ease-out;
+}
 html[data-motion='off'] .prism-settings-section .toggle-slider::before,
 html[data-transitions='off'] .prism-settings-section .toggle-slider::before {
-  transition: none;
+  transition: none !important;
+  scale: 1 !important;
 }
 html[data-motion='off'] .prism-settings .notification,
 html[data-transitions='off'] .prism-settings .notification {
