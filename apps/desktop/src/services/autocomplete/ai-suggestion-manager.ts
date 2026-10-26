@@ -47,29 +47,10 @@ export class AISuggestionManager {
         return
       }
 
-      const parsed = JSON.parse(saved)
-
-      // 新格式：完整的 provider 和 model 对象
-      if (parsed.provider && parsed.model) {
-        this.currentProvider = parsed.provider
-        this.currentModel = parsed.model
-
-        // 获取 API 密钥
-        const settings = await settingsService.getSettings()
-        const configs = settings?.aiProviders || []
-        const providerConfig = configs.find((p: any) => p.id === this.currentProvider?.id)
-
-        if (providerConfig?.apiKey && this.currentProvider && this.currentModel) {
-          this.currentProvider = {
-            ...this.currentProvider,
-            apiKey: providerConfig.apiKey
-          }
-          this.isEnabled = true
-        } else {
-          this.isEnabled = false
-          this.currentProvider = null
-          this.currentModel = null
-        }
+      if (resolved.provider && resolved.model && (resolved.provider.apiKey || resolved.provider.id === 'ollama')) {
+        this.currentProvider = resolved.provider
+        this.currentModel = resolved.model
+        this.isEnabled = true
       } else {
         this.isEnabled = false
         this.currentProvider = null

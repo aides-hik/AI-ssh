@@ -75,7 +75,7 @@
           v-model="showConnectionDialog"
           :folder-id="currentFolderId"
           :connection="editingConnection"
-          @submit="handleConnectionSubmit"
+          :save-connection="handleConnectionSubmit"
           @test="handleConnectionTest"
         />
       </div>
@@ -338,29 +338,26 @@ const openEditConnectionDialog = (connection: any) => {
 
 // 处理连接提交
 const handleConnectionSubmit = async (data: any) => {
-  try {
-    if (editingConnection.value) {
-      // ✅ 编辑模式 - 直接使用 sshService
-      await sshService.updateConnection(editingConnection.value.id, {
-        ...data,
-        authType: data.authType as any
-      })
-    } else {
-      // ✅ 新建模式 - 直接使用 sshService
-      await sshService.createConnection({
-        ...data,
-        authType: data.authType as any
-      })
-    }
-
-    // 重新加载树
-    await loadSSHTree()
-
-    // 关闭对话框后重置编辑状态
-    editingConnection.value = null
-  } catch (err) {
-    console.error('保存连接失败:', err)
+  const connection = editingConnection.value
+  if (connection) {
+    // ✅ 编辑模式 - 直接使用 sshService
+    await sshService.updateConnection(connection.id, {
+      ...data,
+      authType: data.authType as any
+    })
+  } else {
+    // ✅ 新建模式 - 直接使用 sshService
+    await sshService.createConnection({
+      ...data,
+      authType: data.authType as any
+    })
   }
+
+  // 重新加载树
+  await loadSSHTree()
+
+  // 关闭对话框后重置编辑状态
+  if (editingConnection.value === connection) editingConnection.value = null
 }
 
 // 处理连接测试

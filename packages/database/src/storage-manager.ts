@@ -168,6 +168,10 @@ export class StorageManager {
     console.log('Storage manager disconnected')
   }
 
+  async compactLocalStorage(): Promise<void> {
+    await this.localAdapter?.compactLocalStorage()
+  }
+
   // 获取主要存储适配器
   private getPrimaryAdapter(): BaseStorageAdapter {
     if (this.options.mode === 'local') {
@@ -289,7 +293,8 @@ export class StorageManager {
     return await adapter.transaction(async (tx) => {
       // 创建一个临时的存储管理器实例用于事务
       const txManager = Object.create(this)
-      txManager.getPrimaryAdapter = () => ({ ...adapter, ...tx })
+      // Keep the transaction adapter's prototype methods and connection scope.
+      txManager.getPrimaryAdapter = () => tx
       
       return await fn(txManager)
     })

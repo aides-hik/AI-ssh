@@ -5,6 +5,7 @@ import { join, normalize } from 'path'
 import { windowEvents } from '../shared/events'
 import { StorageManager } from '@ai-ssh/database'
 import { initializeStorageManager } from './storage'
+import { migrateStoredCredentials } from '../services/credential-storage'
 import { UpdateService, buildManifestUrls } from '../services/update-service'
 import { getApiOriginByMode } from '../../src/config/api-environment'
 
@@ -107,6 +108,13 @@ class Application {
         // 初始化共享的 StorageManager 实例
         // ✅ IPC handlers 会通过 getStorageManager() 自动获取
         initializeStorageManager(storageManager)
+        try {
+          await migrateStoredCredentials(storageManager)
+        } catch {
+          // Keep existing data recoverable. Protected reads and writes report
+          // the failure until the keyring works, without a plaintext fallback.
+          console.warn('[Main] 系统凭据存储暂不可用，原配置已保留；敏感配置读写将报告错误。')
+        }
         this.storageReady = true
         console.log('[Main] ✅ Shared StorageManager initialized')
 

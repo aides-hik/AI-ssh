@@ -73,8 +73,8 @@ export function installPreviewModels(storage: Pick<Storage, 'getItem' | 'setItem
         'selectedAIModel',
         JSON.stringify({
           source: 'local',
-          provider: PREVIEW_PROVIDER,
-          model: PREVIEW_PROVIDER.models[0]
+          providerId: PREVIEW_PROVIDER.id,
+          modelId: PREVIEW_PROVIDER.models[0].id
         })
       )
     }

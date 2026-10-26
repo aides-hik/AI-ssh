@@ -13,7 +13,7 @@ test('retired managed models cannot be restored from either persisted selection 
   }
 })
 
-test('custom endpoint and API key remain usable in a full local model selection', () => {
+test('model snapshots cannot supply credentials when current settings are missing', () => {
   const provider = {
     id: 'custom-openai',
     name: 'Own model server',
@@ -23,9 +23,7 @@ test('custom endpoint and API key remain usable in a full local model selection'
   }
   const model = { id: 'own-model', name: 'Own model' }
   const selected = resolveSelectedModel(JSON.stringify({ source: 'local', provider, model }), [])
-  assert.equal(selected?.source, 'local')
-  assert.deepEqual(selected?.provider, provider)
-  assert.deepEqual(selected?.model, model)
+  assert.equal(selected, null)
 })
 
 test('ID-only model selections preserve the current user-supplied endpoint', () => {

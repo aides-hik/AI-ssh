@@ -1,212 +1,67 @@
-/**
- * 设置管理 IPC 处理器 - 使用 StorageManager 统一接口
- * StorageManager 自动处理本地/云端/混合模式
- */
-
 import { ipcMain } from 'electron'
 import { getStorageManager } from '../main/storage'
-import * as fs from 'fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
+import { stripCredentials } from '../../src/utils/credential-fields'
 
-// 默认设置
 const DEFAULT_SETTINGS = {
-  aiProviders: {},
-  appearance: {
-    theme: 'light',
-    fontSize: 14,
-    fontFamily: 'Consolas'
-  },
-  editor: {
-    tabSize: 2,
-    wordWrap: true,
-    minimap: true
-  },
-  terminal: {
-    fontSize: 14,
-    fontFamily: 'Consolas',
-    cursorStyle: 'block'
-  },
+  aiProviders: [],
+  theme: 'dark',
+  language: 'zh-CN',
+  appearance: { theme: 'light', fontSize: 14, fontFamily: 'Consolas' },
+  editor: { tabSize: 2, wordWrap: true, minimap: true },
+  terminal: { fontSize: 14, fontFamily: 'Consolas', cursorStyle: 'block' },
   shortcuts: {},
   storageMode: 'local'
 }
 
-// ✅ 立即执行，静态注册（Electron 打包兼容）
-// ✅ 获取设置 - 统一接口，StorageManager 自动处理模式
-ipcMain.handle('settings:get', async (_, userId?: string) => {
-  try {
-    console.log('[Settings IPC] Get settings for user:', userId)
-    const storage = getStorageManager()
-    
-    if (!userId) {
-      return DEFAULT_SETTINGS
-    }
+let pending: Promise<unknown> = Promise.resolve()
+function serialized<T>(operation: () => Promise<T>): Promise<T> {
+  const result = pending.then(operation, operation)
+  pending = result.catch(() => undefined)
+  return result
+}
 
-    const userSettings = await storage.findUnique('UserSettings', {
-      where: { userId }
-    })
-
-    if (userSettings?.data) {
-      console.log('[Settings IPC] Settings loaded from storage')
-      return userSettings.data
-    }
-
-    console.log('[Settings IPC] No settings found, returning defaults')
-    return DEFAULT_SETTINGS
-  } catch (error) {
-    console.error('[Settings IPC] Get error:', error)
-    return DEFAULT_SETTINGS
+function assertSettings(value: unknown): asserts value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('设置文件格式无效，请选择 JSON 设置文件。')
   }
-})
+}
 
-// ✅ 保存设置 - StorageManager 自动同步
-ipcMain.handle('settings:save', async (_, userId: string, settings: any) => {
-  try {
-    console.log('[Settings IPC] 📝 开始保存设置')
-    console.log('[Settings IPC] userId:', userId)
-    const storage = getStorageManager()
-    
-    if (!userId) {
-      console.error('[Settings IPC] ❌ userId 为空')
-      throw new Error('User ID is required')
-    }
+async function loadSettings(userId = 'local-user') {
+  const row = await getStorageManager().findUnique('UserSettings', { where: { userId } })
+  // Decryption errors must propagate: defaults could overwrite locked settings.
+  // An empty store must not masquerade as saved preferences during migration.
+  return row?.data ?? { aiProviders: [] }
+}
 
-    // 检查是否存在
-    console.log('[Settings IPC] 🔍 检查现有设置...')
-    const existing = await storage.findUnique('UserSettings', {
-      where: { userId }
-    })
-    console.log('[Settings IPC] 现有设置:', existing ? '已存在' : '不存在')
+async function saveSettings(userId: string, settings: unknown) {
+  if (!userId) throw new Error('缺少本地用户信息，请重新打开应用。')
+  assertSettings(settings)
+  const storage = getStorageManager()
+  const existing = await storage.findUnique('UserSettings', { where: { userId } })
+  if (existing) await storage.update('UserSettings', { where: { userId }, data: { data: settings } })
+  else await storage.create('UserSettings', { userId, data: settings })
+  return { success: true }
+}
 
-    if (existing) {
-      console.log('[Settings IPC] 📝 更新现有设置...')
-      await storage.update('UserSettings', {
-        where: { userId },
-        data: { 
-          data: settings,
-          updatedAt: new Date()
-        }
-      })
-      console.log('[Settings IPC] 设置更新成功')
-    } else {
-      console.log('[Settings IPC] 📝 创建新设置...')
-      await storage.create('UserSettings', {
-        userId,
-        data: settings
-      })
-      console.log('[Settings IPC] 设置创建成功')
-    }
+ipcMain.handle('settings:get', (_, userId?: string) => serialized(() => loadSettings(userId)))
+ipcMain.handle('settings:save', (_, userId: string, settings: unknown) => serialized(() => saveSettings(userId, settings)))
+ipcMain.handle('settings:reset', (_, userId = 'local-user') => serialized(() =>
+  saveSettings(userId, { ...structuredClone(DEFAULT_SETTINGS), credentialStorageVersion: 1 })))
 
-    console.log('[Settings IPC] ✅ 设置保存成功')
-    
-    // ✅ 如果是 hybrid 模式，自动触发同步
-    const status = await storage.getStatus()
-    console.log('[Settings IPC] 存储模式:', status.mode)
-    if (status.mode === 'hybrid' && !status.sync.inProgress) {
-      console.log('[Settings IPC] 🔄 触发后台同步...')
-      storage.sync().catch((err: any) => {
-        console.warn('[Settings IPC] ⚠️ 后台同步失败:', err)
-      })
-    }
-    
-    return { success: true }
-  } catch (error) {
-    console.error('[Settings IPC] ❌ 保存设置失败:', error)
-    console.error('[Settings IPC] 错误堆栈:', error instanceof Error ? error.stack : error)
-    throw error
-  }
-})
+ipcMain.handle('settings:export', (_, userId: string, exportPath: string) => serialized(async () => {
+  const settings = stripCredentials(await loadSettings(userId))
+  await writeFile(exportPath, JSON.stringify(settings, null, 2), { encoding: 'utf8', mode: 0o600 })
+  return { success: true }
+}))
 
-// ✅ 重置设置
-ipcMain.handle('settings:reset', async (_, userId?: string) => {
-  try {
-    console.log('[Settings IPC] Reset settings for user:', userId)
-    const storage = getStorageManager()
-    
-    if (!userId) {
-      return DEFAULT_SETTINGS
-    }
-
-    const existing = await storage.findUnique('UserSettings', {
-      where: { userId }
-    })
-
-    if (existing) {
-      await storage.update('UserSettings', {
-        where: { userId },
-        data: { 
-          data: DEFAULT_SETTINGS,
-          updatedAt: new Date()
-        }
-      })
-    } else {
-      await storage.create('UserSettings', {
-        userId,
-        data: DEFAULT_SETTINGS
-      })
-    }
-
-    console.log('[Settings IPC] Settings reset successfully')
-    return { success: true }
-  } catch (error) {
-    console.error('[Settings IPC] Reset error:', error)
-    throw error
-  }
-})
-
-// ✅ 导出设置
-ipcMain.handle('settings:export', async (_, userId: string, exportPath: string) => {
-  try {
-    console.log('[Settings IPC] Export settings for user:', userId, 'to:', exportPath)
-    const storage = getStorageManager()
-    
-    const userSettings = await storage.findUnique('UserSettings', {
-      where: { userId }
-    })
-
-    const settingsToExport = userSettings?.data || DEFAULT_SETTINGS
-    await fs.writeFile(exportPath, JSON.stringify(settingsToExport, null, 2), 'utf-8')
-    
-    console.log('[Settings IPC] Settings exported successfully')
-    return { success: true }
-  } catch (error) {
-    console.error('[Settings IPC] Export error:', error)
-    throw error
-  }
-})
-
-// ✅ 导入设置
-ipcMain.handle('settings:import', async (_, userId: string, importPath: string) => {
-  try {
-    console.log('[Settings IPC] Import settings for user:', userId, 'from:', importPath)
-    const storage = getStorageManager()
-    
-    const fileContent = await fs.readFile(importPath, 'utf-8')
-    const importedSettings = JSON.parse(fileContent)
-
-    const existing = await storage.findUnique('UserSettings', {
-      where: { userId }
-    })
-
-    if (existing) {
-      await storage.update('UserSettings', {
-        where: { userId },
-        data: { 
-          data: importedSettings,
-          updatedAt: new Date()
-        }
-      })
-    } else {
-      await storage.create('UserSettings', {
-        userId,
-        data: importedSettings
-      })
-    }
-
-    console.log('[Settings IPC] Settings imported successfully')
-    return { success: true, settings: importedSettings }
-  } catch (error) {
-    console.error('[Settings IPC] Import error:', error)
-    throw error
-  }
-})
-
-console.log('[Settings IPC] ✅ Handlers registered (static)')
+ipcMain.handle('settings:import', (_, userId: string, importPath: string) => serialized(async () => {
+  const contents = await readFile(importPath, 'utf8')
+  let settings: unknown
+  try { settings = JSON.parse(contents) }
+  catch { throw new Error('设置文件不是有效的 JSON，请检查文件后重试。') }
+  assertSettings(settings)
+  // Legacy exports with credentials are accepted and immediately protected.
+  await saveSettings(userId, settings)
+  return { success: true, settings: await loadSettings(userId) }
+}))

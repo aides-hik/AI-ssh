@@ -70,21 +70,8 @@ export function clearRetiredAccountSession(): void {
     storage.removeItem('userInfo')
     storage.removeItem('refreshToken')
     if (isRetiredServiceUrl(storage.getItem('apiUrl'))) storage.removeItem('apiUrl')
-    // Older clients used these additional settings keys. Sanitize them before
-    // a later import or fallback migration can restore a retired provider.
-    for (const key of ['app-settings', 'appSettings', 'aiProviderConfigs']) {
-      const serialized = storage.getItem(key)
-      if (!serialized) continue
-      try {
-        const parsed = JSON.parse(serialized)
-        const cleaned = pruneRetiredProviders(parsed)
-        if (JSON.stringify(cleaned) !== JSON.stringify(parsed)) {
-          storage.setItem(key, JSON.stringify(cleaned))
-        }
-      } catch {
-        // Leave unrelated malformed settings available for manual recovery.
-      }
-    }
+    // Leave old settings intact until ProtectedSettingsPersistence verifies
+    // their encrypted replacement. That migration also rejects retired providers.
     const savedSelection = storage.getItem('selectedAIModel')
     if (!savedSelection) continue
     try {

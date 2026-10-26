@@ -1,6 +1,8 @@
 import type { SSHConfig } from '../services/ssh.service'
 import type { UpdateClientState } from '../services/update-client'
 import { PREVIEW_SERVERS, previewInspectionOutput, previewServer } from './servers'
+import { stripCredentials } from '../utils/credential-fields'
+import type { SettingsDocument } from '../services/settings-persistence'
 
 type Listener = (...args: unknown[]) => void
 interface PreviewNode {
@@ -428,6 +430,32 @@ export function createBrowserPreviewBridge(connectDelay = 450, executeDelay?: nu
       uploadFile: cancelledTransfer,
       downloadFile: cancelledTransfer
     },
+    // This memory-only adapter is loaded exclusively by the preview entry.
+    // It never claims to provide the desktop's OS-backed credential storage.
+    settings: (() => {
+      let saved: SettingsDocument = { aiProviders: [], theme: 'dark', language: 'zh-CN' }
+      return {
+        get: async () => structuredClone(saved),
+        save: async (_userId: string, settings: SettingsDocument) => {
+          saved = structuredClone(settings)
+          return { success: true }
+        },
+        reset: async () => {
+          saved = { aiProviders: [], theme: 'dark', language: 'zh-CN' }
+          return { success: true }
+        },
+        export: async (_userId: string, filename: string) => {
+          documents.set(`settings/${filename}`, JSON.stringify(stripCredentials(saved), null, 2))
+          return { success: true }
+        },
+        import: async (_userId: string, filename: string) => {
+          const serialized = documents.get(`settings/${filename}`)
+          if (!serialized) throw new Error('网页预览中找不到该设置文件。')
+          saved = JSON.parse(serialized)
+          return { success: true, settings: structuredClone(saved) }
+        }
+      }
+    })(),
     fs: { showOpenDialog: async () => [], showSaveDialog: async () => null },
     docStorage: {
       save: async (category: string, name: string, content: string) => {

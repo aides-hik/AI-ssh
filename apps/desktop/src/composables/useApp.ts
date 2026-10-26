@@ -4,6 +4,7 @@
  */
 
 import { ref, computed } from 'vue'
+import { settingsService } from '../services/settings.service'
 
 // 全局状态（单例模式）
 const isInitialized = ref(false)
@@ -15,7 +16,7 @@ const settings = ref({
   language: 'zh-CN',
   autoSave: true,
   notifications: true,
-  theme: 'auto'
+  theme: 'auto' as 'light' | 'dark' | 'auto'
 })
 
 const error = ref<string | null>(null)
@@ -28,24 +29,15 @@ export function useApp() {
 
   // 加载设置
   const loadSettings = async () => {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const savedSettings = localStorage.getItem('app-settings')
-        if (savedSettings) {
-          settings.value = { ...settings.value, ...JSON.parse(savedSettings) }
-        }
-      }
-    } catch {
-      // Keep the default settings when local storage is unavailable or malformed.
-    }
+    settings.value = { ...settings.value, ...await settingsService.getSettings() }
   }
 
   // 保存设置
   const saveSettings = async () => {
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        localStorage.setItem('app-settings', JSON.stringify(settings.value))
-      }
+      const current = await settingsService.getSettings()
+      const { language, autoSave, notifications, theme } = settings.value
+      await settingsService.saveSettings({ ...current, language, autoSave, notifications, theme })
     } catch (cause) {
       throw new Error('保存设置失败', { cause })
     }
@@ -88,7 +80,7 @@ export function useApp() {
     value: typeof settings.value[K]
   ) => {
     settings.value[key] = value
-    saveSettings()
+    void saveSettings().catch(cause => addError(cause instanceof Error ? cause.message : '保存设置失败'))
   }
 
   // 切换侧边栏

@@ -10,6 +10,8 @@ import ts from 'typescript'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { EventEmitter } from 'node:events'
+import { generateKeyPairSync, randomBytes } from 'node:crypto'
+import { Client, Server, utils } from 'ssh2'
 import { SSHExecOutput } from '../services/ssh-exec-output'
 import { SSHExecLiveOutput } from '../services/ssh-exec-live-output'
 import { sshExecutionTimeout, type SSHExecuteOutputEvent } from '../../src/services/ssh/ssh-execution'
@@ -68,6 +70,80 @@ test('SSH Agent uses an explicit socket or the Windows OpenSSH named pipe withou
   assert.equal((await windows({ authType: 'agent' })).agent, '\\\\.\\pipe\\openssh-ssh-agent')
   const unix = await loadAuthentication(tmpdir(), {}, 'linux')
   await assert.rejects(unix({ authType: 'agent' }), /SSH_AUTH_SOCK/)
+})
+
+test('a passphrase-protected key at a Chinese path authenticates with a real loopback SSH server', { timeout: 20000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'ai-ssh-private-auth-'))
+  const passphrase = randomBytes(24).toString('base64url')
+  const privateKey = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs1', format: 'pem', cipher: 'aes-256-cbc', passphrase },
+    publicKeyEncoding: { type: 'pkcs1', format: 'pem' }
+  }).privateKey
+  const publicKey = utils.parseKey(privateKey, passphrase)
+  assert(!(publicKey instanceof Error) && !Array.isArray(publicKey))
+  const hostKey = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
+    publicKeyEncoding: { type: 'pkcs1', format: 'pem' }
+  }).privateKey
+  const parsedHostKey = utils.parseKey(hostKey)
+  assert(!(parsedHostKey instanceof Error) && !Array.isArray(parsedHostKey))
+  const filename = join(directory, '中文 私钥.pem')
+  await writeFile(filename, privateKey, { mode: 0o600 })
+  const clients = new Set<Client>()
+  const sockets = new Set<import('ssh2').Connection>()
+  let authenticated = 0
+  const server = new Server({ hostKeys: [hostKey] }, socket => {
+    sockets.add(socket)
+    socket.on('error', () => {})
+    socket.on('close', () => sockets.delete(socket))
+    socket.on('authentication', context => {
+      if (context.method !== 'publickey' || context.username !== 'key-test' ||
+        !context.key.data.equals(publicKey.getPublicSSH())) {
+        context.reject()
+        return
+      }
+      if (context.signature && (!context.blob || publicKey.verify(context.blob, context.signature, context.hashAlgo) !== true)) {
+        context.reject()
+        return
+      }
+      context.accept()
+    })
+    socket.on('ready', () => { authenticated++ })
+  })
+  t.after(async () => {
+    for (const client of clients) client.destroy()
+    for (const socket of sockets) socket.end()
+    await new Promise<void>(resolve => server.close(() => resolve()))
+    await rm(directory, { recursive: true, force: true })
+  })
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => resolve())
+  })
+  const address = server.address()
+  assert(address && typeof address === 'object')
+  const configure = await loadAuthentication(directory)
+  const settings = await configure({
+    host: '127.0.0.1', port: address.port, username: 'key-test',
+    authType: 'PRIVATE_KEY', privateKey: filename, passphrase, keepAlive: false, timeout: 3
+  })
+  const connect = (credentials: typeof settings) => new Promise<void>((resolve, reject) => {
+    const client = new Client()
+    clients.add(client)
+    client.once('ready', () => { client.end(); resolve() })
+    client.on('error', reject)
+    client.once('close', () => clients.delete(client))
+    client.connect({
+      ...credentials,
+      hostVerifier: (received: Buffer) => received.equals(parsedHostKey.getPublicSSH())
+    })
+  })
+  await connect(settings)
+  assert.equal(authenticated, 1, 'The fixture must accept an actual signed SSH authentication')
+  await assert.rejects(connect({ ...settings, passphrase: 'incorrect-passphrase' }))
+  assert.equal(authenticated, 1, 'A wrong passphrase must not create a second authenticated session')
 })
 
 async function loadTransfers() {

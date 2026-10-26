@@ -50,8 +50,8 @@ test('account migration removes retired sessions and model selections while pres
     assert.equal(local.getItem('selectedAIModel'), null)
     assert.equal(local.getItem('app-settings'), settings)
     assert.equal(local.getItem('ssh-tree'), '[{"id":"my-server"}]')
-    assert.deepEqual(JSON.parse(local.getItem('aiProviderConfigs')!), [ownProvider])
-    assert.deepEqual(JSON.parse(local.getItem('appSettings')!), { theme: 'dark', aiProviders: [ownProvider] })
+    assert.deepEqual(JSON.parse(local.getItem('aiProviderConfigs')!), [retiredProvider, ownProvider])
+    assert.deepEqual(JSON.parse(local.getItem('appSettings')!), { theme: 'dark', aiProviders: [retiredProvider, ownProvider] })
 
     const ownSelection = '{"source":"local","providerId":"custom-openai","modelId":"mine"}'
     local.setItem('selectedAIModel', ownSelection)

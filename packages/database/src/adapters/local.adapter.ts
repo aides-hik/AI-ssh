@@ -24,6 +24,7 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
 
     this.db = new Database(dbPath.replace('file:', ''))
     this.db.pragma('journal_mode = WAL')
+    this.db.pragma('secure_delete = ON')
   }
 
   get type(): 'local' {
@@ -267,6 +268,14 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
     this.db.close()
     this.isConnected = false
     console.log('Local database disconnected')
+  }
+
+  async compactLocalStorage(): Promise<void> {
+    // Credential migration must also retire plaintext in SQLite free pages
+    // and old WAL frames. This does not erase prior backups or filesystem history.
+    this.db.pragma('wal_checkpoint(TRUNCATE)')
+    this.db.exec('VACUUM')
+    this.db.pragma('wal_checkpoint(TRUNCATE)')
   }
 
   async create(model: string, data: any): Promise<any> {

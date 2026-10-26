@@ -187,13 +187,34 @@
                 <!-- 私钥（当认证方式为私钥时显示） -->
                 <div v-if="formData.authType === 'PRIVATE_KEY'" class="form-group">
                   <label :for="`${dialogId}-private-key`" class="form-label">私钥路径</label>
-                  <input
-                    :id="`${dialogId}-private-key`"
-                    v-model="formData.privateKey"
-                    type="text"
-                    class="form-input-full"
-                    placeholder="~/.ssh/id_rsa"
-                  />
+                  <div class="private-key-picker">
+                    <input
+                      :id="`${dialogId}-private-key`"
+                      ref="privateKeyInput"
+                      v-model="formData.privateKey"
+                      type="text"
+                      class="form-input-full"
+                      placeholder="~/.ssh/id_ed25519"
+                      :aria-describedby="`${dialogId}-private-key-help`"
+                      spellcheck="false"
+                      autocomplete="off"
+                    />
+                    <button
+                      ref="privateKeyPickerButton"
+                      type="button"
+                      class="btn-secondary private-key-browse"
+                      :disabled="loading || selectingKey || !nativeKeyPickerAvailable"
+                      @click="selectPrivateKey"
+                    >
+                      <i class="bi bi-folder2-open" aria-hidden="true"></i>
+                      {{ selectingKey ? '选择中…' : '选择文件' }}
+                    </button>
+                  </div>
+                  <p :id="`${dialogId}-private-key-help`" class="auth-help">
+                    {{ nativeKeyPickerAvailable
+                      ? '选择本机私钥文件或填写路径，支持 ~/。文件会保留在原位置。'
+                      : '网页预览不能选择本机私钥，请在桌面应用中选择文件。' }}
+                  </p>
                 </div>
 
                 <!-- 私钥密码 -->
@@ -211,6 +232,10 @@
                   />
                 </div>
 
+                <p v-if="formData.authType === 'SSH_AGENT'" class="auth-help agent-help">
+                  使用已启动的 SSH Agent 中加载的密钥，无需在此填写密码或私钥。
+                </p>
+
                 <!-- 错误和成功提示 -->
                 <div v-if="error" class="error-message" role="alert">
                   <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
@@ -224,10 +249,10 @@
                 <!-- 底部按钮 -->
                 <div class="modal-footer">
                   <button type="button" class="btn-secondary" @click="handleClose">取消</button>
-                  <button type="button" class="btn-test" :disabled="loading" @click="handleTest">
+                  <button type="button" class="btn-test" :disabled="loading || selectingKey" @click="handleTest">
                     {{ loading ? '测试中...' : '测试连接' }}
                   </button>
-                  <button type="submit" class="btn-primary" :disabled="loading">
+                  <button type="submit" class="btn-primary" :disabled="loading || selectingKey">
                     {{ loading ? '保存中...' : isEdit ? '更新' : '创建' }}
                   </button>
                 </div>
@@ -262,12 +287,12 @@ interface Props {
   modelValue: boolean
   connection?: any
   folderId?: string | null
+  saveConnection: (data: SSHConnectionFormData) => Promise<void>
 }
 
 const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
-  submit: [data: SSHConnectionFormData]
   test: [data: SSHConnectionFormData]
 }>()
 
@@ -278,6 +303,12 @@ const successMessage = ref<string | null>(null)
 const dialogId = `ssh-connection-${useId()}`
 const dialogContent = ref<HTMLElement>()
 const nameInput = ref<HTMLInputElement>()
+const privateKeyInput = ref<HTMLInputElement>()
+const privateKeyPickerButton = ref<HTMLButtonElement>()
+const selectingKey = ref(false)
+const nativeKeyPickerAvailable = typeof window !== 'undefined' &&
+  typeof window.electronAPI?.fs?.showOpenDialog === 'function' &&
+  !('preview' in window.electronAPI)
 const connectionForm = ref<HTMLFormElement>()
 const isComposing = ref(false)
 const { errors: fieldErrors, validateForm, revalidateInput, clearErrors } = useInlineValidation()
@@ -436,22 +467,57 @@ function normalizeCredential(value: unknown): string {
   return typeof value === 'string' ? value : String(value)
 }
 
-const handleSubmit = async () => {
-  if (loading.value || isComposing.value || !validateForm(connectionForm.value)) return
+async function selectPrivateKey() {
+  if (!nativeKeyPickerAvailable || selectingKey.value || loading.value) return
+  const epoch = focusEpoch
+  selectingKey.value = true
   error.value = null
+  successMessage.value = null
+  let selected = false
+  try {
+    const paths = await window.electronAPI.fs.showOpenDialog({
+      title: '选择 SSH 私钥',
+      buttonLabel: '选择私钥',
+      properties: ['openFile', 'showHiddenFiles']
+    })
+    if (!props.modelValue || epoch !== focusEpoch || formData.value.authType !== 'PRIVATE_KEY') return
+    const filename = Array.isArray(paths) ? paths[0] : undefined
+    if (typeof filename === 'string' && filename.trim()) {
+      formData.value.privateKey = filename
+      selected = true
+    }
+  } catch {
+    if (props.modelValue && epoch === focusEpoch) {
+      error.value = '无法选择私钥文件，请重试或手动填写路径。'
+    }
+  } finally {
+    selectingKey.value = false
+    if (props.modelValue && epoch === focusEpoch) {
+      await nextTick()
+      ;(selected ? privateKeyInput.value : privateKeyPickerButton.value)?.focus({ preventScroll: true })
+    }
+  }
+}
+
+const handleSubmit = async () => {
+  if (loading.value || selectingKey.value || isComposing.value || !validateForm(connectionForm.value)) return
+  const epoch = focusEpoch
+  error.value = null
+  successMessage.value = null
   loading.value = true
 
   try {
-    emit('submit', { ...formData.value })
-    handleClose()
+    await props.saveConnection({ ...formData.value })
+    if (props.modelValue && epoch === focusEpoch) handleClose()
   } catch (err: any) {
-    error.value = err.message || '保存失败'
+    if (props.modelValue && epoch === focusEpoch) error.value = err.message || '保存失败'
   } finally {
     loading.value = false
   }
 }
 
 const handleTest = async () => {
+  if (loading.value || selectingKey.value) return
   error.value = null
   successMessage.value = null
 
@@ -644,6 +710,48 @@ const handleTest = async () => {
   font-weight: 550;
   color: var(--vscode-fg);
   margin-bottom: 8px;
+}
+
+.private-key-picker {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.private-key-picker input {
+  flex: 1;
+  min-width: 0;
+}
+
+.private-key-browse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.private-key-browse:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+.private-key-browse:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.auth-help {
+  margin: 8px 0 0;
+  color: var(--vscode-fg-muted);
+  font-size: var(--prism-font-12);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.agent-help {
+  margin-bottom: 16px;
 }
 
 .modal-body input,

@@ -1108,12 +1108,16 @@ const showNotification = (message: string, type: 'success' | 'error' | 'warning'
 }
 
 // 保存设置
+const settingsLoaded = ref(false)
+let loadingSettings = false
 const saveSettings = async () => {
+  if (!settingsLoaded.value || loadingSettings) return
   try {
     const currentSettings = await settingsService.getSettings()
 
     // 将响应式对象转换为纯 JSON 对象（避免 IPC 序列化错误）
     const settings = {
+      ...currentSettings,
       appearance: {
         theme: mode.value,
         fontSize: fontSize.value,
@@ -1173,6 +1177,7 @@ const saveSettings = async () => {
 
 // 加载设置
 const loadSettings = async () => {
+  loadingSettings = true
   try {
     // 从主题 Composable 加载主题设置（mode, colorScheme, themeFontSize 已经从 composable 解构）
     fontSize.value = themeFontSize.value
@@ -1256,49 +1261,13 @@ const loadSettings = async () => {
         storageMode.value = 'local'
       }
     }
-  } catch {
-    // 失败时尝试从 localStorage 迁移
-    await migrateFromLocalStorage()
-  }
-}
-
-// 从 localStorage 迁移到数据库
-const migrateFromLocalStorage = async () => {
-  try {
-    const localSettings = localStorage.getItem('appSettings')
-    const localProviders = localStorage.getItem('aiProviderConfigs')
-
-    if (localSettings || localProviders) {
-      const data: any = {}
-
-      if (localSettings) {
-        data.appSettings = JSON.parse(localSettings)
-      }
-
-      if (localProviders) {
-        data.aiProviderConfigs = JSON.parse(localProviders)
-      }
-
-      // ✅ 使用 settingsService 保存迁移的数据
-      const migratedSettings = {
-        ...data.appSettings,
-        aiProviders: data.aiProviderConfigs
-      }
-
-      // 保存到新架构（自动处理 userId）
-      await settingsService.saveSettings(migratedSettings)
-
-      // 迁移成功后清除 localStorage
-      localStorage.removeItem('appSettings')
-      localStorage.removeItem('aiProviderConfigs')
-
-      showNotification('设置已自动迁移到本地配置', 'success')
-
-      // 重新加载设置
-      await loadSettings()
-    }
-  } catch {
-    showNotification('设置迁移失败，请手动重新配置', 'error')
+    settingsLoaded.value = true
+  } catch (error) {
+    settingsLoaded.value = false
+    showNotification(error instanceof Error ? error.message : '读取设置失败，原有配置已保留，请重试。', 'error')
+  } finally {
+    await nextTick()
+    loadingSettings = false
   }
 }
 
@@ -1429,7 +1398,7 @@ const refreshModelList = async (provider: AIProvider) => {
       ]
 
       // 自动保存
-      await saveAIProviderConfigs()
+      if (!await saveAIProviderConfigs()) return
 
       showNotification(`成功获取 ${mergedModels.length} 个模型`, 'success')
     } else {
@@ -1533,7 +1502,7 @@ const addCustomModel = async () => {
   provider.models.push(model)
 
   // 保存配置
-  await saveAIProviderConfigs()
+  if (!await saveAIProviderConfigs()) return
 
   showNotification(`已添加模型: ${model.name}`, 'success')
   cancelAddModel()
@@ -1557,7 +1526,7 @@ const removeCustomModel = async (providerId: string, modelId: string) => {
     delete modelTestResults.value[providerId][modelId]
   }
 
-  await saveAIProviderConfigs()
+  if (!await saveAIProviderConfigs()) return
   showNotification(`已删除模型: ${model.name}`, 'success')
 }
 
@@ -1575,7 +1544,7 @@ const cancelAddModel = () => {
   })
 }
 
-const clearProviderConfig = (providerId: string) => {
+const clearProviderConfig = async (providerId: string) => {
   const provider = aiProviders.value.find(p => p.id === providerId)
   if (provider) {
     if (isManagedProvider(provider)) {
@@ -1585,8 +1554,7 @@ const clearProviderConfig = (providerId: string) => {
     provider.apiKey = ''
     provider.enabled = false
     delete modelTestResults.value[providerId]
-    saveAIProviderConfigs()
-    showNotification('配置已清除', 'success')
+    if (await saveAIProviderConfigs()) showNotification('配置已清除', 'success')
   }
 }
 
@@ -1600,6 +1568,10 @@ const serializeProvidersForSave = (latestProviders: AIProvider[] = []) => {
 }
 
 const saveAIProviderConfigs = async () => {
+  if (!settingsLoaded.value || loadingSettings) {
+    showNotification('请先成功读取现有设置后再修改模型配置。', 'error')
+    return false
+  }
   try {
     // ✅ 使用 settingsService，自动处理 userId
     const currentSettings = await settingsService.getSettings()
@@ -1619,8 +1591,10 @@ const saveAIProviderConfigs = async () => {
 
     // 触发自定义事件通知其他组件配置已更新
     window.dispatchEvent(new CustomEvent('ai-provider-configs-updated'))
+    return true
   } catch (error) {
-    console.error('Failed to save AI provider settings:', error)
+    showNotification(error instanceof Error ? error.message : '模型配置未能保存，请重试。', 'error')
+    return false
   }
 }
 

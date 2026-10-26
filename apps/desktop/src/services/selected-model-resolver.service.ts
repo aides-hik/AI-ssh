@@ -63,21 +63,6 @@ export function resolveSelectedModel(
       }
     }
 
-    if (parsed.provider && parsed.model) {
-      if (parsed.provider.enabled === false || parsed.model.enabled === false) return null
-      return {
-        source: 'local',
-        providerId: parsed.provider.id,
-        providerName: parsed.provider.name,
-        modelId: parsed.model.id,
-        modelName: parsed.model.name,
-        supportsDirectClientCall: true,
-        supportsManagedServerCall: false,
-        provider: parsed.provider,
-        model: parsed.model
-      }
-    }
-
     if (parsed.providerId && parsed.modelId) {
       const provider = findLocalProvider(settingsProviders, parsed.providerId)
       const model = provider?.models?.find(item => item.id === parsed.modelId) || null

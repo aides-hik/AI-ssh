@@ -70,7 +70,7 @@ async function select(model: TitleBarModelOption) {
         : 'Model settings changed. Choose a model again.'
       return
     }
-    const saved = { source: 'local', provider: selection.provider, model: selection.model }
+    const saved = { source: 'local', providerId: selection.providerId, modelId: selection.modelId }
     localStorage.setItem('selectedAIModel', JSON.stringify(saved))
     window.dispatchEvent(new CustomEvent('ai-model-changed', { detail: saved }))
   } catch {

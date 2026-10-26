@@ -6,7 +6,7 @@
 import { createService } from './base/service-factory'
 import { BaseLocalImpl } from './base/base-api-impl'
 import type { AIModel } from '../types/ai-providers.types'
-import { isRetiredManagedProvider } from '../utils/standalone-providers'
+import { ProtectedSettingsPersistence } from './settings-persistence'
 
 // ============= 接口定义 =============
 export interface ISettingsService {
@@ -67,55 +67,34 @@ export interface PermissionRule {
 
 // ============= 本地存储实现 =============
 class SettingsLocalImpl extends BaseLocalImpl implements ISettingsService {
-  private storageKey = 'app-settings'
+  private readonly persistence = new ProtectedSettingsPersistence(
+    () => {
+      const bridge = this.electronAPI?.settings
+      if (!bridge?.get || !bridge?.save) throw new Error('无法访问桌面安全设置，请在桌面应用中重试。')
+      return bridge
+    },
+    () => [localStorage, sessionStorage],
+    this.getUserId()
+  )
 
   async getSettings(): Promise<AppSettings> {
-    const data = localStorage.getItem(this.storageKey)
-    const settings: AppSettings = data ? JSON.parse(data) : this.getDefaultSettings()
-    const providers = settings.aiProviders
-    if (Array.isArray(providers)) {
-      settings.aiProviders = providers.filter(provider => !isRetiredManagedProvider(provider))
-      if (settings.aiProviders.length !== providers.length) {
-        localStorage.setItem(this.storageKey, JSON.stringify(settings))
-      }
-    }
-    return settings
+    return this.persistence.get()
   }
 
   async saveSettings(settings: AppSettings): Promise<{ success: boolean }> {
-    const sanitized = {
-      ...settings,
-      ...(Array.isArray(settings.aiProviders)
-        ? { aiProviders: settings.aiProviders.filter(provider => !isRetiredManagedProvider(provider)) }
-        : {})
-    }
-    localStorage.setItem(this.storageKey, JSON.stringify(sanitized))
-    return { success: true }
+    return this.persistence.save(settings)
   }
 
   async resetSettings(): Promise<{ success: boolean }> {
-    localStorage.removeItem(this.storageKey)
-    return { success: true }
+    return this.persistence.reset()
   }
 
   async exportSettings(exportPath: string): Promise<{ success: boolean }> {
-    const settings = await this.getSettings()
-    await window.electronAPI.fs.writeFile(exportPath, JSON.stringify(settings, null, 2))
-    return { success: true }
+    return this.persistence.export(exportPath)
   }
 
   async importSettings(importPath: string): Promise<{ success: boolean; settings?: AppSettings }> {
-    const content = await window.electronAPI.fs.readFile(importPath)
-    const settings = JSON.parse(content)
-    await this.saveSettings(settings)
-    return { success: true, settings }
-  }
-
-  private getDefaultSettings(): AppSettings {
-    return {
-      theme: 'dark',
-      language: 'zh-CN'
-    }
+    return this.persistence.import(importPath)
   }
 }
 

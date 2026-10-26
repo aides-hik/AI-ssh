@@ -232,7 +232,10 @@ export class CloudStorageAdapter extends BaseStorageAdapter {
   // 事务支持
   async transaction<T>(fn: (tx: any) => Promise<T>): Promise<T> {
     return await this.withRetry(async () => {
-      return await this.prisma.$transaction(fn, {
+      return await this.prisma.$transaction((tx: any) => {
+        const scopedAdapter = Object.assign(Object.create(this), { prisma: tx })
+        return fn(scopedAdapter)
+      }, {
         timeout: this.cloudOptions.timeout || 30000
       })
     })

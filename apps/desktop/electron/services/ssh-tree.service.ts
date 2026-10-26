@@ -218,10 +218,7 @@ export class SSHTreeService {
           port: connection.port,
           username: connection.username,
           authType: normalizeStoredAuthType(connection.authType),
-          ...(connection.password && { password: connection.password }),
-          ...(connection.privateKey && { privateKey: connection.privateKey }),
           ...(connection.publicKey && { publicKey: connection.publicKey }),
-          ...(connection.passphrase && { passphrase: connection.passphrase })
         }))
     }
   }

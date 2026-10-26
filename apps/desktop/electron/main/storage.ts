@@ -2,6 +2,7 @@
  * 共享的 StorageManager 实例
  */
 import { StorageManager } from '@ai-ssh/database'
+import { createCredentialStorage } from '../services/credential-storage'
 
 const storageManagerKey = Symbol.for('ai-ssh-assistant.storage-manager')
 
@@ -10,7 +11,7 @@ type StorageGlobal = typeof globalThis & {
 }
 
 export function initializeStorageManager(instance: StorageManager) {
-  ;(globalThis as StorageGlobal)[storageManagerKey] = instance
+  ;(globalThis as StorageGlobal)[storageManagerKey] = createCredentialStorage(instance)
 }
 
 export function getStorageManager(): StorageManager {
