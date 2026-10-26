@@ -14,6 +14,12 @@
 
 所有本地资源使用相对路径，以兼容 GitHub Pages 的 `/AI-ssh/` 项目路径。更换域名或仓库名时，还需更新 canonical、Open Graph、站点地图和下载仓库配置。
 
+## 字体与动画
+
+中文使用自托管的 Noto Sans SC 可变字体，西文搭配 Manrope，命令和终端保持等宽字体。WOFF2 与原始 OFL 许可位于 `assets/fonts/`，总字体体积约 154 KiB；首屏预加载并使用 `font-display: swap`。中文字体按现有文案生成子集，更新中文内容时需要同步子集，细节见 `assets/fonts/README.md`。
+
+首屏采用分层入场，功能、步骤和下载卡片在进入视口时一次性显现，支持卡片悬停和场景切换反馈。滚动动画使用浏览器原生 IntersectionObserver 与 Web Animations API，内容默认可见，禁用脚本或浏览器不支持时仍可完整阅读。系统开启“减少动态效果”时关闭动画；浏览过程中切换该偏好会立即停止滚动动画。锚点跳转和键盘聚焦优先呈现内容。
+
 ## 下载策略
 
 源 HTML 始终保留 <https://github.com/aides-hik/AI-ssh/releases/latest> 作为下载兜底。发布时，构建进程读取最新正式 Release，为 Windows、两种 macOS 架构、AppImage 和 DEB 匹配真实附件，再把链接写入发布产物。

@@ -118,5 +118,86 @@ for (const demo of document.querySelectorAll('[data-demo], [data-demo-root]')) {
   demo.dataset.enhanced = 'true'
 }
 
-// FAQ uses native details/summary. There are no network requests, timers or server commands here.
-// Motion remains in CSS so prefers-reduced-motion also works before this script loads.
+// Content stays visible by default; entry effects run once when it reaches the viewport.
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+if (!reducedMotion.matches && 'IntersectionObserver' in window && typeof Element.prototype.animate === 'function') {
+  const selector = '.product-preview, .section-heading, .feature-card, .control-intro, .control-steps > li, .start-grid > li, .download-heading, .download-card, .faq-intro, .faq-item, .community'
+  const targets = Array.from(document.querySelectorAll(selector))
+  const targetSet = new Set(targets)
+  const revealed = new WeakSet()
+  const animations = new Map()
+
+  const finish = element => {
+    revealed.add(element)
+    observer.unobserve(element)
+    const animation = animations.get(element)
+    animations.delete(element)
+    animation?.cancel()
+  }
+
+  const reveal = element => {
+    if (revealed.has(element)) return
+    revealed.add(element)
+    // Anchors and keyboard focus must remain immediately readable.
+    if (reducedMotion.matches || element.matches(':focus-within') || element.getBoundingClientRect().top < 0) {
+      finish(element)
+      return
+    }
+    const siblings = Array.from(element.parentElement.children).filter(sibling => targetSet.has(sibling))
+    const delay = Math.min(Math.max(0, siblings.indexOf(element)) * 60, 180)
+    try {
+      const animation = element.animate([
+        { opacity: 0, transform: 'translateY(16px)' },
+        { opacity: 1, transform: 'translateY(0)' }
+      ], { duration: 600, delay, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards' })
+      animations.set(element, animation)
+      animation.onfinish = animation.oncancel = () => {
+        animations.delete(element)
+        observer.unobserve(element)
+      }
+    } catch {
+      finish(element)
+    }
+  }
+
+  const observer = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) reveal(entry.target)
+      else if (animations.has(entry.target)) finish(entry.target)
+    }
+  }, { threshold: 0.06, rootMargin: '0px 0px -24px 0px' })
+
+  const skipAnchor = (hash = location.hash) => {
+    let target
+    try { target = document.getElementById(decodeURIComponent(hash.slice(1))) } catch { return }
+    if (!target) return
+    for (const element of targets) {
+      if (element.contains(target) || target.contains(element)) finish(element)
+    }
+  }
+
+  for (const element of targets) {
+    if (element.getBoundingClientRect().bottom <= 0) revealed.add(element)
+    else observer.observe(element)
+  }
+  skipAnchor()
+  window.addEventListener('hashchange', () => skipAnchor())
+  document.addEventListener('click', event => {
+    const link = event.target.closest('a[href]')
+    if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    const url = new URL(link.href, location.href)
+    if (url.origin === location.origin && url.pathname === location.pathname && url.search === location.search) skipAnchor(url.hash)
+  })
+  document.addEventListener('focusin', event => {
+    for (const element of targets) {
+      if (element.contains(event.target)) finish(element)
+    }
+  })
+  reducedMotion.addEventListener('change', event => {
+    if (!event.matches) return
+    observer.disconnect()
+    for (const element of animations.keys()) finish(element)
+  })
+}
+
+// FAQ uses native details/summary. The page does not call models or execute server commands.
