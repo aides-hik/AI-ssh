@@ -79,8 +79,8 @@ jobs:
           echo "- 首次运行需在\"系统偏好设置 → 安全性与隐私\"中允许" >> $GITHUB_OUTPUT
           echo "" >> $GITHUB_OUTPUT
           echo "### Linux" >> $GITHUB_OUTPUT
-          echo "- **AppImage**: \`chmod +x prism-${VERSION_NUMBER}-linux-x64.AppImage && ./prism-${VERSION_NUMBER}-linux-x64.AppImage\`" >> $GITHUB_OUTPUT
-          echo "- **Debian/Ubuntu**: \`sudo dpkg -i prism-${VERSION_NUMBER}-linux-x64.deb\`" >> $GITHUB_OUTPUT
+          echo "- **AppImage**: \`chmod +x prism-${VERSION_NUMBER}-linux-x86_64.AppImage && ./prism-${VERSION_NUMBER}-linux-x86_64.AppImage\`" >> $GITHUB_OUTPUT
+          echo "- **Debian/Ubuntu**: \`sudo dpkg -i prism-${VERSION_NUMBER}-linux-amd64.deb\`" >> $GITHUB_OUTPUT
           echo "" >> $GITHUB_OUTPUT
           echo "## 🔧 系统要求" >> $GITHUB_OUTPUT
           echo "" >> $GITHUB_OUTPUT
