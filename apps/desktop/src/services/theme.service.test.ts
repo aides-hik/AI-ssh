@@ -140,6 +140,7 @@ test('toolbar selection survives composable startup, font/color changes, and rel
   assert.deepEqual([...env.classes], ['light-modern'])
   assert.equal(env.values.get('app-theme-mode'), 'light-modern')
   assert.equal(env.styles.get('--font-size-base'), '18px')
+  assert.equal(env.styles.get('--prism-font-scale'), '1.125')
   appearance.toggleAnimations()
   appearance.toggleTransitions()
   assert.equal(env.root.dataset.motion, 'off')

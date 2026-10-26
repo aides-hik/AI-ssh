@@ -6,6 +6,7 @@ export type StreamEvent =
   | { type: 'text-delta'; delta: string }
   | { type: 'text-done' }
   | { type: 'tool-call'; toolCallId: string; toolName: string; input: any }
+  | { type: 'tool-start'; toolCallId: string; toolName: string; input: any }
   | { type: 'tool-result'; toolCallId: string; output: { output: string } }
   | { type: 'tool-error'; toolCallId: string; error: string }
   | { type: 'done'; finish: 'stop' | 'tool-calls' }
@@ -27,8 +28,11 @@ export interface ProcessorConfig {
   serverEnvDocId?: string
   abortSignal?: AbortSignal
   reasoning?: ReasoningSelection
+  toolConcurrency?: number
+  /** Calls with the same key run in order; undefined creates an exclusive barrier. */
+  toolExecutionKey?: (toolName: string, input: any) => string | undefined
   onEvent?: (event: StreamEvent) => void
-  onToolExecute?: (toolName: string, input: any) => Promise<{ output: string }>
+  onToolExecute?: (toolName: string, input: any, callId?: string) => Promise<{ output: string }>
 }
 
 // 处理器结果
@@ -98,6 +102,7 @@ export class SessionProcessor {
   }
 
   async process(): Promise<ProcessorResult> {
+    this.throwIfAborted()
     this.state.stepCount = 0
 
     while (this.state.stepCount < MAX_STEPS && !this.state.aborted) {
@@ -108,6 +113,7 @@ export class SessionProcessor {
 
       try {
         const result = await this.processOneRound()
+        this.throwIfAborted()
 
         if (result.finish === 'stop') {
           return { finish: 'stop', messages: this.messages }
@@ -228,71 +234,117 @@ export class SessionProcessor {
   private async executeTools(
     toolCalls: Array<{ callId: string; name: string; input: any }>
   ): Promise<void> {
-    for (const tc of toolCalls) {
+    const configuredConcurrency = this.config.toolConcurrency ?? 1
+    const concurrency = Number.isFinite(configuredConcurrency)
+      ? Math.max(1, Math.floor(configuredConcurrency)) : 1
+    const outputs: Array<ModelMessage | undefined> = new Array(toolCalls.length)
+    type QueuedCall = { call: typeof toolCalls[number]; index: number; key: string }
+
+    const executeCall = async (tc: typeof toolCalls[number], index: number): Promise<void> => {
       this.throwIfAborted()
       this.emit({
-        type: 'tool-call',
+        type: 'tool-start',
         toolCallId: tc.callId,
         toolName: tc.name,
         input: tc.input
       })
 
       try {
-        if (this.config.onToolExecute) {
-          const result = await this.config.onToolExecute(tc.name, tc.input)
-
-          this.emit({
-            type: 'tool-result',
-            toolCallId: tc.callId,
-            output: { output: result.output }
-          })
-
-          this.messages.push({
-            role: 'tool',
-            content: result.output,
-            tool_call_id: tc.callId
-          })
-        } else {
-          const errorOutput = `Tool execution not configured: ${tc.name}`
-          this.emit({
-            type: 'tool-error',
-            toolCallId: tc.callId,
-            error: errorOutput
-          })
-
-          this.messages.push({
-            role: 'tool',
-            content: errorOutput,
-            tool_call_id: tc.callId
-          })
+        this.throwIfAborted()
+        if (!this.config.onToolExecute) throw new Error(`Tool execution not configured: ${tc.name}`)
+        const result = await this.config.onToolExecute(tc.name, tc.input, tc.callId)
+        outputs[index] = {
+          role: 'tool',
+          content: result.output,
+          tool_call_id: tc.callId
         }
+        this.emit({
+          type: 'tool-result',
+          toolCallId: tc.callId,
+          output: { output: result.output }
+        })
       } catch (error) {
         const err = error as Error
-        if (
-          err.name === 'AbortError' ||
-          String(err.message || '')
-            .toLowerCase()
-            .includes('aborted')
-        ) {
+        const toolAborted = err.name === 'AbortError' ||
+          String(err.message || '').toLowerCase().includes('aborted')
+        this.throwIfAborted()
+        if (toolAborted && !this.config.toolExecutionKey) {
           this.state.aborted = true
           throw err
         }
         const errorOutput = err.message || String(error)
-
+        outputs[index] = {
+          role: 'tool',
+          content: errorOutput,
+          tool_call_id: tc.callId
+        }
         this.emit({
           type: 'tool-error',
           toolCallId: tc.callId,
           error: errorOutput
         })
-
-        this.messages.push({
-          role: 'tool',
-          content: errorOutput,
-          tool_call_id: tc.callId
-        })
       }
     }
-    this.throwIfAborted()
+
+    const executeSegment = async (segment: QueuedCall[]): Promise<void> => {
+      if (concurrency === 1) {
+        for (const item of segment) await executeCall(item.call, item.index)
+        return
+      }
+      const groups = new Map<string, QueuedCall[]>()
+      for (const item of segment) {
+        const group = groups.get(item.key)
+        if (group) group.push(item)
+        else groups.set(item.key, [item])
+      }
+      const queue = [...groups.values()]
+      let nextGroup = 0
+      let failed = false
+      const worker = async () => {
+        try {
+          while (nextGroup < queue.length && !failed) {
+            this.throwIfAborted()
+            const group = queue[nextGroup++]
+            for (const item of group) {
+              if (failed) return
+              await executeCall(item.call, item.index)
+            }
+          }
+        } catch (error) {
+          failed = true
+          throw error
+        }
+      }
+      // Settle every running worker before propagating cancellation. No orphaned tool
+      // promises may update the old turn after the caller has started a new request.
+      const results = await Promise.allSettled(
+        Array.from({ length: Math.min(concurrency, queue.length) }, worker)
+      )
+      this.throwIfAborted()
+      const failure = results.find(result => result.status === 'rejected')
+      if (failure?.status === 'rejected') throw failure.reason
+    }
+
+    try {
+      let segment: QueuedCall[] = []
+      for (let index = 0; index < toolCalls.length; index++) {
+        const tc = toolCalls[index]
+        const key = this.config.toolExecutionKey?.(tc.name, tc.input)
+        if (key === undefined) {
+          await executeSegment(segment)
+          segment = []
+          await executeCall(tc, index)
+        } else {
+          segment.push({ call: tc, index, key })
+        }
+      }
+      await executeSegment(segment)
+      this.throwIfAborted()
+    } finally {
+      // Completion events are immediate, while model history keeps each tool output
+      // in the original assistant call order, including completed work after a stop.
+      for (const output of outputs) if (output) this.messages.push(output)
+    }
   }
 
   private throwIfAborted(): void {

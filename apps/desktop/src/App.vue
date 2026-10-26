@@ -53,7 +53,7 @@
       </svg>
     </div>
 
-    <AppTitleBar v-if="!isFullscreen" @open-settings="openSettings" />
+    <AppTitleBar v-if="!isFullscreen" />
 
     <div class="liquid-workbench">
       <Transition name="sidebar-scrim">
@@ -82,8 +82,8 @@
           id="connection-sidebar"
           class="vscode-sidebar liquid-sidebar"
           :radius="22"
-          :strength="32"
-          :blur="7"
+          :strength="48"
+          :blur="0.45"
           :interactive="false"
           :motion="theme.animations.value"
           aria-label="SSH 连接"
@@ -109,8 +109,8 @@
         <LiquidSurface
           class="liquid-toolbar"
           :radius="18"
-          :blur="5"
-          :strength="24"
+          :blur="0.25"
+          :strength="44"
           :interactive="false"
         >
           <button
@@ -185,57 +185,12 @@
     </div>
 
     <footer class="liquid-bottom">
-      <LiquidSurface
-        as="nav"
-        class="liquid-dock"
-        :radius="28"
-        :blur="4"
-        :strength="44"
+      <WorkspaceDock
+        :connected="Boolean(sessionTab)"
+        :active="dockDestination"
         :motion="theme.animations.value"
-        aria-label="主导航"
-      >
-        <button
-          data-destination="home"
-          aria-label="工作台"
-          :class="{ active: route.path === '/ssh' }"
-          :aria-current="route.path === '/ssh' ? 'page' : undefined"
-          @click="openNewTab('ssh', $t('ssh.sshConnection'), 'bi bi-hdd-network', '/ssh')"
-        >
-          <i class="bi bi-grid-1x2" aria-hidden="true"></i><span>工作台</span>
-        </button>
-        <button
-          data-destination="terminal"
-          aria-label="终端"
-          :class="{ active: route.path === '/terminal' }"
-          :aria-current="route.path === '/terminal' ? 'page' : undefined"
-          :disabled="!sessionTab"
-          :data-prism-tooltip="sessionTab ? '终端' : '连接服务器后使用终端'"
-          @click="openSessionView('terminal')"
-        >
-          <i class="bi bi-terminal" aria-hidden="true"></i><span>终端</span>
-        </button>
-        <button
-          data-destination="files"
-          aria-label="文件管理"
-          :class="{ active: route.path === '/file-manager' }"
-          :aria-current="route.path === '/file-manager' ? 'page' : undefined"
-          :disabled="!sessionTab"
-          :data-prism-tooltip="sessionTab ? '文件管理' : '连接服务器后管理文件'"
-          @click="openSessionView('file-manager')"
-        >
-          <i class="bi bi-folder2" aria-hidden="true"></i><span>文件</span>
-        </button>
-        <span class="liquid-dock-divider" aria-hidden="true"></span>
-        <button
-          data-destination="settings"
-          :aria-label="$t('common.settings')"
-          :class="{ active: route.path === '/settings' }"
-          :aria-current="route.path === '/settings' ? 'page' : undefined"
-          @click="openSettings"
-        >
-          <i class="bi bi-sliders2" aria-hidden="true"></i><span>{{ $t('common.settings') }}</span>
-        </button>
-      </LiquidSurface>
+        @navigate="navigateDock"
+      />
       <AppStatusBar v-if="!isFullscreen" />
     </footer>
     <GlobalModals />
@@ -255,6 +210,9 @@ import { useUpdateClient } from '@/services/update-client'
 import AppTitleBar from '@/components/layout/AppTitleBar.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppStatusBar from '@/components/layout/AppStatusBar.vue'
+import WorkspaceDock from '@/components/layout/WorkspaceDock.vue'
+import { useConnectedSessions } from '@/composables/useConnectedSessions'
+import { pickConnectedWorkspaceTab } from '@/utils/workspace-sessions'
 import GlobalModals from '@/components/common/GlobalModals.vue'
 import NotificationContainer from '@/components/common/NotificationContainer.vue'
 import PrismTooltip from '@/components/common/PrismTooltip.vue'
@@ -267,6 +225,7 @@ const router = useRouter()
 const route = useRoute()
 const app = useApp()
 const theme = useTheme()
+const { connections: connectedSessions } = useConnectedSessions()
 const updater = useUpdateClient()
 const { t: $t } = useI18n()
 
@@ -431,18 +390,28 @@ const createConnection = async () => {
 }
 
 // Reuse the current SSH session when moving between terminal and files.
-const sessionTab = computed(() => {
-  const sessions = openTabsList.value.filter(
-    tab =>
-      /^\/(terminal|file-manager)\?/.test(tab.path) &&
-      new URLSearchParams(tab.path.split('?')[1]).has('connectionId')
+const sessionTab = computed(() =>
+  pickConnectedWorkspaceTab(
+    openTabsList.value,
+    connectedSessions.value,
+    activeTab.value,
+    lastSessionTabId.value
   )
-  return (
-    sessions.find(tab => tab.id === activeTab.value) ??
-    sessions.find(tab => tab.id === lastSessionTabId.value) ??
-    sessions.at(-1)
-  )
+)
+
+const dockDestination = computed(() => {
+  if (route.path === '/terminal') return 'terminal'
+  if (route.path === '/file-manager') return 'files'
+  if (route.path === '/settings') return 'settings'
+  return 'home'
 })
+
+const navigateDock = (destination: 'home' | 'terminal' | 'files' | 'settings') => {
+  if (destination === 'home')
+    openNewTab('ssh', $t('ssh.sshConnection'), 'bi bi-hdd-network', '/ssh')
+  else if (destination === 'settings') openSettings()
+  else openSessionView(destination === 'files' ? 'file-manager' : 'terminal')
+}
 
 watch(
   activeTab,

@@ -146,7 +146,7 @@ textarea {
   background-color: var(--vscode-bg-input);
   border: 1px solid var(--vscode-border);
   color: var(--vscode-fg);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   height: 34px;
   padding: 6px 10px;
   border-radius: var(--prism-radius-control);
@@ -160,7 +160,7 @@ select {
   background-color: var(--vscode-bg-input);
   border: 1px solid var(--vscode-border);
   color: var(--vscode-fg);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   min-height: 34px;
   height: 34px;
   padding: 0 8px;
@@ -191,7 +191,7 @@ select option {
   background-color: var(--vscode-bg-input);
   border: 1px solid var(--vscode-border);
   color: var(--vscode-fg);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   border-radius: var(--prism-radius-control);
   transition:
     border-color 150ms ease,
@@ -494,7 +494,7 @@ select.success:focus {
   border-radius: var(--prism-radius-control);
   padding: 12px;
   font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   line-height: 1.4;
   overflow-x: auto;
 }
@@ -516,7 +516,7 @@ select.success:focus {
   }
 
   .btn {
-    font-size: 0.875rem;
+    font-size: var(--prism-font-14);
     padding: 0.375rem 0.75rem;
   }
 }

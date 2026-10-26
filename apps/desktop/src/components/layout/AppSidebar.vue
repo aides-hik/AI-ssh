@@ -672,7 +672,7 @@ const confirmInputDialog = () => {
   background: var(--prism-control);
   color: var(--prism-text);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   cursor: pointer;
   touch-action: manipulation;
   transition:
@@ -722,7 +722,7 @@ const confirmInputDialog = () => {
   min-height: 34px;
   padding: 6px 8px;
   border-radius: var(--prism-radius-small);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   cursor: pointer;
   transition: background-color var(--prism-duration) var(--prism-ease);
 }
@@ -742,7 +742,7 @@ const confirmInputDialog = () => {
     color var(--prism-duration) var(--prism-ease);
 }
 .vscode-icon-button i {
-  font-size: 18px;
+  font-size: var(--prism-font-18);
 }
 
 .sidebar-empty {
@@ -787,7 +787,7 @@ const confirmInputDialog = () => {
 }
 .input-dialog-header h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--prism-font-16);
   font-weight: 600;
 }
 .input-dialog-body {

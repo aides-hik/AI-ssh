@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import type { SSHExecutionOptions, SSHExecuteOutputEvent } from '../../src/services/ssh/ssh-execution'
 
 // 自定义 API 定义
 const api = {
@@ -74,8 +75,13 @@ const api = {
     disconnect: (id: string) => ipcRenderer.invoke('ssh:disconnect', id),
     resize: (id: string, cols: number, rows: number) =>
       ipcRenderer.invoke('ssh:resize', id, cols, rows), // 调整终端尺寸
-    execute: (id: string, command: string, requestId?: string) =>
-      ipcRenderer.invoke('ssh:execute', id, command, requestId),
+    execute: (id: string, command: string, requestId?: string, options?: SSHExecutionOptions) =>
+      ipcRenderer.invoke('ssh:execute', id, command, requestId, options),
+    onExecuteOutput: (callback: (event: SSHExecuteOutputEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, output: SSHExecuteOutputEvent) => callback(output)
+      ipcRenderer.on('ssh:execute-output', listener)
+      return () => ipcRenderer.removeListener('ssh:execute-output', listener)
+    },
     cancelExecute: (requestId: string) => ipcRenderer.invoke('ssh:cancel-execute', requestId),
     readEnvDoc: (id: string) => ipcRenderer.invoke('ssh:read-env-doc', id),
     writeEnvDoc: (id: string, content: string) =>
@@ -330,7 +336,8 @@ interface ElectronAPI {
     // 运行时连接管理
     connect: (config: any) => Promise<any>
     disconnect: (id: string) => Promise<any>
-    execute: (id: string, command: string, requestId?: string) => Promise<any>
+    execute: (id: string, command: string, requestId?: string, options?: SSHExecutionOptions) => Promise<any>
+    onExecuteOutput: (callback: (event: SSHExecuteOutputEvent) => void) => () => void
     cancelExecute: (requestId: string) => Promise<any>
     readEnvDoc: (id: string) => Promise<{ content: string; fullPath: string } | null>
     writeEnvDoc: (id: string, content: string) => Promise<{ content: string; fullPath: string }>

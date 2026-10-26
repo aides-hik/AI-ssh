@@ -5,11 +5,15 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import type { AIModel, AIProvider } from '../../types/ai-providers.types'
-import type { ProcessorConfig, ProcessorResult } from '../../services/processor'
+import { SessionProcessor, type ProcessorConfig, type ProcessorResult } from '../../services/processor'
 import { createAssistantMessage, type Message } from '../../services/messages/message'
 import { compactMessages, filterCompactedMessages, filterValidMessages, fromUserMessage, type ModelMessage } from '../../services/messages/convert'
 import { ProcessorHistory } from '../../services/messages/processor-history'
 import { getReasoningCapability, type ReasoningSelection } from '../../utils/model-reasoning'
+import { MultiHostRun, buildMultiHostPrompt, type HostTarget } from '../../services/multi-host-run'
+import { ExecutionLogBuffer, type HostExecutionLog } from '../../services/execution-log'
+import type { FrozenDeploymentStage } from '../../services/multi-host-deployment'
+import type { MultiHostToolOptions } from '../../services/tools/multi-host-tools'
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const chatViewPath = join(currentDir, 'AIChatOpenCodeStyle.vue')
@@ -156,6 +160,7 @@ test('stream updates preserve reading position until the user explicitly follows
   const container = { scrollHeight: 1400, scrollTop: 220 }
   const frames: Array<() => void> = []
   const { scrollToBottom } = await loadComponentFunctions(['scrollToBottom'], {
+    displayMessages: { value: [{ id: 'reply' }] },
     followLatest, messagesContainer: { value: container }, scrollFrame: 0,
     requestAnimationFrame: (callback: () => void) => { frames.push(callback); return frames.length }
   })
@@ -176,6 +181,7 @@ test('scrolling away before a pending animation frame cancels automatic followin
   const container = { scrollHeight: 1400, scrollTop: 220 }
   const frames: Array<() => void> = []
   const { scrollToBottom } = await loadComponentFunctions(['scrollToBottom'], {
+    displayMessages: { value: [{ id: 'reply' }] },
     followLatest, messagesContainer: { value: container }, scrollFrame: 0,
     requestAnimationFrame: (callback: () => void) => { frames.push(callback); return frames.length }
   })
@@ -185,6 +191,22 @@ test('scrolling away before a pending animation frame cancels automatic followin
   assert(frame)
   frame()
   assert.equal(container.scrollTop, 220)
+})
+
+test('resizing an empty conversation keeps the welcome content at the top', async () => {
+  const followLatest = { value: true }
+  const container = { scrollHeight: 400, clientHeight: 180, scrollTop: 0 }
+  const frames: Array<() => void> = []
+  const { scrollToBottom, handleMessagesScroll } = await loadComponentFunctions(['scrollToBottom', 'handleMessagesScroll'], {
+    displayMessages: { value: [] },
+    followLatest, messagesContainer: { value: container }, scrollFrame: 0,
+    requestAnimationFrame: (callback: () => void) => { frames.push(callback); return frames.length }
+  })
+  scrollToBottom()
+  handleMessagesScroll()
+  assert.equal(container.scrollTop, 0)
+  assert.equal(frames.length, 0)
+  assert.equal(followLatest.value, true)
 })
 
 async function loadSendHandler(overrides: Record<string, any> = {}) {
@@ -363,7 +385,7 @@ type ToolExecutionContext = {
   extra: { connectionId: string; serverEnvDocId: string }
 }
 
-async function loadToolSendFixture(getSettings?: () => Promise<RequestSettings>) {
+async function loadToolSendFixture(getSettings?: () => Promise<RequestSettings>, fixtureOptions: { targets?: HostTarget[] } = {}) {
   const provider: AIProvider = {
     id: 'initial-provider', name: 'Initial provider', endpoint: 'https://initial.invalid/v1',
     description: '', icon: '', website: '',
@@ -385,10 +407,19 @@ async function loadToolSendFixture(getSettings?: () => Promise<RequestSettings>)
     error: { value: null as Error | null }, interruptionState: { value: null },
     activeAssistantId: { value: null as string | null }, messages: { value: [] as Message[] },
     currentStage: { value: 'idle' }, performanceMetrics: { value: {} },
+    deploymentStatus: { value: null }, deploymentIssue: { value: null },
+    executionLogs: { value: [] as HostExecutionLog[] },
+    executionLogBuffer: new ExecutionLogBuffer(),
+    sessionStatusExpanded: { value: false },
+    multiHostSummary: { value: '' },
+    pendingDeploymentApproval: { value: null as {
+      stage: FrozenDeploymentStage; targets: readonly HostTarget[]; resolve: (approved: boolean) => void
+    } | null },
     cachedConnection: { value: { id: 'initial-ssh' } }, cachedServerEnvDoc: { value: null },
     configs: [] as ProcessorConfig[], remembered: [] as Array<{ assistantId: string; messages: ModelMessage[] }>,
     historyReads: [] as Array<{ scope: string; requireOpaqueState: boolean }>,
-    toolExecutions: [] as ToolExecutionContext[]
+    toolExecutions: [] as ToolExecutionContext[],
+    toolRegistrations: [] as Array<{ run: MultiHostRun; options: MultiHostToolOptions; tools: ProcessorConfig['tools'] }>
   }
   const history = new ProcessorHistory()
   const hooks = {
@@ -412,7 +443,8 @@ async function loadToolSendFixture(getSettings?: () => Promise<RequestSettings>)
   }
   let timerId = 0
   const functions = await loadComponentFunctions([
-    'sendMessageWithTools', 'handleStop', 'appendAssistantTextBlock', 'markLastAssistantTextBlockAsSummary'
+    'sendMessageWithTools', 'handleStop', 'appendAssistantTextBlock', 'markLastAssistantTextBlockAsSummary',
+    'requestDeploymentApproval', 'queueExecutionLog', 'flushExecutionLogs'
   ], {
     ...state, getReasoningCapability, createAssistantMessage, fromUserMessage,
     filterValidMessages, filterCompactedMessages, compactMessages,
@@ -430,16 +462,26 @@ async function loadToolSendFixture(getSettings?: () => Promise<RequestSettings>)
       }
     },
     SessionProcessor: StubSessionProcessor,
-    SSH_TOOLS: [{
-      id: 'fixture-tool',
-      init: async () => ({
-        execute: async (_input: unknown, context: ToolExecutionContext) => {
-          state.toolExecutions.push(context)
-          return { output: 'synthetic tool result' }
-        }
-      })
-    }],
+    snapshotRequestTargets: () => fixtureOptions.targets?.map(target => ({ ...target })) || [{ id: state.props.connectionId, name: 'Fixture server', host: 'fixture.invalid' }],
+    MultiHostRun, buildMultiHostPrompt,
+    multiHostRun: null, multiHostStates: { value: [] },
+    executionLogTimer: undefined,
+    executionStageTools: new Set(['execute_deployment_stage', 'execute_ssh_command', 'update_server_env_doc']),
+    createMultiHostTools: (run: MultiHostRun, options: MultiHostToolOptions) => {
+      const tools = ['fixture-tool', 'inspect_server', 'execute_ssh_command', 'execute_deployment_stage', 'update_server_env_doc'].map(id => ({
+        id,
+        init: async () => ({
+          execute: async (_input: unknown, context: ToolExecutionContext) => {
+            state.toolExecutions.push(context)
+            return { output: 'synthetic tool result' }
+          }
+        })
+      }))
+      state.toolRegistrations.push({ run, options, tools })
+      return tools
+    },
     window: { setTimeout: () => ++timerId }, clearTimeout() {},
+    setTimeout: () => ++timerId,
     nextTick: async () => {}, scrollToBottom() {}, startDurationTimer() {}, stopDurationTimer() {},
     refreshSessionContext: async () => {}, getAdaptiveCompactionLimit: () => 20,
     buildSystemPrompt: () => 'Fixture system prompt', updateStatus() {}, logPerformanceSummary() {},
@@ -485,7 +527,7 @@ test('tool requests retain the clicked model and effort across asynchronous sett
   assert.equal(config.connectionId, 'initial-ssh')
   assert.equal(config.serverEnvDocId, 'initial-env')
   assert.deepEqual(state.historyReads, [{
-    scope: JSON.stringify(['initial-provider', 'https://initial.invalid/v1', 'gpt-6-astra', 'initial-ssh', 'initial-session']),
+    scope: JSON.stringify(['initial-provider', 'https://initial.invalid/v1', 'gpt-6-astra', ['initial-ssh'], 'initial-session']),
     requireOpaqueState: true
   }])
   const assistant = state.messages.value.find(message => message.info.role === 'assistant')
@@ -500,6 +542,109 @@ test('tool requests retain the clicked model and effort across asynchronous sett
   assert.equal(state.isGenerating.value, false)
   assert.equal(state.abortController.value, null)
 })
+
+for (const targetCount of [1, 2]) {
+  test(`${targetCount}-host requests use the unified tool factory, real approval callback and isolated live logs`, async () => {
+    const targets = [
+      { id: 'runtime-a', name: 'Web A', host: 'a.fixture.invalid' },
+      { id: 'runtime-b', name: 'Web B', host: 'b.fixture.invalid' }
+    ].slice(0, targetCount)
+    const { state, hooks, send } = await loadToolSendFixture(undefined, { targets })
+    hooks.process = async config => {
+      assert.equal(state.toolRegistrations.length, 1)
+      const registration = state.toolRegistrations[0]
+      assert.equal(config.tools, registration.tools, 'the exact per-request factory tools must reach the processor')
+      assert.deepEqual(config.tools.map(tool => tool.id), [
+        'fixture-tool', 'inspect_server', 'execute_ssh_command', 'execute_deployment_stage', 'update_server_env_doc'
+      ])
+      assert.deepEqual(registration.run.targets, targets)
+      assert.equal(config.toolConcurrency, targetCount === 1 ? 1 : 3)
+      assert.match(String(config.messages[0].content), /multi_host_targets/)
+      assert.deepEqual(state.messages.value[0].info.targets, targets)
+      assert(config.abortSignal)
+      assert(registration.options.approveDeployment)
+      const stage: FrozenDeploymentStage = Object.freeze({
+        name: 'Fixture command', kind: 'command', strategy: 'rolling',
+        steps: Object.freeze(targets.map(target => Object.freeze({ targetId: target.id, label: 'Show hostname', command: 'hostname' })))
+      })
+      let settled = false
+      const approval = registration.options.approveDeployment(stage, config.abortSignal).then(value => { settled = true; return value })
+      await Promise.resolve()
+      assert.equal(settled, false, 'model execution must wait for the actual user decision')
+      const pending = state.pendingDeploymentApproval.value
+      assert(pending)
+      assert.equal(pending.stage, stage)
+      assert.equal(pending.targets, registration.run.targets)
+      pending.resolve(targetCount === 1)
+      assert.equal(await approval, targetCount === 1)
+      assert.equal(state.pendingDeploymentApproval.value, null)
+
+      state.sessionStatusExpanded.value = false
+      registration.options.onPhase?.({ targetId: targets[0].id, phase: 'executing', label: 'Execute', stageName: 'Fixture' })
+      assert.equal(state.sessionStatusExpanded.value, true, 'a running command opens its execution details even for one host')
+      registration.options.onOutput?.({ targetId: targets[0].id, stream: 'stdout', data: 'first-host-only\n' })
+      if (targets[1]) registration.options.onOutput?.({ targetId: targets[1].id, stream: 'stderr', data: 'second-host-warning\n' })
+      registration.options.onOutput?.({ targetId: 'outside-selection', stream: 'stdout', data: 'must not appear' })
+      return { finish: 'stop' }
+    }
+    await send('Check selected hosts')
+    assert.deepEqual(JSON.parse(state.historyReads[0].scope)[3], targets.map(target => target.id))
+    assert.deepEqual(state.executionLogs.value.map(log => log.targetId), targets.map(target => target.id))
+    assert.match(state.executionLogs.value[0].entries.map(entry => entry.text).join(''), /Fixture.*Execute[\s\S]*first-host-only/)
+    if (targets[1]) assert.deepEqual(state.executionLogs.value[1].entries, [{ stream: 'stderr', text: 'second-host-warning\n' }])
+    const completedLogs = structuredClone(state.executionLogs.value)
+    state.toolRegistrations[0].options.onOutput?.({ targetId: targets[0].id, stream: 'stdout', data: 'late result' })
+    assert.deepEqual(state.executionLogBuffer.snapshot(), completedLogs, 'a completed request must ignore late output')
+  })
+}
+
+for (const barrierTool of ['execute_ssh_command', 'update_server_env_doc', 'execute_deployment_stage']) {
+  test(`${barrierTool} waits for both host reads and blocks later reads until approval work settles`, { timeout: 3000 }, async context => {
+    const targets = [
+      { id: 'runtime-a', name: 'Web A', host: 'a.fixture.invalid' },
+      { id: 'runtime-b', name: 'Web B', host: 'b.fixture.invalid' }
+    ]
+    const { hooks, send } = await loadToolSendFixture(undefined, { targets })
+    const started = Object.fromEntries(['read-a', 'read-b', 'approval', 'later-read'].map(id => [id, Promise.withResolvers<void>()]))
+    const release = Object.fromEntries(['read-a', 'read-b', 'approval', 'later-read'].map(id => [id, Promise.withResolvers<void>()]))
+    context.after(() => { for (const gate of Object.values(release)) gate.resolve() })
+    const starts: string[] = []
+    hooks.process = async config => {
+      const processor = new SessionProcessor({
+        ...config, onEvent: undefined,
+        onToolExecute: async (_name, _input, callId) => {
+          assert(callId)
+          starts.push(callId)
+          started[callId].resolve()
+          await release[callId].promise
+          return { output: 'fixture result' }
+        }
+      })
+      // Run the real scheduler with the configuration produced by the real chat handler.
+      await (processor as unknown as { executeTools(calls: Array<{ callId: string; name: string; input: Record<string, string> }>): Promise<void> }).executeTools([
+        { callId: 'read-a', name: 'inspect_server', input: { targetId: targets[0].id } },
+        { callId: 'read-b', name: 'inspect_server', input: { targetId: targets[1].id } },
+        { callId: 'approval', name: barrierTool, input: { targetId: targets[0].id } },
+        { callId: 'later-read', name: 'inspect_server', input: { targetId: targets[1].id } }
+      ])
+      return { finish: 'stop' }
+    }
+    const pending = send('Inspect, then change the selected hosts')
+    await Promise.all([started['read-a'].promise, started['read-b'].promise])
+    assert.deepEqual(starts, ['read-a', 'read-b'])
+    release['read-a'].resolve()
+    await new Promise<void>(resolve => setImmediate(resolve))
+    assert.deepEqual(starts, ['read-a', 'read-b'], 'approval work cannot race another host’s unfinished read')
+    release['read-b'].resolve()
+    await started.approval.promise
+    assert.deepEqual(starts, ['read-a', 'read-b', 'approval'], 'later host work must wait while approval/execution is pending')
+    release.approval.resolve()
+    await started['later-read'].promise
+    release['later-read'].resolve()
+    await pending
+    assert.deepEqual(starts, ['read-a', 'read-b', 'approval', 'later-read'])
+  })
+}
 
 test('stopping clears the controller ref while the processor and tools retain the same aborted request signal', async () => {
   const { state, hooks, send, stop } = await loadToolSendFixture()
@@ -554,7 +699,9 @@ test('failed and aborting processors never remember a partial streamed assistant
 test('chat input stays editable while generation is in progress', async () => {
   const source = await readFile(chatViewPath, 'utf8')
 
-  assert.doesNotMatch(source, /:disabled="isGenerating"/)
+  const input = source.match(/<textarea\b[\s\S]*?>/)
+  assert.ok(input, 'the draft input must remain available')
+  assert.doesNotMatch(input[0], /:disabled="isGenerating"/)
   assert.match(source, /if \(!inputMessage\.value\.trim\(\) \|\| isGenerating\.value\) return/)
 })
 
@@ -617,7 +764,7 @@ test('inquiry and summary use response shell while tools stay in timeline', asyn
     /v-else-if="\(block\.type === 'inquiry' \|\| block\.type === 'summary'\) && block\.text"/
   )
   assert.match(source, /block\.type === 'inquiry' \? '询问' : '总结'/)
-  assert.match(source, /copyResponse\(block\.text\)/)
+  assert.match(source, /copyToClipboard\(block\.text, block\.id\)/)
 })
 
 test('active SSH chat system prompt forbids interactive shell commands', async () => {
@@ -697,3 +844,60 @@ test('assistant turns with tool activity stay expanded while tools are running',
   assert.match(source, /block\.type === 'tool' && block\.toolPart\?\.state\.status === 'running'/)
   assert.match(source, /if \(hasRunningTool\) \{\s*return false\s*\}/)
 })
+
+for (const completedFirst of ['a', 'b'] as const) {
+  test(`overlapping single-host context reads keep A and B paired when ${completedFirst.toUpperCase()} resolves first`, async () => {
+    const connections = [
+      { id: 'runtime-a', config: { name: 'Server A', host: 'a.fixture.invalid', port: 22, username: 'fixture' }, status: 'connected' },
+      { id: 'runtime-b', config: { name: 'Server B', host: 'b.fixture.invalid', port: 22, username: 'fixture' }, status: 'connected' }
+    ]
+    const docs = {
+      a: Promise.withResolvers<{ content: string }>(),
+      b: Promise.withResolvers<{ content: string }>()
+    }
+    const props = { connectionId: 'runtime-a' }
+    const requests: string[] = []
+    const cacheLoading = { value: false }
+    const { refreshSessionContext, buildSystemPrompt } = await loadComponentFunctions([
+      'refreshSessionContext', 'buildSystemPrompt', 'summarizeServerEnvDoc'
+    ], {
+      props, cacheLoading, cachedConnection: { value: null }, cachedServerEnvDoc: { value: null },
+      sessionContextStats: { value: {} },
+      sshService: { getConnections: async () => connections },
+      docStorageService: {
+        readServerEnvDoc: async (id: string) => {
+          requests.push(id)
+          return id === 'runtime-a' ? docs.a.promise : docs.b.promise
+        }
+      },
+      console: { warn() {} }
+    })
+    type Context = { connection: typeof connections[number] | null; doc: string | null }
+    const pendingA = refreshSessionContext(false, 'runtime-a') as Promise<Context>
+    assert.equal(cacheLoading.value, true)
+    props.connectionId = 'runtime-b'
+    const pendingB = refreshSessionContext(false, 'runtime-b') as Promise<Context>
+    assert.deepEqual(requests, ['runtime-a', 'runtime-b'], 'a background A load must not suppress the selected B load')
+    const pending = { a: pendingA, b: pendingB }
+    docs[completedFirst].resolve({ content: `# Environment ${completedFirst.toUpperCase()} only` })
+    const first = await pending[completedFirst]
+    assert.equal(first.connection?.id, `runtime-${completedFirst}`)
+    assert.equal(first.doc, `# Environment ${completedFirst.toUpperCase()} only`)
+    const completedLast = completedFirst === 'a' ? 'b' : 'a'
+    docs[completedLast].resolve({ content: `# Environment ${completedLast.toUpperCase()} only` })
+    const last = await pending[completedLast]
+    assert.equal(last.connection?.id, `runtime-${completedLast}`)
+    assert.equal(last.doc, `# Environment ${completedLast.toUpperCase()} only`)
+    const [a, b] = await Promise.all([pendingA, pendingB])
+    // Build each request from its returned context after both shared cache writes finish.
+    // This catches pairing a selected host with the other host's cached document.
+    const promptA = buildSystemPrompt(a.connection, a.doc, 'runtime-a') as string
+    const promptB = buildSystemPrompt(b.connection, b.doc, 'runtime-b') as string
+    assert.match(promptA, /Host: a\.fixture\.invalid/)
+    assert.match(promptA, /Environment A only/)
+    assert.doesNotMatch(promptA, /Environment B only|Host: b\.fixture\.invalid/)
+    assert.match(promptB, /Host: b\.fixture\.invalid/)
+    assert.match(promptB, /Environment B only/)
+    assert.doesNotMatch(promptB, /Environment A only|Host: a\.fixture\.invalid/)
+  })
+}

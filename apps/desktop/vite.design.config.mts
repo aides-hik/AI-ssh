@@ -7,7 +7,18 @@ import { resolve } from 'node:path'
 // An independent browser entry for design prototypes, with no Electron startup.
 export default defineConfig({
   root: import.meta.dirname,
-  plugins: [vue(), tailwindcss(), renderer()],
+  plugins: [
+    {
+      name: 'browser-preview-entry',
+      transformIndexHtml: {
+        order: 'pre',
+        handler: html => html.replace('src="/src/main.ts"', 'src="/src/browser-preview/main.ts"')
+      }
+    },
+    vue(),
+    tailwindcss(),
+    renderer()
+  ],
   resolve: {
     alias: {
       '@': resolve(import.meta.dirname, 'src'),

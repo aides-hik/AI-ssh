@@ -7,6 +7,10 @@ import { randomUUID } from 'node:crypto'
 import { windowEvents } from '../shared/events'
 import { getSSHTreeService } from '../services/ssh-tree.service'
 import { Events, emit } from '../../src/services/event-bus'
+import { SSHExecOutput } from '../services/ssh-exec-output'
+import { SSHExecLiveOutput } from '../services/ssh-exec-live-output'
+import { sshExecutionTimeout, type SSHExecutionOptions, type SSHExecuteOutputEvent } from '../../src/services/ssh/ssh-execution'
+import type { SSHCommandResult } from '../../src/services/ssh/ssh-command-result'
 
 interface SSHConnection {
   id: string
@@ -46,6 +50,7 @@ type SerializedSSHConnection = Omit<
 }
 
 interface PendingExec {
+  connectionId: string
   stream: any | null
   aborted: boolean
   reject: (error: Error) => void
@@ -198,6 +203,7 @@ class SSHManager {
             stream.on('close', () => {
               connection.isConnected = false
               connection.shell = undefined
+              this.cancelConnectionExecutions(id)
               windowEvents.sendToRenderer('ssh:connection-status-changed', {
                 id,
                 status: 'disconnected'
@@ -239,6 +245,7 @@ class SSHManager {
 
         this.closeFileListShell(id)
         this.cancelConnectionTransfers(id)
+        this.cancelConnectionExecutions(id)
 
         // 通知前端连接状态变化
         windowEvents.sendToRenderer('ssh:connection-status-changed', {
@@ -271,6 +278,8 @@ class SSHManager {
       console.warn(`Connection ${id} not found`)
       return
     }
+
+    this.cancelConnectionExecutions(id)
 
     // 关闭 shell 会话
     if (connection.shell) {
@@ -311,8 +320,11 @@ class SSHManager {
   async execute(
     id: string,
     command: string,
-    requestId?: string
-  ): Promise<{ success: boolean; output?: string; error?: string }> {
+    requestId?: string,
+    options?: SSHExecutionOptions,
+    onOutput?: (event: SSHExecuteOutputEvent) => void
+  ): Promise<SSHCommandResult> {
+    const timeout = sshExecutionTimeout(options)
     const startTime = Date.now()
     const connection = this.connections.get(id)
     if (!connection || !connection.client || !connection.isConnected) {
@@ -329,35 +341,35 @@ class SSHManager {
     })
 
     return new Promise((resolve, reject) => {
-      let output = ''
-      let errorOutput = ''
-      let firstOutputTime = 0
-      const timeout = 300000 // 5分钟超时，支持长时间运行的命令（apt, yum, 下载等）
+      const captured = new SSHExecOutput()
+      const executionId = requestId || randomUUID()
+      if (this.pendingExecs.has(executionId)) {
+        reject(new Error('命令请求 ID 已在执行中'))
+        return
+      }
+      const liveOutput = onOutput ? new SSHExecLiveOutput(executionId, id, onOutput) : undefined
+      let exitCode: number | null = null
+      let exitSignal: string | undefined
       let settled = false
       let execStream: any = null
-      let wasAborted = false
 
       // 超时处理
       const timeoutId = setTimeout(() => {
-        cleanup()
+        finalizeOutput(`命令执行超时（${timeout % 60000 === 0 ? `${timeout / 60000}分钟` : `${timeout / 1000}秒`}）`)
         if (execStream) {
-          execStream.close()
+          try { execStream.signal?.('INT') } catch { /* Best effort interruption. */ }
+          try { execStream.close() } catch { /* The channel may already be closed. */ }
         }
-        resolve({
-          success: false,
-          error: '命令执行超时（12000秒）'
-        })
       }, timeout)
 
       // 清理监听器
       const cleanup = () => {
         clearTimeout(timeoutId)
-        if (requestId) {
-          this.pendingExecs.delete(requestId)
-        }
+        liveOutput?.dispose()
+        this.pendingExecs.delete(executionId)
       }
 
-      const settleResolve = (result: { success: boolean; output?: string; error?: string }) => {
+      const settleResolve = (result: SSHCommandResult) => {
         if (settled) return
         settled = true
         cleanup()
@@ -371,72 +383,57 @@ class SSHManager {
         reject(error)
       }
 
-      if (requestId) {
-        this.pendingExecs.set(requestId, { stream: null, aborted: false, reject: settleReject })
-      }
+      this.pendingExecs.set(executionId, { connectionId: id, stream: null, aborted: false, reject: settleReject })
 
-      const finalizeOutput = () => {
+      const finalizeOutput = (executionError?: string) => {
         if (settled) return
-
-        // 清理输出
-        let cleanedOutput = output
-
-        // 1. 移除命令回显（第一行）
-        const lines = cleanedOutput.split('\n')
-        if (lines.length > 0) {
-          const firstLine = lines[0]?.trim() || ''
-          const trimmedCommand = command.trim()
-
-          if (firstLine && firstLine === trimmedCommand) {
-            cleanedOutput = lines.slice(1).join('\n')
-          }
-        }
-
-        // 2. 移除最后的提示符（最后一行如果包含 $ # 等提示符）
-        const outputLines = cleanedOutput.split('\n')
-        if (outputLines.length > 0) {
-          const lastLine = outputLines[outputLines.length - 1]
-          // 检测常见的提示符模式
-          const promptPattern = /[@#$%>]\s*$/
-          if (promptPattern.test(lastLine) || lastLine.trim() === '') {
-            cleanedOutput = outputLines.slice(0, -1).join('\n')
-          }
-        }
-
-        // 3. 移除末尾多余的换行符（保留一个）
-        cleanedOutput = cleanedOutput.replace(/\n+$/, '\n').replace(/^\n+/, '')
+        liveOutput?.finish()
+        const { stdout, stderr, truncated } = captured.snapshot()
+        const durationMs = Date.now() - startTime
+        const success = !executionError && !exitSignal && exitCode === 0
+        const error = success ? undefined : executionError || (
+          exitSignal ? `命令被信号 ${exitSignal} 终止`
+            : exitCode === null ? '命令已结束，但未收到退出状态'
+              : `命令退出码为 ${exitCode}${stderr ? `：${stderr.trim()}` : ''}`
+        )
 
         // 发布事件总线事件
         emit(Events.SSH_COMMAND_COMPLETED, {
           connectionId: id,
           command,
-          success: !errorOutput,
-          output: cleanedOutput,
-          duration: Date.now() - startTime
+          success,
+          output: stdout,
+          duration: durationMs
         })
 
         settleResolve({
-          success: !errorOutput,
-          output: cleanedOutput,
-          error: errorOutput || undefined
+          success,
+          // Non-PTY exec has no terminal prompt or command echo to strip.
+          output: stdout,
+          stdout,
+          stderr,
+          exitCode,
+          durationMs,
+          truncated,
+          ...(exitSignal ? { signal: exitSignal } : {}),
+          ...(error ? { error } : {})
         })
       }
 
       // 监听标准输出
       const onData = (data: Buffer) => {
-        const chunk = data.toString()
-        output += chunk
-
-        // 记录首次输出时间
-        if (firstOutputTime === 0) {
-          firstOutputTime = Date.now()
+        if (!settled) {
+          captured.append('stdout', data)
+          liveOutput?.append('stdout', data)
         }
       }
 
       // 监听错误输出
       const onStderr = (data: Buffer) => {
-        const chunk = data.toString()
-        errorOutput += chunk
+        if (!settled) {
+          captured.append('stderr', data)
+          liveOutput?.append('stderr', data)
+        }
       }
 
       let finalCommand = command
@@ -456,16 +453,16 @@ class SSHManager {
         }
       }
 
-      connection.client!.exec(finalCommand, (err, stream) => {
-        if (err) {
-          console.error('[SSHManager] ❌ 写入命令失败:', err)
-          settleReject(err)
-          return
-        }
+      try {
+        connection.client!.exec(finalCommand, (err, stream) => {
+          if (err) {
+            console.error('[SSHManager] ❌ 写入命令失败:', err)
+            settleReject(err)
+            return
+          }
 
-        execStream = stream
-        if (requestId) {
-          const pendingExec = this.pendingExecs.get(requestId)
+          execStream = stream
+          const pendingExec = this.pendingExecs.get(executionId)
           if (!pendingExec || pendingExec.aborted) {
             try {
               stream.close()
@@ -476,30 +473,36 @@ class SSHManager {
             return
           }
           pendingExec.stream = stream
-        }
 
+          stream.on('data', onData)
+          stream.stderr.on('data', onStderr)
 
-        stream.on('data', onData)
-        stream.stderr.on('data', onStderr)
+          stream.on('exit', (code: number | null, signal?: string) => {
+            exitCode = typeof code === 'number' ? code : null
+            exitSignal = signal || undefined
+          })
+          stream.on('close', (code?: number, signal?: string) => {
+            const pendingExec = this.pendingExecs.get(executionId)
+            if (typeof code === 'number') exitCode = code
+            if (signal) exitSignal = signal
 
-        stream.on('close', () => {
-          const pendingExec = requestId ? this.pendingExecs.get(requestId) : null
-          wasAborted = Boolean(pendingExec?.aborted)
+            if (pendingExec?.aborted) {
+              const abortError = new Error('Command aborted')
+              abortError.name = 'AbortError'
+              settleReject(abortError)
+              return
+            }
 
-          if (wasAborted) {
-            const abortError = new Error('Command aborted')
-            abortError.name = 'AbortError'
-            settleReject(abortError)
-            return
-          }
+            finalizeOutput()
+          })
 
-          finalizeOutput()
+          stream.on('error', (streamError: Error) => {
+            finalizeOutput(streamError.message)
+          })
         })
-
-        stream.on('error', (streamError: Error) => {
-          settleReject(streamError)
-        })
-      })
+      } catch (error) {
+        settleReject(error instanceof Error ? error : new Error(String(error)))
+      }
     })
   }
 
@@ -536,6 +539,16 @@ class SSHManager {
     const error = new Error('Command aborted')
     error.name = 'AbortError'
     return error
+  }
+
+  private cancelConnectionExecutions(connectionId: string): void {
+    for (const pending of [...this.pendingExecs.values()]) {
+      if (pending.connectionId !== connectionId) continue
+      pending.aborted = true
+      pending.reject(new Error('SSH连接已断开，命令已中断'))
+      try { pending.stream?.signal?.('INT') } catch { /* Best effort interruption. */ }
+      try { pending.stream?.close() } catch { /* The channel may already be closed. */ }
+    }
   }
 
   /**
@@ -1412,9 +1425,12 @@ ipcMain.handle('ssh:resize', async (_, id: string, cols: number, rows: number) =
   }
 })
 
-ipcMain.handle('ssh:execute', async (_, id: string, command: string, requestId?: string) => {
+ipcMain.handle('ssh:execute', async (event, id: string, command: string, requestId?: string, options?: SSHExecutionOptions) => {
   try {
-    return await sshManager.execute(id, command, requestId)
+    return await sshManager.execute(id, command, requestId, options, output => {
+      if (event.sender.isDestroyed()) return
+      event.sender.send('ssh:execute-output', output)
+    })
   } catch (error) {
     console.error('SSH execute error:', error)
     throw error

@@ -15,6 +15,7 @@
           {{ $t('welcome.appTitle') }}集成 SSH 连接管理、远程终端、文件传输和 AI
           智能助手，帮助您在一处继续服务器上的工作。
         </p>
+        <AboutAppActions />
       </section>
       <section class="about-panel" aria-labelledby="about-stack-title">
         <h2 id="about-stack-title">技术栈</h2>
@@ -66,6 +67,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { APP_VERSION } from '@ai-ssh/shared'
+import AboutAppActions from '@/components/common/AboutAppActions.vue'
 
 const appVersion = ref(APP_VERSION)
 const isDesktop = !!window.electronAPI
@@ -119,17 +121,17 @@ onMounted(async () => {
   background: var(--liquid-selected);
   border: 1px solid var(--liquid-rim);
   box-shadow: inset 0 1px var(--liquid-inner-light);
-  font-size: 29px;
+  font-size: var(--prism-font-29);
 }
 .about-heading h1 {
   margin: 0;
-  font-size: 28px;
+  font-size: var(--prism-font-28);
   font-weight: 600;
   letter-spacing: -0.5px;
 }
 .about-heading p {
   margin: 6px 0 0;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   color: var(--prism-muted);
 }
 .version-badge {
@@ -139,7 +141,7 @@ onMounted(async () => {
   border-radius: 999px;
   color: var(--vscode-accent);
   background: var(--liquid-selected);
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 .about-panel {
   padding: clamp(20px, 3vw, 28px);
@@ -152,11 +154,11 @@ onMounted(async () => {
 }
 .about-panel h2 {
   margin: 0 0 18px;
-  font-size: 16px;
+  font-size: var(--prism-font-16);
   font-weight: 600;
 }
 .about-panel p {
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   line-height: 1.8;
   margin: 0;
   color: var(--prism-muted);
@@ -175,13 +177,13 @@ onMounted(async () => {
 }
 .about-details dt {
   color: var(--prism-muted);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   font-weight: 400;
 }
 .about-details dd {
   color: var(--prism-text);
   margin: 0;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   overflow-wrap: anywhere;
   text-align: right;
 }
@@ -200,7 +202,7 @@ onMounted(async () => {
 }
 .about-panel .about-runtime-note {
   margin-top: 14px;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 @media (max-width: 600px) {
   .about-heading {

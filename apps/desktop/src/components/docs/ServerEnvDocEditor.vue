@@ -194,13 +194,13 @@ onBeforeUnmount(() => {
 }
 
 .header-left i {
-  font-size: 20px;
+  font-size: var(--prism-font-20);
   color: var(--vscode-accent);
 }
 
 .header-left h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--prism-font-16);
   font-weight: 600;
   color: var(--vscode-fg);
   overflow: hidden;
@@ -235,7 +235,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: var(--prism-font-14);
   z-index: 1000;
   box-shadow: var(--prism-shadow);
   border: 1px solid var(--prism-border);

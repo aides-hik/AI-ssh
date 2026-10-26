@@ -1,4 +1,5 @@
 // Electron API 类型定义
+import type { SSHExecutionOptions, SSHExecuteOutputEvent } from '../services/ssh/ssh-execution'
 interface ElectronAPI {
   // 应用控制
   minimizeWindow: () => Promise<any>
@@ -58,7 +59,8 @@ interface ElectronAPI {
     connect: (config: any) => Promise<any>
     disconnect: (id: string) => Promise<any>
     resize: (id: string, cols: number, rows: number) => Promise<any> // 调整终端尺寸
-    execute: (id: string, command: string, requestId?: string) => Promise<any>
+    execute: (id: string, command: string, requestId?: string, options?: SSHExecutionOptions) => Promise<any>
+    onExecuteOutput: (callback: (event: SSHExecuteOutputEvent) => void) => () => void
     cancelExecute: (requestId: string) => Promise<boolean>
     readEnvDoc: (id: string) => Promise<{ content: string; fullPath: string } | null>
     writeEnvDoc: (id: string, content: string) => Promise<{ content: string; fullPath: string }>

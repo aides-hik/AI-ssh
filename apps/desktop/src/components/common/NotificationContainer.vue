@@ -236,7 +236,7 @@ onBeforeUnmount(() => {
 .notification-icon {
   width: 30px;
   height: 30px;
-  font-size: 16px;
+  font-size: var(--prism-font-16);
   border-radius: var(--prism-radius-control);
 }
 .notification-copy {
@@ -247,14 +247,14 @@ onBeforeUnmount(() => {
 }
 .notification-title {
   margin: 0 0 4px;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   font-weight: 620;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
 .notification-message {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   line-height: 1.8;
   color: var(--prism-muted);
   white-space: pre-wrap;
@@ -263,7 +263,7 @@ onBeforeUnmount(() => {
 .notification-close {
   width: 30px;
   min-height: 30px;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
 }
 .notification-actions {
   display: flex;
@@ -274,7 +274,7 @@ onBeforeUnmount(() => {
 .notification-actions .prism-button {
   min-height: 32px;
   padding: 5px 10px;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 .notification-progress {
   height: 2px;

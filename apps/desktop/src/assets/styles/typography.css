@@ -1,0 +1,33 @@
+/* Interface text scales independently of layout units and the terminal renderer.
+   The number in each token is its pixel size at the medium setting. */
+:root {
+  --prism-font-8: calc(8px * var(--prism-font-scale, 1));
+  --prism-font-9: calc(9px * var(--prism-font-scale, 1));
+  --prism-font-10: calc(10px * var(--prism-font-scale, 1));
+  --prism-font-11: calc(11px * var(--prism-font-scale, 1));
+  --prism-font-12: calc(12px * var(--prism-font-scale, 1));
+  --prism-font-13: calc(13px * var(--prism-font-scale, 1));
+  --prism-font-14: calc(14px * var(--prism-font-scale, 1));
+  --prism-font-15: calc(15px * var(--prism-font-scale, 1));
+  --prism-font-16: calc(16px * var(--prism-font-scale, 1));
+  --prism-font-17: calc(17px * var(--prism-font-scale, 1));
+  --prism-font-18: calc(18px * var(--prism-font-scale, 1));
+  --prism-font-19: calc(19px * var(--prism-font-scale, 1));
+  --prism-font-20: calc(20px * var(--prism-font-scale, 1));
+  --prism-font-21: calc(21px * var(--prism-font-scale, 1));
+  --prism-font-23: calc(23px * var(--prism-font-scale, 1));
+  --prism-font-24: calc(24px * var(--prism-font-scale, 1));
+  --prism-font-25: calc(25px * var(--prism-font-scale, 1));
+  --prism-font-27: calc(27px * var(--prism-font-scale, 1));
+  --prism-font-28: calc(28px * var(--prism-font-scale, 1));
+  --prism-font-29: calc(29px * var(--prism-font-scale, 1));
+  --prism-font-30: calc(30px * var(--prism-font-scale, 1));
+  --prism-font-32: calc(32px * var(--prism-font-scale, 1));
+  --prism-font-34: calc(34px * var(--prism-font-scale, 1));
+  --prism-font-48: calc(48px * var(--prism-font-scale, 1));
+  --text-xs: var(--prism-font-12);
+  --text-sm: var(--prism-font-14);
+}
+body {
+  font-size: var(--prism-font-16);
+}

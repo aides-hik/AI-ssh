@@ -604,7 +604,7 @@ onUnmounted(() => {
 }
 
 .result-title {
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   font-weight: 500;
   color: var(--vscode-fg-muted);
 }
@@ -614,7 +614,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   background: transparent;
   color: var(--vscode-fg-muted);
   border: 1px solid var(--vscode-border);
@@ -639,7 +639,7 @@ onUnmounted(() => {
 }
 
 .btn-copy i {
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 
 .test-result-box {
@@ -648,7 +648,7 @@ onUnmounted(() => {
   border: 1px solid var(--vscode-border);
   border-radius: 0 0 var(--prism-radius-control) var(--prism-radius-control);
   color: var(--vscode-fg);
-  font-size: 14px;
+  font-size: var(--prism-font-14);
   line-height: 1.8;
   white-space: pre-wrap;
   word-break: break-word;
@@ -720,7 +720,7 @@ onUnmounted(() => {
 
 .prompt-display {
   font-family: var(--vscode-editor-font-family, Consolas, monospace);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
 }
 .btn-copy:focus-visible {
   outline: 2px solid var(--vscode-accent);
@@ -737,6 +737,6 @@ html[data-transitions='off'] .bi-hourglass-split {
 }
 .result-placeholder {
   color: var(--prism-muted);
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 </style>

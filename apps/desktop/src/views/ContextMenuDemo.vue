@@ -219,7 +219,7 @@ function handleDangerMenu(e: MouseEvent) {
 
 h2 {
   margin-bottom: 2rem;
-  font-size: 24px;
+  font-size: var(--prism-font-24);
   font-weight: 600;
   color: var(--prism-text);
 }
@@ -229,7 +229,7 @@ h2 {
 }
 
 .demo-section h3 {
-  font-size: 1.1rem;
+  font-size: calc(1.1rem * var(--prism-font-scale, 1));
   margin-bottom: 1rem;
   color: var(--prism-muted);
 }

@@ -26,6 +26,7 @@ async function launch() {
   fs.writeFileSync(path.join(outputDir, 'probe.js'), result.outputFiles[0].text)
   const env = { ...process.env, WINDOWS_AI_SMOKE_DIR: outputDir }
   delete env.ELECTRON_RUN_AS_NODE
+  delete env.ELECTRON_RENDERER_URL
   const child = spawn(require('electron'), [__filename], {
     cwd: desktopRoot, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']
   })
@@ -104,14 +105,18 @@ export async function run(endpoint) {
 }`
 
 async function runElectron() {
-  const { app, BrowserWindow, session } = require('electron')
+  const { app, BrowserWindow, globalShortcut, session } = require('electron')
   const http = require('node:http')
   const outputDir = process.env.WINDOWS_AI_SMOKE_DIR
   assert.ok(outputDir, 'Use the Node launcher to isolate test data')
   process.env.NODE_ENV = 'production'
   process.env.ELECTRON_FORCE_PROD_RENDERER = '1'
   app.setPath('userData', path.join(outputDir, 'profile'))
+  app.setPath('sessionData', path.join(outputDir, 'profile'))
   BrowserWindow.prototype.show = function () {}
+  BrowserWindow.prototype.showInactive = function () {}
+  BrowserWindow.prototype.focus = function () {}
+  globalShortcut.register = () => false
   const unexpectedHosts = new Set()
   let schemaValidated = false
   let requests = 0

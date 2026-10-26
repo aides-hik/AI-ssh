@@ -21,6 +21,7 @@ export interface MessageInfo {
   }
   compacted?: boolean // 是否已被压缩
   summary?: string // 压缩后的摘要
+  targets?: Array<{ id: string; name: string; host: string }>
 }
 
 // 文本部分

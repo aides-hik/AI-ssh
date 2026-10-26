@@ -93,13 +93,53 @@ test('OpenRouter consumes metadata, filters mandatory none, and uses its own req
 
 test('explicit toggle-only support works without inventing effort levels; malformed metadata stays safe', () => {
   const toggle = model('fixture-toggle', { reasoning: { protocol: 'qwen', supportsToggle: true } })
-  assert.deepEqual(getReasoningCapability(provider, toggle).options, ['default', 'none', 'enabled'])
+  assert.deepEqual(getReasoningCapability(provider, toggle).options, ['none', 'enabled'])
   assert.deepEqual(buildReasoningRequest(provider, toggle, 'enabled').body, { enable_thinking: true })
   assert.deepEqual(getReasoningCapability(provider, model('fixture', { reasoning: { protocol: 'qwen', supportedEfforts: ['max'] } })).options, ['default'])
   const malformed = model('fixture', { reasoning: JSON.parse('{"protocol":"openai","supportedEfforts":123}') })
   assert.deepEqual(buildReasoningRequest(provider, malformed, 'high').body, {})
   const nativeClaude = { ...provider, endpoint: 'https://api.anthropic.com/v1' }
   assert.equal(getReasoningCapability(nativeClaude, model('claude-opus-4-7')).adapter, 'anthropic')
+})
+
+test('binary reasoning migrates missing and legacy defaults to off and sends explicit selected states', () => {
+  for (const [protocol, off, on] of [
+    ['qwen', { enable_thinking: false }, { enable_thinking: true }],
+    ['deepseek', { thinking: { type: 'disabled' } }, { thinking: { type: 'enabled' } }],
+    ['openrouter', { reasoning: { effort: 'none' } }, { reasoning: { enabled: true } }]
+  ] as const) {
+    const toggle = model(`fixture-${protocol}`, { reasoning: { protocol, supportsToggle: true } })
+    const capability = getReasoningCapability(provider, toggle)
+    assert.deepEqual(capability.options, ['none', 'enabled'])
+    for (const legacy of [undefined, null, 'default', 'high', 'invalid']) {
+      assert.equal(normalizeReasoningSelection(capability, legacy), 'none', `${protocol}: ${legacy}`)
+    }
+    assert.equal(normalizeReasoningSelection(capability, 'none'), 'none')
+    assert.equal(normalizeReasoningSelection(capability, 'enabled'), 'enabled')
+    assert.deepEqual(buildReasoningRequest(provider, toggle).body, off)
+    assert.deepEqual(buildReasoningRequest(provider, toggle, 'none').body, off)
+    assert.deepEqual(buildReasoningRequest(provider, toggle, 'enabled').body, on)
+    const key = reasoningPreferenceKey(provider, toggle)
+    const saved = readReasoningPreferences(JSON.stringify({ [key]: 'enabled' }))
+    assert.equal(normalizeReasoningSelection(capability, saved[key]), 'enabled')
+  }
+})
+
+test('mandatory binary reasoning always resolves to on and cannot send an unsupported off state', () => {
+  for (const [protocol, body] of [
+    ['qwen', { enable_thinking: true }],
+    ['deepseek', { thinking: { type: 'enabled' } }],
+    ['openrouter', { reasoning: { enabled: true } }]
+  ] as const) {
+    const toggle = model(`fixture-${protocol}`, { reasoning: { protocol, supportsToggle: true, mandatory: true } })
+    const capability = getReasoningCapability(provider, toggle)
+    assert.deepEqual(capability.options, ['enabled'])
+    for (const value of [undefined, 'default', 'none', 'enabled', 'high']) {
+      assert.equal(normalizeReasoningSelection(capability, value), 'enabled')
+    }
+    assert.deepEqual(buildReasoningRequest(provider, toggle).body, body)
+    assert.deepEqual(buildReasoningRequest(provider, toggle, 'none').body, body)
+  }
 })
 
 test('native Claude adapts effort and budget by family without leaking native fields into gateways', () => {

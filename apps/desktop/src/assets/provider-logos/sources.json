@@ -1,0 +1,276 @@
+{
+  "qwen": {
+    "file": "qwen.png",
+    "source": "https://img.alicdn.com/imgextra/i4/O1CN01OXv3EM1FN8t9W4P79_!!6000000000474-2-tps-80-80.png",
+    "page": "https://qwen.ai"
+  },
+  "deepseek": {
+    "file": "deepseek.ico",
+    "source": "https://www.deepseek.com/favicon.ico",
+    "page": "https://www.deepseek.com"
+  },
+  "moonshot": {
+    "file": "moonshot.ico",
+    "source": "https://www.kimi.com/favicon-light.ico",
+    "page": "https://www.kimi.com"
+  },
+  "zhipu": {
+    "file": "zhipu.png",
+    "source": "https://open.bigmodel.cn/static/images/favicon.png",
+    "page": "https://open.bigmodel.cn"
+  },
+  "baichuan": {
+    "file": "baichuan.ico",
+    "source": "https://platform.baichuan-ai.com/favicon.ico",
+    "page": "https://platform.baichuan-ai.com/homePage"
+  },
+  "minimax": {
+    "file": "minimax.ico",
+    "source": "https://www.minimax.cn/favicon.ico",
+    "page": "https://www.minimax.cn"
+  },
+  "yi": {
+    "file": "yi.png",
+    "source": "https://platform.lingyiwanwu.com/icon.png?f17992d0c17501d7",
+    "page": "https://platform.lingyiwanwu.com"
+  },
+  "stepfun": {
+    "file": "stepfun.png",
+    "source": "https://platform.stepfun.com/images/title-logo.png",
+    "page": "https://platform.stepfun.com"
+  },
+  "spark": {
+    "file": "spark.ico",
+    "source": "https://xinghuo.xfyun.cn/spark-icon.ico",
+    "page": "https://xinghuo.xfyun.cn"
+  },
+  "hunyuan": {
+    "file": "hunyuan.svg",
+    "source": "https://hunyuan-blog-web-prod-1258344703.cos.ap-guangzhou.myqcloud.com/logo.svg",
+    "page": "https://hunyuan.tencent.com"
+  },
+  "wenxin": {
+    "file": "wenxin.ico",
+    "source": "https://www.baidu.com/favicon.ico",
+    "page": "https://wenxin.baidu.com/?enter_type=yiyan_site"
+  },
+  "360ai": {
+    "file": "360ai.png",
+    "source": "https://p4.ssl.qhimg.com/t110b9a9301d4da7a687593034a.png",
+    "page": "https://ai.360.cn"
+  },
+  "sensenova": {
+    "file": "sensenova.png",
+    "source": "https://www.sensenova.cn/icon.png",
+    "page": "https://www.sensenova.cn/",
+    "note": "Official SenseNova symbol, verified against the same purple/green striped mark in the homepage header logo at https://www.sensenova.cn/images/logo.png and SenseTime product asset https://www.sensetime.com/assets/hero-icon-ririxin.png."
+  },
+  "taichu": {
+    "file": "taichu.png",
+    "source": "https://taichu-public.wair.ac.cn/chatweb/apple-touch-icon.png",
+    "page": "https://www.zidongtaichu.com/"
+  },
+  "chatglm": {
+    "file": "chatglm.png",
+    "source": "https://chatglm.cn/favicon.ico",
+    "page": "https://chatglm.cn"
+  },
+  "infini-ai": {
+    "file": "infini-ai.ico",
+    "source": "https://docs.infini-ai.com/graphics/infini-ai.favicon.ico",
+    "page": "https://docs.infini-ai.com/"
+  },
+  "doubao": {
+    "file": "doubao.png",
+    "source": "https://lf-flow-web-cdn.doubao.com/obj/flow-doubao/favicon/new-doubao/192x192.png",
+    "page": "https://www.doubao.com/chat/"
+  },
+  "yuan": {
+    "file": "yuan.png",
+    "source": "https://raw.githubusercontent.com/IEIT-Yuan/YuanChat/main/src/webui/public/favicon.png",
+    "page": "https://github.com/IEIT-Yuan/YuanChat",
+    "note": "Official YuanChat favicon from the model creator IEIT-Yuan GitHub organization."
+  },
+  "tiangong": {
+    "file": "tiangong.png",
+    "source": "https://static.tiangong.cn/prod-pc-main-site-www-home/favicon.ico",
+    "page": "https://www.tiangong.cn/"
+  },
+  "minimax-music": {
+    "file": "minimax.ico",
+    "source": "https://www.minimax.cn/favicon.ico",
+    "page": "https://www.minimax.cn"
+  },
+  "zhipuai-all": {
+    "file": "chatglm.png",
+    "source": "https://chatglm.cn/favicon.ico",
+    "page": "https://chatglm.cn"
+  },
+  "mistral": {
+    "file": "mistral.svg",
+    "source": "https://mistral.ai/",
+    "note": "Unchanged inline mobile navigation logomark, extracted as a standalone SVG."
+  },
+  "google": {
+    "file": "google.png",
+    "source": "https://www.gstatic.com/lamda/images/gemini_sparkle_4g_512_lt_f94943af3be039176192d.png"
+  },
+  "anthropic": {
+    "file": "anthropic.png",
+    "source": "https://assets.claude.com/95a868946ac8a31e5ff832e2899f294aa368b836.png?w=128&h=128"
+  },
+  "openai": {
+    "file": "openai.svg",
+    "source": "https://developers.openai.com/favicon.svg"
+  },
+  "azure-openai": {
+    "file": "azure-openai.ico",
+    "source": "https://azure.microsoft.com/favicon.ico?v2"
+  },
+  "cohere": {
+    "file": "cohere.png",
+    "source": "https://cohere.com/apple-touch-icon.png",
+    "page": "https://cohere.com",
+    "note": "Official apple-touch-icon, matching the three-part color logomark in the site header."
+  },
+  "groq": {
+    "file": "groq.svg",
+    "source": "https://groq.com/favicon.svg"
+  },
+  "xai": {
+    "file": "xai.ico",
+    "source": "https://docs.x.ai/favicon.ico"
+  },
+  "aws-bedrock": {
+    "file": "aws-bedrock.png",
+    "source": "https://a0.awsstatic.com/libra-css/images/site/touch-icon-ipad-144-smile.png"
+  },
+  "together": {
+    "file": "together.png",
+    "source": "https://cdn.prod.website-files.com/69654e88dce9154b5f1206dd/69a59cff65ed0f267dd2fbe8_touchicon.png"
+  },
+  "github-models": {
+    "file": "github-models.svg",
+    "source": "https://github.githubassets.com/favicons/favicon.svg"
+  },
+  "cloudflare": {
+    "file": "cloudflare.png",
+    "source": "https://www.cloudflare.com/favicon.ico"
+  },
+  "novita": {
+    "file": "novita.svg",
+    "source": "https://novita.ai/logo/logo_small.svg"
+  },
+  "huggingface": {
+    "file": "huggingface.svg",
+    "source": "https://huggingface.co/front/assets/huggingface_logo-noborder.svg"
+  },
+  "openrouter": {
+    "file": "openrouter.png",
+    "source": "https://openrouter.ai/favicon/glyph.png"
+  },
+  "replicate": {
+    "file": "replicate.png",
+    "source": "https://static.replicateassets.com/fe/44974001ab91965fb9ed929edd36e0055fd18d07/favicon-CKiqAkf2.png"
+  },
+  "fireworks": {
+    "file": "fireworks.svg",
+    "source": "https://fireworks.ai/icon.svg?26fd47f5c5eddcac"
+  },
+  "siliconcloud": {
+    "file": "siliconcloud.png",
+    "source": "https://www.siliconflow.cn/favicon.ico"
+  },
+  "ollama": {
+    "file": "ollama.svg",
+    "source": "https://raw.githubusercontent.com/ollama/ollama/main/docs/ollama-logo.svg"
+  },
+  "perplexity": {
+    "file": "perplexity.png",
+    "source": "https://docs.perplexity.ai/mintlify-assets/_mintlify/favicons/perplexity/rSPP83rcZL_iw-xo/_generated/favicon/android-chrome-192x192.png"
+  },
+  "ai21": {
+    "file": "ai21.webp",
+    "source": "https://www.ai21.com/wp-content/uploads/2026/01/favicon-75x75.png",
+    "note": "Official site serves WebP for this PNG URL."
+  },
+  "lepton": {
+    "file": "lepton.png",
+    "source": "https://avatars.githubusercontent.com/u/124112888?v=4",
+    "note": "Official Lepton AI GitHub organization avatar; historical brand retained because lepton.ai redirects to NVIDIA."
+  },
+  "octoai": {
+    "file": "octoai.png",
+    "source": "https://avatars.githubusercontent.com/u/53242847?v=4",
+    "note": "Official OctoAI (octoml) GitHub organization avatar; octo.ai now redirects to NVIDIA."
+  },
+  "runway": {
+    "file": "runway.png",
+    "source": "https://runway.com/icon.png?icon.35ps9bmugbe1e.png"
+  },
+  "upstage": {
+    "file": "upstage.svg",
+    "source": "https://cdn.prod.website-files.com/6743d5190bb2b52f38e99e37/6748713db65988aab4e2dbf7_G.WEB.svg",
+    "note": "Official website favicon"
+  },
+  "runpod": {
+    "file": "runpod.png",
+    "source": "https://cdn.prod.website-files.com/69ce570adca53340abab8376/69e08b4ced16e020149fc61d_favicon_www_runpod_io_256x256.png"
+  },
+  "modal": {
+    "file": "modal.svg",
+    "source": "https://modal.com/assets/favicon.svg"
+  },
+  "banana": {
+    "file": "banana.ico",
+    "source": "https://www.banana.dev/favicon.ico"
+  },
+  "deepinfra": {
+    "file": "deepinfra.png",
+    "source": "https://deepinfra.com/fav-192.png"
+  },
+  "elevenlabs": {
+    "file": "elevenlabs.svg",
+    "source": "https://elevenlabs.io/icon.svg?c23f5371fdd26632"
+  },
+  "higress": {
+    "file": "higress.svg",
+    "source": "https://higress.io/img/higress-mark.svg"
+  },
+  "suno": {
+    "file": "suno.png",
+    "source": "https://cdn-o.suno.com/favicon-192x192.png"
+  },
+  "friendli": {
+    "file": "friendli.svg",
+    "source": "https://friendli.ai/favicon/favicon.svg"
+  },
+  "stability": {
+    "file": "stability.ico",
+    "source": "https://images.squarespace-cdn.com/content/v1/6213c340453c3f502425776e/804f0e8b-0028-4262-a8b0-b9f1c5de72c0/favicon.ico?format=100w"
+  },
+  "anyscale": {
+    "file": "anyscale.ico",
+    "source": "https://www.anyscale.com/static/favicon-new.ico"
+  },
+  "midjourney": {
+    "file": "midjourney.png",
+    "source": "https://avatars.githubusercontent.com/u/61396273?s=200&v=4",
+    "note": "Official verified Midjourney GitHub organization avatar (midjourney.com domain verified)."
+  },
+  "ideogram": {
+    "file": "ideogram.png",
+    "source": "https://avatars.githubusercontent.com/u/288687116?s=200&v=4",
+    "note": "Official Ideogram GitHub organization avatar, linked by ideogram.ai."
+  },
+  "minimax-speech": {
+    "file": "minimax.ico",
+    "source": "https://www.minimax.cn/favicon.ico",
+    "note": "Uses the official MiniMax brand mark shared with its speech service."
+  },
+  "together-image": {
+    "file": "together.png",
+    "source": "https://cdn.prod.website-files.com/69654e88dce9154b5f1206dd/69a59cff65ed0f267dd2fbe8_touchicon.png",
+    "note": "Uses the official Together brand mark shared with its image service."
+  }
+}

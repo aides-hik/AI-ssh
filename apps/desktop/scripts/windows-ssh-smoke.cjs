@@ -14,6 +14,7 @@ const { spawn } = require('node:child_process')
 if (!process.versions.electron) {
   const env = { ...process.env }
   delete env.ELECTRON_RUN_AS_NODE
+  delete env.ELECTRON_RENDERER_URL
   const child = spawn(require('electron'), [__filename], { env, stdio: 'inherit', windowsHide: true })
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill())
   child.on('error', error => { console.error(error); process.exitCode = 1 })
@@ -23,7 +24,7 @@ if (!process.versions.electron) {
 }
 
 async function run() {
-  const { app, BrowserWindow, session: electronSession } = require('electron')
+  const { app, BrowserWindow, globalShortcut, session: electronSession } = require('electron')
   const { Server, utils: { sftp: { OPEN_MODE, STATUS_CODE } } } = require('ssh2')
   const { generateKeyPairSync, randomBytes } = require('node:crypto')
   const root = path.resolve(__dirname, '../../..')
@@ -208,6 +209,20 @@ async function run() {
             interactiveShell.write('__SMOKE_CANCEL_READY__\r\n')
             return
           }
+          if (command === 'smoke-stream') {
+            stream.write('开始执行\n')
+            // Let each live batch cross the actual SSH transport before changing
+            // streams. ssh2 may otherwise buffer separate stdout writes together.
+            setTimeout(() => {
+              stream.stderr.write('预期的过程警告\n')
+              setTimeout(() => {
+                stream.write('rate:95%')
+                stream.exit(0)
+                stream.end()
+              }, 80)
+            }, 80)
+            return
+          }
           if (command === 'smoke-exec') stream.write('命令输出：你好，世界\n')
           else if (command === 'smoke-stderr') stream.stderr.write('预期的标准错误\n')
           else if (command === 'pwd' || command === 'printf \'%s\' "$HOME"') stream.write('/home/smoke')
@@ -249,7 +264,11 @@ async function run() {
   process.env.ELECTRON_FORCE_PROD_RENDERER = '1'
   process.env.NODE_ENV = 'production'
   app.setPath('userData', profile)
+  app.setPath('sessionData', profile)
   BrowserWindow.prototype.show = function () {}
+  BrowserWindow.prototype.showInactive = function () {}
+  BrowserWindow.prototype.focus = function () {}
+  globalShortcut.register = () => false
   const originalWindowOn = BrowserWindow.prototype.on
   BrowserWindow.prototype.on = function (event, listener) {
     if (event === 'ready-to-show' && readyToShowDelayMs) {
@@ -320,6 +339,21 @@ async function probe(input) {
     check(exec.success && exec.output.includes('你好，世界'), 'SSH exec Chinese output failed')
     const stderr = await api.ssh.execute(id, 'smoke-stderr')
     check(!stderr.success && stderr.error.includes('预期的标准错误'), 'SSH stderr propagation failed')
+    stage = 'live-exec-output'
+    const liveOutput = []
+    cleanup.push(api.ssh.onExecuteOutput(event => {
+      if (event.requestId === 'windows-smoke-stream' && event.connectionId === id) liveOutput.push(event)
+    }))
+    const streamed = await api.ssh.execute(id, 'smoke-stream', 'windows-smoke-stream', { timeoutMs: 10000 })
+    check(streamed.success && streamed.exitCode === 0 && streamed.output === '开始执行\nrate:95%' &&
+      streamed.stdout === streamed.output && streamed.stderr === '预期的过程警告\n',
+    'Non-PTY exec changed raw output or treated a stderr warning as failure')
+    await until(() => liveOutput.some(event => event.data.includes('rate:95%')))
+    check(JSON.stringify(liveOutput.map(({ stream, data }) => ({ stream, data }))) === JSON.stringify([
+      { stream: 'stdout', data: '开始执行\n' },
+      { stream: 'stderr', data: '预期的过程警告\n' },
+      { stream: 'stdout', data: 'rate:95%' }
+    ]), `Live stdout/stderr IPC output was missing, corrupted or reordered: ${JSON.stringify(liveOutput)}`)
     stage = 'cancellation'
     const pending = api.ssh.execute(id, 'smoke-cancel', 'windows-smoke-cancel').then(() => false, error => /abort/i.test(String(error)))
     await until(() => terminal.includes('__SMOKE_CANCEL_READY__'))
@@ -347,7 +381,9 @@ async function probe(input) {
     await api.ssh.disconnect(id)
     check(!(await api.ssh.getConnections()).some(connection => connection.id === id), 'SSH disconnect did not clear session')
     id = undefined
-    return { passwordAuthentication: true, ptyChinese: true, resize: true, execChinese: true, stderr: true, cancellation: true, sftpDirectoryListing: true, uploadDownloadBytes: new TextEncoder().encode(input.payload).byteLength, atomicRename: true, remoteDelete: true, disconnected: true }
+    return { passwordAuthentication: true, ptyChinese: true, resize: true, execChinese: true, stderr: true,
+      liveOutputOrder: true, rawExecOutput: true, stderrWarningSuccess: true,
+      cancellation: true, sftpDirectoryListing: true, uploadDownloadBytes: new TextEncoder().encode(input.payload).byteLength, atomicRename: true, remoteDelete: true, disconnected: true }
   } catch (error) {
     return { failure: `${error.stack || String(error)}; stage=${stage}; terminal=${JSON.stringify(terminal)}` }
   } finally {

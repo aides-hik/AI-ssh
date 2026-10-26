@@ -57,23 +57,23 @@ const goBack = () => {
   backdrop-filter: blur(22px) saturate(140%);
 }
 .not-found-icon {
-  font-size: 34px;
+  font-size: var(--prism-font-34);
   color: var(--vscode-accent);
 }
 .not-found-code {
   margin: 18px 0 4px;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   color: var(--prism-muted);
 }
 .not-found-panel h1 {
-  font-size: 24px;
+  font-size: var(--prism-font-24);
   font-weight: 600;
   margin: 0;
 }
 .not-found-description {
   color: var(--prism-muted);
   margin: 14px 0 26px;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   line-height: 1.8;
 }
 .not-found-actions {
@@ -97,7 +97,7 @@ const goBack = () => {
   gap: 8px;
   color: var(--vscode-accent);
   text-decoration: none;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 .not-found-links a:focus-visible {
   outline: 2px solid var(--vscode-accent);

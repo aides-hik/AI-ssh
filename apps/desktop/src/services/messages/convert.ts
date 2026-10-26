@@ -122,7 +122,7 @@ export function toModelMessages(msgs: Message[]): ModelMessage[] {
 
       result.push({
         role: 'user',
-        content: summarizeForModel(userContent, MAX_MODEL_TEXT_LENGTH)
+        content: (msg.info.targets?.length ? `[操作目标: ${msg.info.targets.map(target => `${target.name} (${target.id})`).join('、')}]\n` : '') + summarizeForModel(userContent, MAX_MODEL_TEXT_LENGTH)
       })
     }
 
@@ -168,7 +168,7 @@ export function toModelMessages(msgs: Message[]): ModelMessage[] {
             const output = tp.state.output || tp.state.error || ''
             result.push({
               role: 'tool',
-              content: summarizeToolOutput(tp.tool, output),
+              content: (tp.state.metadata?.targetId ? `[服务器: ${tp.state.metadata.targetName} (${tp.state.metadata.targetId})]\n` : '') + summarizeToolOutput(tp.tool, output),
               tool_call_id: toolCallId,
               index: toolIndex++
             })
@@ -186,7 +186,7 @@ export function toModelMessages(msgs: Message[]): ModelMessage[] {
           const output = toolPart.state.output || toolPart.state.error || ''
           result.push({
             role: 'tool',
-            content: summarizeToolOutput(toolPart.tool, output),
+            content: (toolPart.state.metadata?.targetId ? `[服务器: ${toolPart.state.metadata.targetName} (${toolPart.state.metadata.targetId})]\n` : '') + summarizeToolOutput(toolPart.tool, output),
             tool_call_id: toolCallId,
             index: toolIndex++
           })
@@ -329,7 +329,8 @@ function generateMessageSummary(msgs: Message[]): string {
     assistantMsgs.forEach(msg => {
       msg.parts.forEach(part => {
         if (part.type === 'tool') {
-          toolCounts[part.tool] = (toolCounts[part.tool] || 0) + 1
+          const key = part.state.metadata?.targetId ? `${part.state.metadata.targetName} (${part.state.metadata.targetId}) / ${part.tool} [${part.state.status}]` : part.tool
+          toolCounts[key] = (toolCounts[key] || 0) + 1
         }
       })
     })

@@ -8,13 +8,32 @@ import { themeService, type ThemeMode as ServiceThemeMode } from '../services/th
 
 type ThemeMode = 'light' | 'dark' | 'auto'
 type ColorScheme = 'blue' | 'green' | 'purple' | 'orange' | 'red'
+type FontSize = 'small' | 'medium' | 'large'
+
+function readSavedObject(key: string): Record<string, unknown> {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(key) || 'null')
+    return saved && typeof saved === 'object' && !Array.isArray(saved)
+      ? saved as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
+}
+
+function isFontSize(value: unknown): value is FontSize {
+  return value === 'small' || value === 'medium' || value === 'large'
+}
+
+function isColorScheme(value: unknown): value is ColorScheme {
+  return typeof value === 'string' && ['blue', 'green', 'purple', 'orange', 'red'].includes(value)
+}
 
 // 全局状态（单例模式）
 const normalizeMode = (value: ServiceThemeMode): ThemeMode =>
   value === 'auto' ? 'auto' : value.includes('dark') ? 'dark' : 'light'
 const mode = ref<ThemeMode>(normalizeMode(themeService.getMode()))
 const colorScheme = ref<ColorScheme>('blue')
-const fontSize = ref<'small' | 'medium' | 'large'>('medium')
+const fontSize = ref<FontSize>('medium')
 const isDark = ref(themeService.isDarkTheme())
 const animations = ref(true)
 const transitions = ref(true)
@@ -69,16 +88,19 @@ export function useTheme() {
     // 字体大小
     switch (fontSize.value) {
       case 'small':
+        vars['--prism-font-scale'] = '0.875'
         vars['--font-size-base'] = '14px'
         vars['--font-size-sm'] = '12px'
         vars['--font-size-lg'] = '16px'
         break
       case 'large':
+        vars['--prism-font-scale'] = '1.125'
         vars['--font-size-base'] = '18px'
         vars['--font-size-sm'] = '16px'
         vars['--font-size-lg'] = '20px'
         break
       default:
+        vars['--prism-font-scale'] = '1'
         vars['--font-size-base'] = '16px'
         vars['--font-size-sm'] = '14px'
         vars['--font-size-lg'] = '18px'
@@ -89,21 +111,20 @@ export function useTheme() {
 
   // 加载主题设置
   const loadThemeSettings = () => {
-    try {
-      const savedTheme = localStorage.getItem('theme-settings')
-      if (savedTheme) {
-        const settings = JSON.parse(savedTheme)
-        if (['blue', 'green', 'purple', 'orange', 'red'].includes(settings.colorScheme)) {
-          colorScheme.value = settings.colorScheme
-        }
-        if (['small', 'medium', 'large'].includes(settings.fontSize))
-          fontSize.value = settings.fontSize
-        animations.value = settings.animations !== false
-        transitions.value = settings.transitions !== false
-      }
-    } catch {
-      // Keep the current theme when saved preferences cannot be read.
-    }
+    const saved = readSavedObject('theme-settings')
+    const appSettings = readSavedObject('app-settings')
+    const legacy = appSettings.appearance && typeof appSettings.appearance === 'object'
+      ? appSettings.appearance as Record<string, unknown> : {}
+
+    // Current preferences win field by field. Old app settings only seed missing
+    // values; initialization then persists the migrated appearance without touching
+    // the user's unrelated app settings or model configuration.
+    if (isColorScheme(saved.colorScheme)) colorScheme.value = saved.colorScheme
+    else if (isColorScheme(legacy.colorScheme)) colorScheme.value = legacy.colorScheme
+    if (isFontSize(saved.fontSize)) fontSize.value = saved.fontSize
+    else if (isFontSize(legacy.fontSize)) fontSize.value = legacy.fontSize
+    animations.value = saved.animations !== false
+    transitions.value = saved.transitions !== false
   }
 
   // 保存主题设置
@@ -194,7 +215,7 @@ export function useTheme() {
   }
 
   // 设置字体大小
-  const setFontSize = (size: 'small' | 'medium' | 'large') => {
+  const setFontSize = (size: FontSize) => {
     fontSize.value = size
   }
 

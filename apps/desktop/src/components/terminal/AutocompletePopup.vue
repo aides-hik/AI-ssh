@@ -192,7 +192,7 @@ defineExpose({
   padding: 8px 12px;
   background: transparent;
   border-bottom: 1px solid var(--prism-border);
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   gap: 10px;
   flex-wrap: wrap;
 }
@@ -206,7 +206,7 @@ defineExpose({
 }
 
 .autocomplete-title .icon {
-  font-size: 14px;
+  font-size: var(--prism-font-14);
 }
 
 .autocomplete-hint {
@@ -214,7 +214,7 @@ defineExpose({
   align-items: center;
   gap: 4px;
   color: var(--vscode-descriptionForeground);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
 }
 
 .autocomplete-hint kbd {
@@ -224,7 +224,7 @@ defineExpose({
   border-radius: var(--prism-radius-small);
   color: var(--vscode-keybindingLabel-foreground);
   font-family: monospace;
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   line-height: 1;
 }
 
@@ -253,7 +253,7 @@ defineExpose({
 }
 
 .item-icon {
-  font-size: 14px;
+  font-size: var(--prism-font-14);
   width: 16px;
   text-align: center;
   flex-shrink: 0;
@@ -262,7 +262,7 @@ defineExpose({
 .item-name {
   color: var(--prism-text);
   font-family: var(--vscode-editor-font-family, 'Courier New', monospace);
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   font-weight: 400;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -273,7 +273,7 @@ defineExpose({
 .item-type {
   padding: 2px 8px;
   border-radius: var(--prism-radius-small);
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -312,7 +312,7 @@ defineExpose({
 .item-description {
   grid-column: 2 / 4;
   color: var(--vscode-descriptionForeground);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

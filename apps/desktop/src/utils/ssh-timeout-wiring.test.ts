@@ -71,7 +71,7 @@ test('renderer SSH command service cancels in-flight execute requests on abort',
     /const requestId = `exec-\$\{Date\.now\(\)\}-\$\{Math\.random\(\)\.toString\(36\)\.slice\(2, 8\)\}`/
   )
   assert.match(source, /window\.electronAPI\.ssh\.cancelExecute\(requestId\)/)
-  assert.match(source, /window\.electronAPI\.ssh\.execute\(connectionId, command, requestId\)/)
+  assert.match(source, /window\.electronAPI\.ssh\.execute\(connectionId, command, requestId, \{ timeoutMs \}\)/)
 })
 
 test('main-process SSH handlers expose cancelable exec requests', async () => {

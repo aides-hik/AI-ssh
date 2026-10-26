@@ -157,11 +157,11 @@ onBeforeUnmount(release)
 .menu-shortcut {
   margin-left: 20px;
   color: var(--prism-muted);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   white-space: nowrap;
 }
 .menu-arrow {
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   color: var(--prism-muted);
 }
 </style>

@@ -234,7 +234,7 @@ defineExpose({
   background: transparent;
   color: var(--prism-muted);
   font-family: var(--prism-font);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   user-select: none;
 }
 .vscode-statusbar > .flex-1 {
@@ -288,7 +288,7 @@ defineExpose({
 @media (max-width: 800px) {
   .statusbar-item {
     padding-inline: 5px;
-    font-size: 10px;
+    font-size: var(--prism-font-10);
   }
   .vscode-statusbar > .flex-1 {
     padding-inline: 6px;

@@ -1,52 +1,31 @@
-/* Conversation surfaces stay solid; the surrounding workspace supplies the glass. */
+/* Keep the conversation readable above a transparent, refracting composer. */
+.oc-tool-host { display:flex; align-items:center; gap:5px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-interactive-base); font-size:var(--prism-font-10); line-height:1.5; }
+.oc-tool-host i { flex:none; }
+.oc-message-targets { display:inline-flex; align-items:center; gap:4px; font-size:var(--prism-font-10); color:var(--text-weak); white-space:nowrap; }
+.oc-turn-multi-host .oc-response-content tbody td:first-child { min-width:116px; }
+.oc-turn-multi-host .oc-response-content tbody td:nth-child(2) { min-width:64px; white-space:nowrap; }
+.oc-turn-multi-host .oc-response-content tbody td:nth-child(n+3) { min-width:180px; }
 .oc-chat {
   min-width: 0;
   overflow: hidden;
   container: chat-pane / size;
-  --chat-border: color-mix(in srgb, var(--text-base) 12%, transparent);
+  background: transparent;
+  --chat-border: color-mix(in srgb, var(--text-base) 10%, transparent);
+  --chat-gutter: 20px;
 }
 
-.oc-chat .oc-context-strip {
-  display: flex;
-  align-items: center;
-  flex: none;
-  gap: 9px;
-  min-height: 44px;
-  padding: 9px 16px;
-  border-bottom: 1px solid var(--chat-border);
-  color: var(--text-weak);
-  background: color-mix(in srgb, var(--surface-base) 50%, transparent);
-}
-.oc-chat .oc-context-strip > i {
-  font-size: 15px;
-}
-.oc-chat .oc-context-copy {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  min-width: 0;
-}
-.oc-chat .oc-context-label {
-  flex: none;
-  font-size: 11px;
-}
-.oc-chat .oc-context-host {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-base);
-  font: 11px/1.5 var(--font-family-mono);
-}
 .oc-chat .oc-conversation {
   position: relative;
   display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
+  background: var(--background-base);
 }
 .oc-chat .oc-messages {
   flex: 1;
   min-width: 0;
-  padding: 20px 18px 24px;
+  padding: 22px var(--chat-gutter) 24px;
   scroll-behavior: auto;
   overscroll-behavior: contain;
   overflow-anchor: none;
@@ -65,84 +44,98 @@
   min-height: min-content;
   height: auto;
   margin: auto;
-  padding: 16px 4px;
+  padding: 24px 4px;
   text-align: left;
 }
 .oc-chat .oc-empty-icon {
   display: grid;
   place-items: center;
   align-self: flex-start;
-  width: 46px;
-  height: 46px;
-  margin-bottom: 18px;
-  border: 1px solid color-mix(in srgb, var(--vscode-accent) 22%, transparent);
+  width: 44px;
+  height: 44px;
+  margin-bottom: 20px;
+  border: 1px solid color-mix(in srgb, var(--vscode-accent) 16%, transparent);
   border-radius: 15px;
   color: var(--text-interactive-base);
-  background: var(--surface-interactive-weak);
+  background: color-mix(in srgb, var(--vscode-accent) 7%, var(--background-base));
 }
 .oc-chat .oc-empty-icon svg {
   opacity: 1;
 }
 .oc-chat .oc-empty-title {
-  margin: 0 0 9px;
-  font-size: 21px;
+  margin: 0 0 10px;
+  font-size: var(--prism-font-23);
   line-height: 1.4;
   letter-spacing: -0.4px;
 }
 .oc-chat .oc-empty-text {
   margin: 0;
   max-width: 29em;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   line-height: 1.8;
 }
 .oc-chat .oc-suggestions {
   display: grid;
-  gap: 7px;
-  margin-top: 24px;
+  gap: 0;
+  margin-top: 26px;
+  overflow: hidden;
+  border: 1px solid var(--chat-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-inset-base) 45%, transparent);
 }
 .oc-chat .oc-suggestion {
   display: flex;
   align-items: center;
   gap: 11px;
   width: 100%;
-  min-height: 43px;
-  padding: 10px 12px;
-  border: 1px solid var(--chat-border);
-  border-radius: 11px;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 0;
   background: transparent;
   color: var(--text-base);
   text-align: left;
-  font: 12px/1.5 var(--font-family-sans);
+  font: var(--prism-font-13)/1.5 var(--font-family-sans);
   cursor: pointer;
   transition:
     background-color 120ms,
     border-color 120ms;
 }
+.oc-chat .oc-suggestion + .oc-suggestion {
+  border-top: 1px solid var(--chat-border);
+}
+.oc-chat .oc-suggestions .oc-suggestion:focus-visible {
+  outline-offset: -3px;
+}
 .oc-chat .oc-suggestion > i:first-child {
   color: var(--text-interactive-base);
-  font-size: 15px;
+  font-size: var(--prism-font-15);
 }
 .oc-chat .oc-suggestion > span {
   flex: 1;
 }
 .oc-chat .oc-suggestion > i:last-child {
   color: var(--text-weak);
+  font-size: var(--prism-font-12);
 }
 .oc-chat .oc-suggestion-hint {
   margin: 10px 0 0;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   color: var(--text-weak);
   line-height: 1.7;
 }
 .oc-chat .oc-setup-hint {
   margin: 16px 0 0;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   line-height: 1.7;
   color: var(--text-weak);
 }
 .oc-chat .oc-message-list {
-  gap: 26px;
+  gap: 24px;
   min-width: 0;
+  width: 100%;
+  max-width: 680px;
+  margin-inline: auto;
 }
 .oc-chat .oc-turn {
   gap: 10px;
@@ -157,7 +150,7 @@
 }
 .oc-chat .oc-turn-header {
   height: auto;
-  min-height: 25px;
+  min-height: 28px;
   gap: 6px;
   flex-wrap: wrap;
 }
@@ -174,27 +167,43 @@
   border-radius: 8px;
   background: var(--surface-interactive-weak);
   color: var(--text-interactive-base);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
 }
 .oc-chat .oc-turn-user .oc-turn-avatar {
-  background: var(--surface-base-hover);
-  color: var(--text-weak);
+  display: none;
+}
+.oc-chat .oc-turn-user {
+  align-self: flex-end;
+  width: fit-content;
+  max-width: 90%;
+  gap: 0;
+}
+.oc-chat .oc-turn-user + .oc-turn:not(.oc-turn-user) {
+  margin-top: -4px;
+}
+.oc-chat .oc-turn-user .oc-turn-content {
+  gap: 2px;
 }
 .oc-chat .oc-turn-role {
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   font-weight: 600;
 }
 .oc-chat .oc-turn-time {
-  margin-left: auto;
-  font-size: 10px;
+  margin-left: 3px;
+  font-size: var(--prism-font-10);
+  opacity: 0.75;
 }
 .oc-chat .oc-model-badge {
   display: none;
 }
 .oc-chat .oc-turn-badge {
+  margin-left: auto;
   padding: 0;
   background: transparent;
-  font-size: 10px;
+  font-size: var(--prism-font-10);
+}
+.oc-chat .oc-badge-success {
+  color: var(--text-weak);
 }
 .oc-chat .oc-badge-error {
   color: var(--text-critical-base);
@@ -210,26 +219,33 @@
 }
 .oc-chat .oc-collapse-button {
   order: 2;
-  width: 28px;
+  flex: none;
+  width: auto;
   height: 28px;
+  gap: 4px;
+  padding: 0 6px;
+  font: var(--prism-font-10)/1.4 var(--font-family-sans);
   transition:
     color 120ms,
     background-color 120ms;
 }
 .oc-chat .oc-user-message {
   position: relative;
-  padding: 12px 14px;
-  border-radius: 4px 13px 13px;
-  border: 1px solid var(--chat-border);
-  background: var(--surface-base);
+  padding: 10px 12px;
+  border-radius: 16px 16px 5px 16px;
+  border: 1px solid color-mix(in srgb, var(--vscode-accent) 12%, transparent);
+  background: color-mix(in srgb, var(--vscode-accent) 8%, var(--background-base));
 }
-.oc-chat .oc-user-text {
-  padding-right: 20px;
+.oc-chat .oc-user-message .oc-user-text {
+  min-width: 0;
+  padding-right: 0;
+  font-size: var(--prism-font-13);
+  line-height: 1.8;
 }
 .oc-chat :is(.oc-markdown, .oc-response-content, .oc-tool-output-content) {
   color: var(--text-base);
-  font-size: 13px;
-  line-height: 1.85;
+  font-size: var(--prism-font-14);
+  line-height: 1.8;
   overflow-wrap: anywhere;
   user-select: text;
 }
@@ -240,7 +256,8 @@
   margin-bottom: 0;
 }
 .oc-chat :is(.oc-markdown, .oc-response-content, .oc-tool-output-content) p {
-  margin: 10px 0;
+  margin: 14px 0;
+  font-size: inherit;
 }
 .oc-chat :is(.oc-markdown, .oc-response-content, .oc-tool-output-content) pre {
   max-width: 100%;
@@ -251,7 +268,7 @@
   border-radius: 9px;
   background: var(--prism-surface-raised);
   color: var(--text-base);
-  font: 12px/1.75 var(--font-family-mono);
+  font: var(--prism-font-12)/1.75 var(--font-family-mono);
   white-space: pre;
   overflow-wrap: normal;
   scrollbar-width: thin;
@@ -267,22 +284,65 @@
   border-radius: var(--prism-radius-small);
   background: var(--surface-base-hover);
   color: var(--text-base);
-  font: 12px/1.6 var(--font-family-mono);
+  font: var(--prism-font-12)/1.6 var(--font-family-mono);
 }
 .oc-chat :is(.oc-markdown, .oc-response-content) :is(h1, h2, h3) {
-  margin: 20px 0 8px;
-  font-size: 14px;
+  margin: 24px 0 10px;
+  font-size: var(--prism-font-15);
   line-height: 1.6;
   font-weight: 600;
+}
+.oc-chat :is(.oc-markdown, .oc-response-content) h1 {
+  font-size: var(--prism-font-19);
+  letter-spacing: -0.3px;
+}
+.oc-chat :is(.oc-markdown, .oc-response-content) h2 {
+  font-size: var(--prism-font-17);
+  letter-spacing: -0.2px;
 }
 .oc-chat :is(.oc-markdown, .oc-response-content) :is(ul, ol) {
   padding-left: 20px;
   margin: 10px 0;
 }
+.oc-chat :is(.oc-markdown, .oc-response-content) ul {
+  list-style-type: disc;
+}
+.oc-chat :is(.oc-markdown, .oc-response-content) ol {
+  list-style-type: decimal;
+}
+.oc-chat :is(.oc-markdown, .oc-response-content) li + li {
+  margin-top: 6px;
+}
+.oc-chat :is(.oc-markdown, .oc-response-content) li::marker {
+  color: var(--text-weak);
+}
+.oc-chat :is(.oc-markdown, .oc-response-content) li > p {
+  margin-block: 6px;
+}
+.oc-chat :is(.oc-markdown, .oc-response-content) a {
+  color: var(--text-interactive-base);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--text-interactive-base) 35%, transparent);
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+.oc-chat :is(.oc-markdown, .oc-response-content) img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+.oc-chat :is(.oc-markdown, .oc-response-content) hr {
+  margin: 22px 0;
+  border: 0;
+  border-top: 1px solid var(--chat-border);
+}
 .oc-chat :is(.oc-markdown, .oc-response-content) blockquote {
   margin: 12px 0;
-  padding-left: 12px;
-  border-left: 2px solid var(--chat-border);
+  padding: 6px 12px;
+  border-left: 2px solid color-mix(in srgb, var(--vscode-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--vscode-accent) 3%, transparent);
+  border-radius: 0 6px 6px 0;
   color: var(--text-weak);
 }
 .oc-chat :is(.oc-markdown, .oc-response-content) table {
@@ -291,7 +351,7 @@
   overflow-x: auto;
   overflow-wrap: normal;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 .oc-chat :is(.oc-markdown, .oc-response-content) :is(td, th) {
   border: 1px solid var(--chat-border);
@@ -300,12 +360,16 @@
 }
 .oc-chat :is(.oc-markdown, .oc-response-content) th {
   white-space: nowrap;
+  background: color-mix(in srgb, var(--text-base) 4%, transparent);
+  font-weight: 550;
 }
 .oc-chat .oc-response {
-  margin-top: 10px;
+  min-width: 0;
+  margin-top: 2px;
   border: 0;
   border-radius: 0;
   background: transparent;
+  overflow: visible;
 }
 .oc-chat .oc-response-header {
   padding: 0 0 7px;
@@ -319,6 +383,77 @@
 .oc-chat .oc-response-content {
   padding: 0;
 }
+.oc-chat .oc-response.is-standalone {
+  margin-top: 0;
+}
+.oc-chat .oc-response-actions {
+  display: flex;
+  justify-content: flex-start;
+  padding: 6px 0 0;
+}
+.oc-chat .oc-turn .oc-copy-button {
+  flex: none;
+  gap: 5px;
+  width: auto;
+  height: 22px;
+  padding: 0 6px;
+  margin-top: 0;
+  font: var(--prism-font-10)/1.4 var(--font-family-sans);
+  touch-action: manipulation;
+}
+.oc-chat .oc-message-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 22px;
+}
+.oc-chat .oc-user-actions {
+  justify-content: flex-end;
+  padding-right: 1px;
+}
+.oc-chat .oc-message-time {
+  color: var(--text-weak);
+  font-size: var(--prism-font-10);
+  font-variant-numeric: tabular-nums;
+}
+.oc-chat .oc-analysis-text {
+  margin-bottom: 0;
+}
+.oc-chat .oc-analysis-block {
+  margin-bottom: 0;
+  border: 0;
+  border-left: 2px solid var(--chat-border);
+  border-radius: 0;
+  background: transparent;
+}
+.oc-chat .oc-analysis-block summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  list-style: none;
+  font-size: var(--prism-font-11);
+}
+.oc-chat .oc-analysis-block summary::-webkit-details-marker {
+  display: none;
+}
+.oc-chat .oc-analysis-block summary > i:last-child {
+  margin-left: auto;
+  font-size: var(--prism-font-10);
+  transition: transform 150ms ease-out;
+}
+.oc-chat .oc-analysis-block[open] summary > i:last-child {
+  transform: rotate(90deg);
+}
+.oc-chat .oc-analysis-block .oc-analysis-text {
+  padding: 8px 10px 2px;
+  font-size: var(--prism-font-12);
+  line-height: 1.8;
+}
+.oc-chat .oc-analysis-block summary:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: -2px;
+}
 .oc-chat .oc-tools {
   min-width: 0;
 }
@@ -326,14 +461,42 @@
   border: 1px solid var(--chat-border);
   border-radius: 10px;
   overflow: hidden;
+  border-left-width: 1px;
+}
+.oc-chat .oc-tool:is(.completed, .expanded) {
+  border-color: var(--chat-border);
+}
+.oc-chat .oc-tool.running {
+  border-color: color-mix(in srgb, var(--vscode-accent) 28%, transparent);
 }
 .oc-chat .oc-tool-trigger {
   width: 100%;
   border: 0;
   color: var(--text-base);
-  background: var(--surface-base);
+  min-height: 50px;
+  padding: 10px 11px;
+  background: color-mix(in srgb, var(--surface-inset-base) 25%, transparent);
   text-align: left;
   font-family: inherit;
+}
+.oc-chat .oc-tool-icon {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--text-base) 4%, transparent);
+}
+.oc-chat .oc-tool-status {
+  font-size: var(--prism-font-10);
+}
+.oc-chat .oc-tool.completed .oc-tool-status {
+  color: var(--text-weak);
+}
+.oc-chat .oc-tool-content pre {
+  max-width: 100%;
+  overflow: auto;
+  font-size: var(--prism-font-11);
+  line-height: 1.7;
 }
 .oc-chat .oc-tool-content {
   max-height: 360px;
@@ -342,6 +505,66 @@
 }
 .oc-chat .oc-tool-subtitle {
   min-width: 0;
+}
+.oc-chat .oc-code-block {
+  min-width: 0;
+  max-width: 100%;
+  margin: 16px 0;
+  overflow: hidden;
+  border: 1px solid var(--chat-border);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--surface-inset-base) 50%, var(--background-base));
+}
+.oc-chat .oc-code-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  padding: 4px 10px 4px 13px;
+  border-bottom: 1px solid var(--chat-border);
+  background: color-mix(in srgb, var(--text-base) 3%, transparent);
+  font: var(--prism-font-10)/1.5 var(--font-family-sans);
+  color: var(--text-weak);
+  user-select: none;
+}
+.oc-chat .oc-code-language {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.oc-chat .oc-code-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  gap: 5px;
+  min-height: 26px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: color 100ms, background-color 100ms;
+}
+.oc-chat .oc-code-copy:hover {
+  background: color-mix(in srgb, var(--text-base) 5%, transparent);
+  color: var(--text-base);
+}
+.oc-chat .oc-code-copy.is-copied {
+  color: var(--text-success-base);
+}
+.oc-chat .oc-code-block > pre {
+  margin: 0;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  scrollbar-color: var(--chat-border) transparent;
 }
 .oc-chat .oc-load-more {
   width: 100%;
@@ -357,51 +580,375 @@
   opacity: 0.65;
 }
 .oc-chat .oc-jump-latest {
-  position: absolute;
-  z-index: 2;
-  bottom: 10px;
-  left: 50%;
-  transform: translateX(-50%);
+  align-self: flex-end;
+  flex: none;
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 8px 13px;
+  margin: 0 14px 7px;
+  padding: 5px 10px;
   border: 1px solid var(--chat-border);
   border-radius: 999px;
   white-space: nowrap;
   background: var(--prism-surface);
   color: var(--text-base);
   box-shadow: var(--prism-shadow);
-  font: 12px/1.5 var(--font-family-sans);
+  font: var(--prism-font-11)/1.5 var(--font-family-sans);
   cursor: pointer;
   border-color: var(--liquid-rim);
   backdrop-filter: blur(20px);
 }
 .oc-chat .oc-session-status {
+  --liquid-tint: color-mix(in srgb, var(--surface-inset-base) 14%, transparent);
+  display: flex;
+  flex-direction: column;
   flex: none;
-  gap: 8px;
-  margin: 0 12px 8px;
-  padding: 8px 10px;
-  max-height: 28%;
-  overflow-y: auto;
-  border-color: var(--chat-border);
+  min-width: 0;
+  margin: 2px 16px 4px;
+  border: 1px solid transparent;
   background: transparent;
+  color: var(--text-weak);
+  font-size: var(--prism-font-12);
+  transition: border-color 160ms;
+}
+.oc-chat .oc-session-status > .liquid-surface__content {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  min-width: 0;
 }
 .oc-chat .oc-session-status-main {
-  gap: 7px;
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 9px;
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 17px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.oc-chat .oc-session-status-main:focus-visible {
+  outline-offset: -2px;
+}
+.oc-chat .oc-session-status-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: var(--text-interactive-base);
+  background: var(--surface-interactive-weak);
+  font-size: var(--prism-font-13);
+}
+.oc-chat .is-complete .oc-session-status-icon {
+  color: var(--text-success-base);
+  background: color-mix(in srgb, var(--text-success-base) 9%, transparent);
+}
+.oc-chat .is-stopped .oc-session-status-icon {
+  color: var(--prism-warning);
+  background: var(--prism-warning-bg);
+}
+.oc-chat .is-error .oc-session-status-icon {
+  color: var(--text-critical-base);
+  background: var(--prism-danger-bg);
+}
+.oc-chat .oc-session-status-icon .oc-status-dot {
+  width: 6px;
+  height: 6px;
+  margin: 0;
 }
 .oc-chat .oc-session-status-text {
-  font-size: 11px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-base);
+  font-size: var(--prism-font-12);
   line-height: 1.6;
-  overflow-wrap: anywhere;
+}
+.oc-chat .oc-session-status-time {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 5px;
+  white-space: nowrap;
+  font-size: var(--prism-font-11);
+  font-variant-numeric: tabular-nums;
+}
+.oc-chat .oc-session-chevron {
+  flex: none;
+  font-size: var(--prism-font-10);
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.oc-chat .is-expanded .oc-session-chevron {
+  transform: rotate(180deg);
 }
 .oc-chat .oc-session-status.is-error {
-  background: color-mix(in srgb, var(--text-critical-base) 8%, var(--background-base));
+  --liquid-tint: color-mix(in srgb, var(--text-critical-base) 6%, transparent);
   border-color: color-mix(in srgb, var(--text-critical-base) 22%, transparent);
+}
+.oc-chat .oc-session-status.is-error .oc-session-status-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--text-critical-base);
+}
+.oc-chat .oc-session-error-detail {
+  margin: 0 0 14px;
+  padding-left: 9px;
+  border-left: 2px solid color-mix(in srgb, var(--text-critical-base) 35%, transparent);
+  color: var(--text-critical-base);
+  font-size: var(--prism-font-12);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+/* The summary stays in place; only expanded details can scroll. */
+.oc-chat .oc-session-details {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 150ms;
+}
+.oc-chat .oc-session-status.is-expanded > .liquid-surface__content > .oc-session-details {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.oc-chat .oc-session-details-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+.oc-chat .oc-session-details-scroll {
+  max-height: min(260px, 32cqh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--chat-border) transparent;
+  padding: 6px 12px 10px;
+}
+.oc-chat .oc-session-status-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+.oc-chat .oc-session-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--text-weak);
+  font-size: var(--prism-font-10);
+  line-height: 1.5;
+}
+.oc-chat .oc-session-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 9px;
+  left: calc(50% + 14px);
+  width: calc(100% - 28px);
+  height: 1px;
+  background: var(--chat-border);
+}
+.oc-chat .oc-session-step.done::after {
+  background: color-mix(in srgb, var(--text-success-base) 25%, transparent);
+}
+.oc-chat .oc-session-step-dot {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  border: 1px solid var(--chat-border);
+  font-size: var(--prism-font-12);
+}
+.oc-chat .oc-session-step-dot > span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+}
+.oc-chat .oc-session-step.done .oc-session-step-dot {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--text-success-base) 9%, transparent);
+  color: var(--text-success-base);
+}
+.oc-chat .oc-session-step.active {
+  color: var(--text-interactive-base);
+}
+.oc-chat .oc-session-step.active .oc-session-step-dot {
+  border-color: currentColor;
+  background: var(--surface-interactive-weak);
+}
+.oc-chat .oc-session-step-label {
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.oc-chat .oc-session-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0 0 10px;
+  padding: 0;
+}
+.oc-chat .oc-session-metric {
+  min-width: 0;
+  padding-inline: 10px;
+}
+.oc-chat .oc-session-metric:first-child {
+  padding-left: 0;
+}
+.oc-chat .oc-session-metric + .oc-session-metric {
+  border-left: 1px solid var(--chat-border);
+}
+.oc-chat .oc-session-metric dt {
+  margin-bottom: 3px;
+  color: var(--text-weak);
+  font-size: var(--prism-font-10);
+  font-weight: 400;
+}
+.oc-chat .oc-session-metric dd {
+  margin: 0;
+  color: var(--text-base);
+  font-size: var(--prism-font-13);
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.oc-chat .oc-debug-panel {
+  border-top: 1px solid var(--chat-border);
+}
+.oc-chat .oc-debug-panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 0 1px;
+  list-style: none;
+  color: var(--text-weak);
+  font-size: var(--prism-font-11);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.oc-chat .oc-debug-panel-title::-webkit-details-marker {
+  display: none;
+}
+.oc-chat .oc-debug-panel-title > i {
+  font-size: var(--prism-font-10);
+  transition: transform 150ms ease-out;
+}
+.oc-chat .oc-debug-panel[open] > summary > i {
+  transform: rotate(90deg);
+}
+.oc-chat .oc-debug-panel-title:focus-visible {
+  outline: 2px solid var(--vscode-accent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+.oc-chat .oc-debug-facts {
+  margin: 8px 0 0;
+}
+.oc-chat .oc-debug-fact {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 16px;
+  padding: 5px 0;
+  font-size: var(--prism-font-11);
+  line-height: 1.6;
+}
+.oc-chat .oc-debug-fact-label {
+  font-weight: 400;
+}
+.oc-chat .oc-debug-fact-value {
+  margin: 0;
+  color: var(--text-base);
+  text-align: right;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.oc-chat .oc-debug-chain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.oc-chat .oc-debug-chain-label {
+  flex-basis: 100%;
+  font-size: var(--prism-font-11);
+}
+.oc-chat .oc-debug-chain-item {
+  min-width: 0;
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: var(--surface-base-hover);
+  font-size: var(--prism-font-10);
+  overflow-wrap: anywhere;
+}
+.oc-chat .oc-debug-chain-item.is-completed {
+  color: var(--text-success-base);
+}
+.oc-chat .oc-debug-chain-item.is-running {
+  color: var(--text-interactive-base);
+}
+.oc-chat .oc-debug-chain-item.is-error {
+  color: var(--text-critical-base);
+}
+.oc-chat .oc-session-insight {
+  margin: 10px 0 0;
+  color: var(--text-weak);
+  font-size: var(--prism-font-11);
+  line-height: 1.7;
+}
+.oc-chat .oc-session-interruption {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 2px 0 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--prism-warning-bg);
+  font-size: var(--prism-font-11);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.oc-chat .oc-session-interruption-title {
+  color: var(--text-base);
+  font-weight: 600;
+}
+.oc-chat .oc-session-interruption-preview {
+  padding-left: 8px;
+  border-left: 2px solid color-mix(in srgb, var(--prism-warning) 40%, transparent);
+}
+@media (hover: hover) and (pointer: fine) {
+  .oc-chat .oc-session-status-main:hover {
+    background: color-mix(in srgb, var(--text-base) 3%, transparent);
+  }
+  .oc-chat .oc-debug-panel-title:hover {
+    color: var(--text-base);
+  }
 }
 .oc-chat .oc-composer-area {
   flex: none;
-  padding: 4px 12px 10px;
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
+  padding: 6px 16px 10px;
 }
 .oc-chat .oc-model-notice {
   display: flex;
@@ -409,7 +956,7 @@
   flex-wrap: wrap;
   gap: 4px 10px;
   padding: 6px 2px 10px;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   line-height: 1.6;
   color: var(--text-weak);
 }
@@ -425,37 +972,49 @@
   cursor: pointer;
 }
 .oc-chat .oc-input-wrapper {
+  --liquid-tint: color-mix(in srgb, var(--surface-inset-base) 14%, transparent);
   position: relative;
   gap: 0;
   padding: 2px;
-  border: 1px solid var(--chat-border);
-  border-radius: 14px;
-  background: var(--surface-inset-base);
+  border: 1px solid transparent;
+  background: transparent;
+  box-shadow: none;
   transition:
     border-color 120ms,
     box-shadow 120ms;
 }
 .oc-chat .oc-input-wrapper:focus-within {
-  border-color: var(--vscode-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--vscode-accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--vscode-accent) 35%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vscode-accent) 12%, transparent);
+}
+.oc-chat .oc-input-wrapper > .liquid-surface__content {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  min-width: 0;
 }
 .oc-chat .oc-input-container {
   min-height: 0;
-  padding: 11px 11px 7px;
+  padding: 12px 12px 8px;
   border: 0;
   border-radius: 11px;
   background: transparent;
 }
 .oc-chat .oc-input {
   min-width: 0;
-  min-height: 64px;
+  min-height: 32px;
   max-height: 176px;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   line-height: 1.7;
+}
+.oc-chat textarea.oc-input:focus {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 .oc-chat .oc-input-actions {
   gap: 8px;
-  padding: 0 8px 6px;
+  padding: 0 8px 7px;
   min-height: 37px;
 }
 .oc-chat .oc-input-actions-left {
@@ -467,28 +1026,6 @@
   flex: none;
   gap: 8px;
 }
-.oc-chat .oc-composer-model {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  flex: 0 1 auto;
-  max-width: 180px;
-  color: var(--text-base);
-  font-size: 10px;
-}
-.oc-chat .oc-composer-model > span {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.oc-chat .oc-composer-model > i {
-  flex: none;
-  color: var(--text-weak);
-}
-.oc-chat .oc-composer-model.is-unconfigured {
-  color: var(--text-weak);
-}
 .oc-chat .oc-action-button {
   gap: 5px;
   padding: 0 7px;
@@ -499,7 +1036,7 @@
     background-color 120ms;
 }
 .oc-chat .oc-action-button span {
-  font-size: 10px;
+  font-size: var(--prism-font-11);
 }
 .oc-chat .oc-action-menu-popover {
   bottom: calc(100% + 7px);
@@ -530,7 +1067,7 @@
   gap: 4px;
   background: color-mix(in srgb, var(--text-critical-base) 12%, transparent);
   color: var(--text-critical-base);
-  font-size: 10px;
+  font-size: var(--prism-font-10);
 }
 .oc-chat .oc-stop-button:hover:not(:disabled) {
   background: color-mix(in srgb, var(--text-critical-base) 20%, transparent);
@@ -547,7 +1084,7 @@
   gap: 4px 12px;
   padding: 7px 3px 0;
   color: var(--text-weak);
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   line-height: 1.4;
 }
 .oc-chat .oc-composer-hint kbd {
@@ -585,17 +1122,51 @@
   .oc-chat .oc-composer-area {
     padding-inline: 8px;
   }
-  .oc-chat .oc-composer-model {
-    max-width: 130px;
-  }
   .oc-chat .oc-action-button span {
     display: none;
   }
-  .oc-chat .oc-context-copy {
-    gap: 6px;
+  .oc-chat .oc-turn-user {
+    max-width: 96%;
   }
 }
 @container chat-pane (max-height: 620px) {
+  .oc-chat .oc-messages {
+    padding-block: 12px 14px;
+  }
+  .oc-chat .oc-message-list {
+    gap: 18px;
+  }
+  .oc-chat .oc-turn {
+    gap: 8px;
+  }
+  .oc-chat .oc-turn-header {
+    min-height: 24px;
+  }
+  .oc-chat .oc-turn-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    font-size: var(--prism-font-12);
+  }
+  .oc-chat .oc-turn-time,
+  .oc-chat .oc-message-time {
+    font-size: var(--prism-font-9);
+  }
+  .oc-chat :is(.oc-markdown, .oc-response-content, .oc-tool-output-content) p {
+    margin-block: 10px;
+  }
+  .oc-chat .oc-composer-area {
+    padding: 4px 8px 8px;
+  }
+  .oc-chat .oc-input-container {
+    padding: 8px 10px 4px;
+  }
+  .oc-chat .oc-input-actions {
+    padding-bottom: 5px;
+  }
+  .oc-chat .oc-composer-hint {
+    display: none;
+  }
   .oc-chat .oc-empty {
     padding-block: 6px;
   }
@@ -606,10 +1177,9 @@
     border-radius: 12px;
   }
   .oc-chat .oc-empty-title {
-    font-size: 20px;
+    font-size: var(--prism-font-20);
   }
   .oc-chat .oc-suggestions {
-    gap: 6px;
     margin-top: 14px;
   }
   .oc-chat .oc-suggestion {
@@ -621,12 +1191,8 @@
   }
 }
 @container chat-pane (max-height: 360px) {
-  .oc-chat .oc-context-strip {
-    min-height: 34px;
-    padding-block: 6px;
-  }
   .oc-chat .oc-input {
-    min-height: 44px;
+    min-height: 32px;
     max-height: 80px;
     overflow-y: auto !important;
   }
@@ -637,8 +1203,8 @@
     padding-block: 2px 6px;
   }
   .oc-chat .oc-session-status {
-    padding-block: 6px;
-    margin-bottom: 4px;
+    padding-block: 2px;
+    margin-bottom: 2px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

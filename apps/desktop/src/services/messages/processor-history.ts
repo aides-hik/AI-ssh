@@ -148,7 +148,8 @@ function plainAssistantSummary(message: Message): ModelMessage | null {
     if (part.type !== 'tool') continue
     const output = results.get(part.callID)
     const status = output ? '' : ` (${part.state.status})`
-    summaries.push(`[工具 ${part.tool}${status}]${output ? `\n${output}` : ''}`)
+    const target = part.state.metadata?.targetId ? ` / ${part.state.metadata.targetName} (${part.state.metadata.targetId})` : ''
+    summaries.push(`[工具 ${part.tool}${target}${status}]${output ? `\n${output}` : ''}`)
   }
   return summaries.length ? { role: 'assistant', content: summaries.join('\n\n') } : null
 }

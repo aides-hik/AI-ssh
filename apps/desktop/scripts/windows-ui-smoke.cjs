@@ -149,9 +149,18 @@ async function rendererProbe(options) {
     check(document.querySelector(`.liquid-dock button[data-destination="${destination}"]`),
       `Missing workspace navigation: ${destination}`)
   }
-  check(document.querySelector('[data-destination="terminal"]').disabled &&
-    document.querySelector('[data-destination="files"]').disabled,
-  'Terminal and files must require a connected session')
+  for (const destination of ['terminal', 'files']) {
+    const button = document.querySelector(`[data-destination="${destination}"]`)
+    const style = getComputedStyle(button)
+    check(button.inert && button.getAttribute('aria-hidden') === 'true' && button.tabIndex === -1 &&
+      style.visibility === 'hidden' && style.pointerEvents === 'none',
+    `Disconnected ${destination} navigation must be hidden and unavailable to pointer or keyboard input`)
+    const initialPath = router.currentRoute.value.fullPath
+    button.click()
+    await Promise.resolve()
+    check(router.currentRoute.value.fullPath === initialPath,
+      `Disconnected ${destination} navigation must reject programmatic activation`)
+  }
   result.liquidWorkspaceMounted = true
 
   const parseColor = value => {

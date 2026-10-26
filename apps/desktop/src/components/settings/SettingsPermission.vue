@@ -293,14 +293,14 @@ function getActionLabel(action: string): string {
   background: var(--prism-control);
   padding: 0.25rem 0.5rem;
   border-radius: var(--prism-radius-small);
-  font-size: 0.85rem;
+  font-size: calc(0.85rem * var(--prism-font-scale, 1));
   word-break: break-all;
 }
 
 .rule-action {
   padding: 0.25rem 0.75rem;
   border-radius: 20px;
-  font-size: 0.75rem;
+  font-size: var(--prism-font-12);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -348,7 +348,7 @@ function getActionLabel(action: string): string {
 
 .add-rule-form h4 {
   margin-bottom: 1rem;
-  font-size: 0.9rem;
+  font-size: calc(0.9rem * var(--prism-font-scale, 1));
   color: var(--prism-muted);
 }
 
@@ -403,10 +403,10 @@ function getActionLabel(action: string): string {
   background: var(--prism-danger-bg);
   padding: 0.15rem 0.4rem;
   border-radius: var(--prism-radius-small);
-  font-size: 0.85rem;
+  font-size: calc(0.85rem * var(--prism-font-scale, 1));
 }
 .permission-feedback {
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   color: var(--prism-success);
   margin-top: 14px;
 }

@@ -28,7 +28,7 @@
 }
 .prism-settings .sidebar-title {
   margin: 0;
-  font-size: 17px;
+  font-size: var(--prism-font-17);
   font-weight: 620;
   color: var(--prism-text);
   line-height: 1.5;
@@ -73,11 +73,11 @@
   outline-offset: 2px;
 }
 .prism-settings .nav-icon {
-  font-size: 15px;
+  font-size: var(--prism-font-15);
   flex: 0 0 auto;
 }
 .prism-settings .nav-label {
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   font-weight: 500;
 }
 .prism-settings .settings-content {
@@ -114,19 +114,19 @@
   align-items: center;
   gap: 10px;
   margin: 0 0 8px;
-  font-size: 21px;
+  font-size: var(--prism-font-21);
   line-height: 1.5;
   font-weight: 620;
   letter-spacing: -0.4px;
   color: var(--prism-text);
 }
 .prism-settings-section .section-title > i {
-  font-size: 19px;
+  font-size: var(--prism-font-19);
   color: var(--vscode-accent);
 }
 .prism-settings-section .section-description {
   margin: 0 0 18px;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   color: var(--prism-muted);
   line-height: 1.8;
   max-width: 80ch;
@@ -156,13 +156,13 @@
 .prism-settings-section .setting-label {
   display: block;
   margin-bottom: 5px;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   font-weight: 500;
   line-height: 1.6;
   color: var(--prism-text);
 }
 .prism-settings-section .setting-hint {
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   line-height: 1.75;
   color: var(--prism-muted);
   margin: 0;
@@ -180,7 +180,7 @@
   border: 1px solid var(--prism-border);
   border-radius: var(--prism-radius-control);
   background: var(--liquid-selected);
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   line-height: 1.7;
   color: var(--prism-muted);
   overflow-wrap: anywhere;
@@ -200,7 +200,7 @@
   background-color: var(--prism-control);
   color: var(--prism-text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   line-height: 1.6;
   box-shadow: inset 0 1px 2px color-mix(in srgb, var(--liquid-shadow) 8%, transparent);
   transition:
@@ -325,7 +325,7 @@
   cursor: not-allowed;
 }
 .prism-settings-section .toggle-label {
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   color: var(--prism-muted);
 }
 
@@ -334,24 +334,24 @@
   text-align: center;
 }
 .prism-settings-section .app-logo {
-  font-size: 48px;
+  font-size: var(--prism-font-48);
   line-height: 1;
   color: var(--vscode-accent);
   margin-bottom: 18px;
 }
 .prism-settings-section .app-name {
-  font-size: 24px;
+  font-size: var(--prism-font-24);
   font-weight: 620;
   color: var(--prism-text);
   margin: 0 0 8px;
 }
 .prism-settings-section .app-version {
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   color: var(--prism-muted);
   margin: 0 0 16px;
 }
 .prism-settings-section .app-description {
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   line-height: 1.8;
   color: var(--prism-muted);
   max-width: 440px;
@@ -371,7 +371,7 @@
   flex-wrap: wrap;
 }
 .prism-settings-section .sync-time {
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   color: var(--prism-muted);
 }
 .prism-settings-section .btn-update {
@@ -392,7 +392,7 @@
   color: var(--prism-text);
   box-shadow: var(--prism-shadow);
   backdrop-filter: blur(22px);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   opacity: 0;
   transform: translateY(-6px);
   transition:
@@ -432,17 +432,17 @@
 }
 .prism-settings .settings-empty-state > i {
   color: var(--vscode-accent);
-  font-size: 32px;
+  font-size: var(--prism-font-32);
 }
 .prism-settings .settings-empty-state h2 {
   color: var(--prism-text);
-  font-size: 20px;
+  font-size: var(--prism-font-20);
   font-weight: 600;
   margin: 4px 0 0;
 }
 .prism-settings .settings-empty-state p {
   color: var(--prism-muted);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   line-height: 1.8;
   margin: 0 0 8px;
   max-width: 44ch;
@@ -468,7 +468,7 @@
     padding: 21px 16px 16px;
   }
   .prism-settings .sidebar-title {
-    font-size: 15px;
+    font-size: var(--prism-font-15);
   }
   .prism-settings .content-inner {
     padding: 22px 18px 40px;
@@ -494,7 +494,7 @@
     text-align: center;
   }
   .prism-settings .sidebar-title {
-    font-size: 11px;
+    font-size: var(--prism-font-11);
   }
   .prism-settings .settings-nav {
     padding: 0 6px 12px;
@@ -518,7 +518,7 @@
     padding: 18px 12px 32px;
   }
   .prism-settings-section .section-title {
-    font-size: 18px;
+    font-size: var(--prism-font-18);
   }
   .prism-settings-section:not(.ai-settings) {
     padding: 17px;

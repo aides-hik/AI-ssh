@@ -20,7 +20,7 @@ function profile(
   options: Exclude<ReasoningSelection, 'default'>[],
   extra: Partial<ReasoningCapability> = {}
 ): ReasoningCapability {
-  return { options: ['default', ...options], kind: 'effort', adapter, protocol: 'chat-completions', omitTemperature: false, ...extra }
+  return { options: extra.kind === 'toggle' ? options : ['default', ...options], kind: 'effort', adapter, protocol: 'chat-completions', omitTemperature: false, ...extra }
 }
 
 function unavailable(reason: ReasoningCapability['reason'], omitTemperature = false): ReasoningCapability {
@@ -145,7 +145,10 @@ export function getReasoningCapability(provider: AIProvider | null, model: AIMod
 }
 
 export function normalizeReasoningSelection(capability: ReasoningCapability, value: unknown): ReasoningSelection {
-  return capability.options.includes(value as ReasoningSelection) ? value as ReasoningSelection : 'default'
+  if (capability.options.includes(value as ReasoningSelection)) return value as ReasoningSelection
+  // Binary controls must send the state they display, including old saved "default" values.
+  if (capability.kind === 'toggle') return capability.options.includes('none') ? 'none' : 'enabled'
+  return 'default'
 }
 
 export function buildReasoningRequest(provider: AIProvider, model: AIModel, selection: ReasoningSelection = 'default'): {

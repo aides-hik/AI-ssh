@@ -1364,12 +1364,13 @@ const handleGlobalKeyDown = (e: KeyboardEvent) => {
   const target = e.target as HTMLElement
   const tagName = target.tagName.toUpperCase()
 
-  // 如果焦点在输入框、选择框或按钮上,不拦截
+  // 原生控件保留自己的键盘行为，包括详情区域的展开/收起。
   if (
     tagName === 'TEXTAREA' ||
     tagName === 'INPUT' ||
     tagName === 'SELECT' ||
-    tagName === 'BUTTON'
+    tagName === 'BUTTON' ||
+    target.closest('summary, .oc-messages')
   ) {
     return
   }
@@ -1571,7 +1572,7 @@ onBeforeUnmount(() => {
   border-top: 1px solid var(--vscode-border-subtle);
   background: transparent;
   color: var(--vscode-fg-muted);
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 
 .terminal-status-left {
@@ -1627,7 +1628,7 @@ onBeforeUnmount(() => {
 }
 
 .connection-name {
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   font-weight: 500;
   color: var(--vscode-fg);
   min-width: 0;
@@ -1642,7 +1643,7 @@ onBeforeUnmount(() => {
   gap: 4px;
   padding: 4px 9px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   font-weight: 500;
   flex-shrink: 0;
 }
@@ -1662,7 +1663,7 @@ onBeforeUnmount(() => {
 }
 
 .status-badge i {
-  font-size: 8px;
+  font-size: var(--prism-font-8);
 }
 
 .status-badge.connected {
@@ -1777,12 +1778,12 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   color: var(--vscode-accent);
-  font-size: 15px;
+  font-size: var(--prism-font-15);
 }
 
 .ai-panel-title {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -1868,7 +1869,7 @@ onBeforeUnmount(() => {
 }
 
 .ai-floating-toggle-label {
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   font-weight: 600;
 }
 
@@ -1921,7 +1922,7 @@ onBeforeUnmount(() => {
   padding: 7px 10px;
   cursor: pointer;
   color: var(--vscode-fg);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   border-radius: var(--prism-radius-control);
   transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
   user-select: none;
@@ -1936,7 +1937,7 @@ onBeforeUnmount(() => {
 .submenu-arrow {
   margin-left: auto;
   width: auto;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 
 .context-submenu {
@@ -1987,7 +1988,7 @@ onBeforeUnmount(() => {
 
 .context-menu-item i {
   width: 18px;
-  font-size: 0.875rem;
+  font-size: var(--prism-font-14);
   color: var(--vscode-fg-muted);
   transition: color 0.15s ease;
   text-align: center;

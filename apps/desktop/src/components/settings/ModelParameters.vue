@@ -39,7 +39,7 @@
         @input="changeReasoning"
       />
       <div class="reasoning-scale" aria-hidden="true">
-        <span>{{ copy.default }}</span
+        <span>{{ reasoningLabel(capabilities.reasoning.options[0] || 'default') }}</span
         ><span>{{ reasoningLabel(capabilities.reasoning.options.at(-1) || 'default') }}</span>
       </div>
       <p class="parameter-hint">
@@ -54,7 +54,13 @@
     </div>
     <p v-else class="reasoning-unavailable">
       <i class="bi bi-info-circle" aria-hidden="true"></i
-      >{{ capabilities.reasoning.reason === 'unknown' ? copy.unknownReasoning : copy.noReasoning }}
+      >{{
+        capabilities.reasoning.kind === 'toggle' && reasoningSelection === 'enabled'
+          ? copy.alwaysThinking
+          : capabilities.reasoning.reason === 'unknown'
+            ? copy.unknownReasoning
+            : copy.noReasoning
+      }}
     </p>
     <div class="parameter-fields">
       <label class="number-parameter" :for="`${id}-tokens`"
@@ -203,6 +209,7 @@ const copy = computed(() =>
         default: '默认',
         budgetHint: '各档位对应此模型支持的思考预算。',
         toggleHint: '此模型支持切换思考模式，不提供强度档位。',
+        alwaysThinking: '此模型始终开启思考。',
         reasoningHint: '只显示此模型支持的档位，默认由服务商决定。',
         unknownReasoning: '尚无此模型的思考能力资料，保留服务默认。',
         noReasoning: '此模型或接口不提供可调节的思考程度。',
@@ -221,6 +228,7 @@ const copy = computed(() =>
         default: 'Default',
         budgetHint: 'Each level maps to a thinking budget supported by this model.',
         toggleHint: 'This model supports a thinking toggle rather than effort levels.',
+        alwaysThinking: 'Thinking is always enabled for this model.',
         reasoningHint: 'Only supported levels are shown. Default delegates to the service.',
         unknownReasoning:
           'Reasoning capabilities are not verified; the service default is preserved.',
@@ -327,7 +335,7 @@ function restoreFieldInteraction(element: Element) {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   color: var(--vscode-fg-muted);
 }
 .reset-parameters {
@@ -338,7 +346,7 @@ function restoreFieldInteraction(element: Element) {
   background: transparent;
   color: var(--vscode-accent);
   font: inherit;
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   padding: 2px;
   cursor: pointer;
   border-radius: var(--prism-radius-small);
@@ -365,7 +373,7 @@ function restoreFieldInteraction(element: Element) {
 .model-description {
   margin: 10px 0 0;
   color: var(--vscode-fg-muted);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   line-height: 1.7;
 }
 .reasoning-setting {
@@ -376,7 +384,7 @@ function restoreFieldInteraction(element: Element) {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   color: var(--vscode-fg);
 }
 .parameter-label output {
@@ -447,14 +455,14 @@ function restoreFieldInteraction(element: Element) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 9px;
+  font-size: var(--prism-font-9);
   color: var(--vscode-fg-muted);
 }
 .parameter-hint,
 .reasoning-unavailable,
 .parameters-footnote {
   color: var(--vscode-fg-muted);
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   line-height: 1.7;
 }
 .parameter-hint {
@@ -477,7 +485,7 @@ function restoreFieldInteraction(element: Element) {
   flex-direction: column;
   gap: 7px;
   min-width: 0;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
 }
 .number-parameter > span {
   color: var(--vscode-fg);
@@ -492,7 +500,7 @@ function restoreFieldInteraction(element: Element) {
   background: var(--vscode-bg-input);
   color: var(--vscode-fg);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   transition: border-color var(--parameter-motion-duration) ease;
 }
 .number-parameter input:focus-visible {
@@ -524,7 +532,7 @@ function restoreFieldInteraction(element: Element) {
 }
 .number-parameter small {
   color: var(--vscode-fg-muted);
-  font-size: 9px;
+  font-size: var(--prism-font-9);
   line-height: 1.6;
 }
 .sampling-hint {
@@ -535,7 +543,7 @@ function restoreFieldInteraction(element: Element) {
   margin: 14px 0 0;
   padding-top: 10px;
   border-top: 1px solid var(--vscode-border-subtle);
-  font-size: 9px;
+  font-size: var(--prism-font-9);
 }
 button:focus-visible,
 input:focus-visible {

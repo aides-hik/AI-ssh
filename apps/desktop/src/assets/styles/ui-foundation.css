@@ -167,7 +167,7 @@ input:is([type='checkbox'], [type='radio'], [type='range']):focus-visible {
     color: var(--prism-text);
     box-shadow: var(--prism-shadow-raised);
     backdrop-filter: blur(24px) saturate(145%);
-    font: 400 13px/1.6 var(--prism-font);
+    font: 400 var(--prism-font-13)/1.6 var(--prism-font);
     scrollbar-width: thin;
     scrollbar-color: var(--prism-border) transparent;
     opacity: 0;
@@ -249,7 +249,7 @@ input:is([type='checkbox'], [type='radio'], [type='range']):focus-visible {
   border-radius: var(--prism-radius-control);
   background: var(--prism-control);
   color: var(--prism-text);
-  font: 500 13px/1.5 var(--prism-font);
+  font: 500 var(--prism-font-13)/1.5 var(--prism-font);
   text-decoration: none;
   touch-action: manipulation;
   transition:
@@ -297,7 +297,7 @@ input:is([type='checkbox'], [type='radio'], [type='range']):focus-visible {
   border: 1px solid var(--prism-border);
   border-radius: var(--prism-radius-control);
   color: var(--prism-text);
-  font: 13px/1.5 var(--prism-font);
+  font: var(--prism-font-13)/1.5 var(--prism-font);
   transition:
     border-color var(--prism-duration) ease,
     box-shadow var(--prism-duration) ease;
@@ -324,7 +324,7 @@ select[aria-invalid='true']:not(:disabled) {
 .prism-field-error {
   margin: 6px 0 0;
   color: var(--prism-danger);
-  font: 400 12px/1.7 var(--prism-font);
+  font: 400 var(--prism-font-12)/1.7 var(--prism-font);
   overflow-wrap: anywhere;
 }
 
@@ -364,7 +364,7 @@ select[aria-invalid='true']:not(:disabled) {
 }
 .prism-dialog__title {
   margin: 0;
-  font: 620 18px/1.5 var(--prism-font);
+  font: 620 var(--prism-font-18)/1.5 var(--prism-font);
   color: var(--prism-text);
   overflow-wrap: anywhere;
 }
@@ -372,7 +372,7 @@ select[aria-invalid='true']:not(:disabled) {
   padding: 20px 24px 24px;
   overflow: auto;
   min-height: 0;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   line-height: 1.8;
 }
 .prism-dialog__message {
@@ -405,7 +405,7 @@ select[aria-invalid='true']:not(:disabled) {
   border-radius: var(--prism-radius-row);
   background: color-mix(in srgb, var(--status-color) 12%, transparent);
   color: var(--status-color);
-  font-size: 18px;
+  font-size: var(--prism-font-18);
 }
 .prism-status-icon[data-type='danger'],
 .prism-status-icon[data-type='error'] {
@@ -426,7 +426,7 @@ select[aria-invalid='true']:not(:disabled) {
   border-radius: var(--prism-radius-panel);
   box-shadow: var(--prism-shadow-raised);
   color: var(--prism-text);
-  font: 13px/1.5 var(--prism-font);
+  font: var(--prism-font-13)/1.5 var(--prism-font);
 }
 .prism-menu-item {
   display: flex;

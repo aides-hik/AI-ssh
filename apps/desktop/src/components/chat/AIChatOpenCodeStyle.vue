@@ -1,14 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
+import { ref, shallowRef, computed, nextTick, watch, onMounted, onUnmounted, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { marked } from 'marked'
 import { createMarkdownRenderCache } from '@/utils/markdown-render-cache'
+import { renderChatMarkdown } from '@/utils/chat-markdown'
 
 import { settingsService } from '@/services/settings.service'
 import { sshService, type SSHConnection } from '@/services/ssh.service'
 import { docStorageService } from '@/services/doc-storage.service'
-import { SSH_TOOLS } from '@/services/tools/ssh-tools'
 import { Message as V2Message, createAssistantMessage, type ToolPart, type TextPart } from '@/services/messages/message'
 import {
   fromUserMessage,
@@ -21,6 +20,18 @@ import { SessionProcessor } from '@/services/processor'
 import { ProcessorHistory } from '@/services/messages/processor-history'
 import type { AIProvider, AIModel } from '@/types/ai-providers'
 import ReasoningSlider from './ReasoningSlider.vue'
+import ComposerModelList from './ComposerModelList.vue'
+import LiquidSurface from '@/components/common/LiquidSurface.vue'
+import HostTargetPicker from './HostTargetPicker.vue'
+import MultiHostProgress from './MultiHostProgress.vue'
+import DeploymentApproval from './DeploymentApproval.vue'
+import DeploymentStageResult from './DeploymentStageResult.vue'
+import ExecutionLogPanel from './ExecutionLogPanel.vue'
+import { ExecutionLogBuffer, type HostExecutionLog } from '@/services/execution-log'
+import type { FrozenDeploymentStage } from '@/services/multi-host-deployment'
+import { useConnectedSessions } from '@/composables/useConnectedSessions'
+import { MultiHostRun, buildMultiHostPrompt, type HostTarget, type HostRunState } from '@/services/multi-host-run'
+import { createMultiHostTools } from '@/services/tools/multi-host-tools'
 import {
   getReasoningCapability,
   normalizeReasoningSelection,
@@ -45,30 +56,34 @@ const emit = defineEmits<{
 const { locale } = useI18n()
 const router = useRouter()
 const ui = computed(() => locale.value.startsWith('zh') ? {
-  context: '当前主机', noConnection: '尚未连接主机', configure: '配置模型',
+  configure: '配置模型',
   emptyTitle: '从一个问题开始', emptyText: '排查报错、解释命令，或一起梳理下一步。',
   placeholder: '描述问题，或粘贴终端输出…', draftPlaceholder: '继续补充，当前回复结束后可发送…',
   promptHint: '选择一个起点，编辑后发送', user: '你', assistant: 'Prism',
   older: '加载更早的消息', latest: '回到最新', thinking: '处理中', done: '已完成',
   failed: '未完成', stopped: '已停止', send: '发送消息', stop: '停止生成', stopping: '正在停止',
-  copy: '复制', copied: '已复制', details: '展开或收起过程', model: '选择模型',
+  copy: '复制', copied: '已复制', copyReply: '复制回复', copyCode: '复制代码', code: '代码',
+  showProcess: '查看过程', hideProcess: '收起过程', analysis: '分析过程',
+  details: '展开或收起过程', model: '选择模型',
   sendHint: '发送', newlineHint: '换行', environment: '环境文档',
   connectionHint: '连接主机后，AI 可以协助处理当前终端的问题。',
   modelHint: '先配置模型服务，再开始对话。'
 } : {
-  context: 'Current host', noConnection: 'No host connected', configure: 'Configure model',
+  configure: 'Configure model',
   emptyTitle: 'Start with a question', emptyText: 'Troubleshoot an error, explain a command, or plan your next step.',
   placeholder: 'Ask a question or paste terminal output…', draftPlaceholder: 'Draft your next message while the response finishes…',
   promptHint: 'Choose a starting point, then edit and send', user: 'You', assistant: 'Prism',
   older: 'Load earlier messages', latest: 'Back to latest', thinking: 'Working', done: 'Complete',
   failed: 'Incomplete', stopped: 'Stopped', send: 'Send message', stop: 'Stop generating', stopping: 'Stopping',
-  copy: 'Copy', copied: 'Copied', details: 'Toggle process details', model: 'Choose model',
+  copy: 'Copy', copied: 'Copied', copyReply: 'Copy reply', copyCode: 'Copy code', code: 'Code',
+  showProcess: 'Show process', hideProcess: 'Hide process', analysis: 'Analysis',
+  details: 'Toggle process details', model: 'Choose model',
   sendHint: 'send', newlineHint: 'new line', environment: 'Environment',
   connectionHint: 'Connect a host so AI can help with this terminal.',
   modelHint: 'Configure a model service to start chatting.'
 })
 const quickPrompts = computed(() => locale.value.startsWith('zh') ? [
-  { icon: 'bi-activity', title: '检查主机状态', prompt: '请检查当前主机的 CPU、内存、磁盘和运行中的服务，先给出只读检查结果。' },
+  { icon: 'bi-activity', title: '检查主机状态', prompt: effectiveHostIds.value.length > 1 ? '请并行检查所有选中服务器的 CPU、内存、磁盘和运行中的服务，按服务器汇总只读检查结果并比较异常。' : '请检查当前主机的 CPU、内存、磁盘和运行中的服务，先给出只读检查结果。' },
   { icon: 'bi-terminal', title: '分析终端报错', prompt: '请帮我分析这段终端输出，说明原因并给出排查步骤：\n' },
   { icon: 'bi-list-check', title: '梳理部署步骤', prompt: '请帮我梳理部署步骤，先确认环境和依赖，不要直接修改服务器。我的项目是：\n' }
 ] : [
@@ -77,6 +92,71 @@ const quickPrompts = computed(() => locale.value.startsWith('zh') ? [
   { icon: 'bi-list-check', title: 'Plan a deployment', prompt: 'Help me plan a deployment. Check the environment and dependencies first, without changing the server. My project is:\n' }
 ])
 const hasModel = computed(() => Boolean(props.currentProvider && props.currentModel))
+const { connections: connectedHosts } = useConnectedSessions()
+const selectedHostIds = ref<string[] | null>(null)
+const effectiveHostIds = computed(() => selectedHostIds.value ?? (props.connectionId ? [props.connectionId] : []))
+const multiHostStates = ref<HostRunState[]>([])
+let multiHostRun: MultiHostRun | null = null
+const deploymentStatus = ref<'completed' | 'failed' | 'rejected' | 'stopped' | null>(null)
+const deploymentIssue = ref<'failed' | 'rejected' | 'stopped' | null>(null)
+const executionLogBuffer = new ExecutionLogBuffer()
+const executionLogs = shallowRef<HostExecutionLog[]>([])
+let executionLogTimer: ReturnType<typeof setTimeout> | undefined
+function flushExecutionLogs() {
+  clearTimeout(executionLogTimer)
+  executionLogTimer = undefined
+  executionLogs.value = executionLogBuffer.snapshot()
+}
+function queueExecutionLog(targetId: string, stream: 'stdout' | 'stderr' | 'phase', data: string, truncated = false) {
+  executionLogBuffer.append(targetId, stream, data, truncated)
+  if (!executionLogTimer) executionLogTimer = setTimeout(flushExecutionLogs, 60)
+}
+const hasExecutionLogs = computed(() => executionLogs.value.some(host => host.entries.length))
+const executionStageTools = new Set(['execute_deployment_stage', 'execute_ssh_command', 'update_server_env_doc'])
+const pendingDeploymentApproval = shallowRef<{
+  stage: FrozenDeploymentStage
+  targets: readonly HostTarget[]
+  resolve: (approved: boolean) => void
+} | null>(null)
+const hasHostActivity = computed(() => Boolean(pendingDeploymentApproval.value || deploymentStatus.value || multiHostStates.value.some(host => host.completed || host.failed || !['waiting', 'skipped'].includes(host.status))))
+function requestDeploymentApproval(stage: FrozenDeploymentStage, signal: AbortSignal, targets: readonly HostTarget[]): Promise<boolean> {
+  if (signal.aborted || pendingDeploymentApproval.value) return Promise.resolve(false)
+  return new Promise(resolve => {
+    const settle = (approved: boolean) => {
+      signal.removeEventListener('abort', cancelled)
+      if (pendingDeploymentApproval.value?.resolve === settle) pendingDeploymentApproval.value = null
+      resolve(approved && !signal.aborted)
+    }
+    const cancelled = () => settle(false)
+    pendingDeploymentApproval.value = { stage, targets, resolve: settle }
+    signal.addEventListener('abort', cancelled, { once: true })
+    setStatus('executing', `等待确认：${stage.name}`)
+    nextTick(() => scrollToBottom(true))
+  })
+}
+const multiHostSummary = computed(() => {
+  const hosts = multiHostStates.value
+  if (!hosts.length || !hasHostActivity.value) return ''
+  const zh = locale.value.startsWith('zh')
+  const complete = hosts.filter(host => host.status === 'complete').length
+  const failed = hosts.filter(host => ['error', 'unavailable'].includes(host.status)).length
+  const stopped = hosts.filter(host => host.status === 'stopped').length
+  const remaining = hosts.filter(host => ['waiting', 'skipped'].includes(host.status)).length
+  if (pendingDeploymentApproval.value) return zh ? '请确认本阶段的目标与执行内容' : 'Review this stage’s targets and operations'
+  if (deploymentIssue.value === 'rejected') return zh ? '有阶段未获确认 · 已保留各节点结果' : 'A stage was declined · host results retained'
+  if (deploymentIssue.value === 'stopped') return zh ? '已停止后续执行 · 远程状态需核对' : 'Further execution stopped · remote state needs checking'
+  if (deploymentIssue.value === 'failed') return zh ? '有执行阶段未完成 · 已保留各节点结果' : 'An execution stage failed · host results retained'
+  const running = hosts.find(host => host.status === 'running')
+  if (isGenerating.value && running) return zh ? `${running.name} · ${running.label || '执行中'}${hosts.filter(host => host.status === 'running').length > 1 ? ' 等任务' : ''}` : `${running.name} · ${running.label || 'Running'}`
+  return zh
+    ? `${hosts.length} 台服务器 · ${complete} 台已完成${failed ? ` · ${failed} 台失败` : ''}${stopped ? ` · ${stopped} 台停止` : ''}${!isGenerating.value && remaining ? ` · ${remaining} 台未执行` : ''}`
+    : `${hosts.length} hosts · ${complete} complete${failed ? ` · ${failed} failed` : ''}${stopped ? ` · ${stopped} stopped` : ''}${!isGenerating.value && remaining ? ` · ${remaining} not executed` : ''}`
+})
+watch(connectedHosts, hosts => {
+  if (!isGenerating.value || !multiHostRun) return
+  const ids = new Set(hosts.map(host => host.id))
+  for (const target of multiHostRun.targets) if (!ids.has(target.id)) multiHostRun.stopTarget(target.id, true)
+})
 const modelLabel = computed(() => props.currentModel?.name || props.currentModel?.id || ui.value.model)
 const REASONING_PREFERENCES_KEY = 'prism.reasoning-preferences.v1'
 const reasoningPreferences = ref<Record<string, ReasoningSelection>>({})
@@ -114,12 +194,18 @@ const expandedTurns = ref<Set<string>>(new Set())
 const visibleCount = ref(5)
 const isLoadingMore = ref(false)
 const copiedId = ref<string | null>(null)
-const responseCopied = ref(false)
+let copyFeedbackTimer: ReturnType<typeof setTimeout> | undefined
+const codeCopyFeedback = new Map<HTMLButtonElement, ReturnType<typeof setTimeout>>()
 const currentStatus = ref('')
 const currentStage = ref<
   'idle' | 'preparing' | 'thinking' | 'executing' | 'complete' | 'error' | 'stopped'
 >('idle')
 const sessionStatusExpanded = ref(false)
+const sessionStatusToggle = ref<HTMLButtonElement | null>(null)
+const sessionDetailsId = `session-details-${useId()}`
+const sessionErrorMessage = computed(() => error.value
+  ? normalizeUserErrorMessage(error.value.message || error.value)
+  : currentStage.value === 'error' ? currentStatus.value : '')
 const sessionDuration = ref('')
 const performanceMetrics = ref<SessionPerformanceMetrics>({
   prepMs: null,
@@ -148,7 +234,7 @@ let viewportObserver: ResizeObserver | null = null
 const serverEnvMenuOpen = ref(false)
 const serverEnvMenuRef = ref<HTMLElement | null>(null)
 
-const INPUT_MIN_HEIGHT = 64
+const INPUT_MIN_HEIGHT = 32
 const INPUT_MAX_HEIGHT = 176
 
 interface TodoItem {
@@ -174,6 +260,7 @@ interface DisplayMessage {
   timestamp: number
   summary?: string
   modelInfo?: { providerID: string; modelID: string }
+  targets?: HostTarget[]
 }
 
 type DisplayBlock =
@@ -241,7 +328,8 @@ const displayMessages = computed<DisplayMessage[]>(() => {
     finish: msg.info.finish,
     timestamp: msg.info.createdAt,
     summary: (msg.info as any).summary,
-    modelInfo: (msg.info as any).model
+    modelInfo: (msg.info as any).model,
+    targets: msg.info.targets
   }))
   return mapped
 })
@@ -250,84 +338,68 @@ const earlierMessageCount = computed(() => Math.max(0,
   messages.value.filter(msg => msg.info.role === 'user' || msg.info.role === 'assistant').length - visibleCount.value
 ))
 
-const currentConnectionDisplay = computed(() => {
-  const connection = cachedConnection.value
-  const connectionConfig = connection?.config
-
-  const name = connectionConfig?.name || (connection as any)?.name || '当前主机'
-  const host = connectionConfig?.host || (connection as any)?.host || 'unknown-host'
-  const port = connectionConfig?.port || (connection as any)?.port || 22
-  const username = connectionConfig?.username || (connection as any)?.username || 'unknown-user'
-  const id = connection?.id || props.connectionId || ''
-  const shortId = id ? id.slice(0, 8) : ''
-
-  return {
-    name,
-    host,
-    port,
-    username,
-    id,
-    shortId
-  }
-})
-
 const sessionSteps = computed(() => {
-  const stageOrder: Array<typeof currentStage.value> = [
-    'preparing',
-    'thinking',
-    'executing',
-    'complete'
-  ]
-  const currentIndex =
-    currentStage.value === 'error' || currentStage.value === 'stopped'
-      ? 2
-      : Math.max(stageOrder.indexOf(currentStage.value), 0)
-
+  const complete = currentStage.value === 'complete'
+  const chinese = locale.value.startsWith('zh')
   return [
     {
       key: 'preparing',
-      label: '准备上下文',
+      label: chinese ? '准备' : 'Prepare',
       active: currentStage.value === 'preparing',
-      done: currentIndex > 0
+      done: performanceMetrics.value.prepMs !== null || complete
     },
     {
       key: 'thinking',
-      label: '分析请求',
+      label: chinese ? '分析' : 'Analyze',
       active: currentStage.value === 'thinking',
-      done: currentIndex > 1
+      done: performanceMetrics.value.toolCalls > 0 || complete
     },
     {
       key: 'executing',
-      label: '执行操作',
+      label: complete && performanceMetrics.value.toolCalls === 0
+        ? (chinese ? '无需工具' : 'No tools') : (chinese ? '执行' : 'Tools'),
       active: currentStage.value === 'executing',
-      done: currentIndex > 2 || currentStage.value === 'complete'
+      done: currentStage.value === 'complete' && performanceMetrics.value.toolCalls > 0,
+      skipped: currentStage.value === 'complete' && performanceMetrics.value.toolCalls === 0
     },
     {
       key: 'complete',
-      label: '完成',
-      active: currentStage.value === 'complete',
+      label: chinese ? '完成' : 'Done',
+      active: false,
       done: currentStage.value === 'complete'
     }
   ]
 })
 
-const performanceBadges = computed(() => {
+function formatSessionElapsed(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)} ms`
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)} s`
+  return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`
+}
+
+const sessionElapsed = computed(() => isGenerating.value
+  ? sessionDuration.value
+  : performanceMetrics.value.totalMs !== null
+    ? formatSessionElapsed(performanceMetrics.value.totalMs)
+    : '')
+
+const sessionCopy = computed(() => locale.value.startsWith('zh') ? {
+  expand: '展开请求状态', collapse: '收起请求状态', duration: '总耗时',
+  process: '执行过程', prepare: '准备上下文', response: '首次响应', tools: '工具调用',
+  details: '请求详情', toolChain: '最近工具', times: '次'
+} : {
+  expand: 'Expand request status', collapse: 'Collapse request status', duration: 'Total time',
+  process: 'Request progress', prepare: 'Preparation', response: 'First response', tools: 'Tool calls',
+  details: 'Request details', toolChain: 'Recent tools', times: 'calls'
+})
+
+const performanceItems = computed(() => {
   const metrics = performanceMetrics.value
-  const badges: string[] = []
-
-  if (metrics.prepMs !== null) badges.push(`准备 ${metrics.prepMs}ms`)
-  if (metrics.firstResponseMs !== null) badges.push(`首响应 ${metrics.firstResponseMs}ms`)
-  if (metrics.totalMs !== null) badges.push(`总耗时 ${metrics.totalMs}ms`)
-  badges.push(`工具 ${metrics.toolCalls} 次`)
-  if (metrics.compactionLimit !== null) {
-    badges.push(
-      metrics.contextCompacted
-        ? `上下文压缩到最近 ${metrics.compactionLimit} 条`
-        : `上下文保留最近 ${metrics.compactionLimit} 条`
-    )
-  }
-
-  return badges
+  return [
+    { label: sessionCopy.value.prepare, value: metrics.prepMs === null ? '—' : formatSessionElapsed(metrics.prepMs) },
+    { label: sessionCopy.value.response, value: metrics.firstResponseMs === null ? '—' : formatSessionElapsed(metrics.firstResponseMs) },
+    { label: sessionCopy.value.tools, value: `${metrics.toolCalls} ${sessionCopy.value.times}` }
+  ]
 })
 
 const performanceInsight = computed(() => {
@@ -444,9 +516,13 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopDurationTimer()
+  clearTimeout(copyFeedbackTimer)
+  codeCopyFeedback.forEach(timer => clearTimeout(timer))
+  codeCopyFeedback.clear()
   viewportObserver?.disconnect()
   if (scrollFrame) cancelAnimationFrame(scrollFrame)
   abortController.value?.abort()
+  clearTimeout(executionLogTimer)
   document.removeEventListener('pointerdown', handlePointerDownOutsideMenu)
 })
 
@@ -566,6 +642,15 @@ function markLastAssistantTextBlockAsSummary(msg: V2Message | null) {
   }
 }
 
+function snapshotRequestTargets(): HostTarget[] {
+  if (!effectiveHostIds.value.length) throw new Error('请先选择操作目标')
+  return effectiveHostIds.value.map(id => {
+    const host = connectedHosts.value.find(host => host.id === id)
+    if (!host) throw new Error('所选服务器连接已断开，请重新选择操作目标')
+    return { id: host.id, name: host.name, host: host.host }
+  })
+}
+
 async function sendMessageWithTools(content: string) {
   const requestStartedAt = Date.now()
   let firstResponseRecorded = false
@@ -591,14 +676,45 @@ async function sendMessageWithTools(content: string) {
     } : props.currentModel.reasoning
   }
   const requestReasoning = reasoningSelection.value
-  const requestConnectionId = props.connectionId
+  const requestTargets = snapshotRequestTargets()
+  const isMultiHost = requestTargets.length > 1
+  const requestConnectionId = requestTargets[0].id
   const requestSessionId = props.sessionId
-  const requestEnvDocId = props.serverEnvDocId
+  const requestEnvDocId = requestConnectionId === props.connectionId ? props.serverEnvDocId : requestConnectionId
 
   isGenerating.value = true
   error.value = null
   abortController.value = new AbortController()
   const requestSignal = abortController.value.signal
+  const requestRun = new MultiHostRun(requestTargets, requestSignal, states => {
+    multiHostStates.value = states
+    const pending = pendingDeploymentApproval.value
+    if (pending && pending.stage.steps.some(step => states.some(host => host.id === step.targetId && (host.status === 'stopped' || host.status === 'unavailable')))) pending.resolve(false)
+  })
+  multiHostRun = requestRun
+  deploymentStatus.value = null
+  deploymentIssue.value = null
+  clearTimeout(executionLogTimer)
+  executionLogTimer = undefined
+  executionLogBuffer.reset(requestTargets.map(target => target.id))
+  executionLogs.value = []
+  let openedExecutionDetails = false
+  const requestTools = createMultiHostTools(requestRun, {
+    approveDeployment: (stage, signal) => requestDeploymentApproval(stage, signal, requestRun.targets),
+    onOutput: event => {
+      if (requestSignal.aborted || multiHostRun !== requestRun) return
+      queueExecutionLog(event.targetId, event.stream, event.data, event.truncated)
+    },
+    onPhase: event => {
+      if (requestSignal.aborted || multiHostRun !== requestRun) return
+      queueExecutionLog(event.targetId, 'phase', `\n── ${event.stageName || event.label} / ${event.label} ──\n`)
+      if (!openedExecutionDetails) {
+        openedExecutionDetails = true
+        sessionStatusExpanded.value = true
+      }
+    }
+  })
+  if (isMultiHost) sessionStatusExpanded.value = true
   stopRequested.value = false
   interruptionState.value = null
   startDurationTimer()
@@ -610,7 +726,7 @@ async function sendMessageWithTools(content: string) {
     compactionLimit: null,
     contextCompacted: false
   }
-  setStatus('preparing', '正在准备当前主机的上下文')
+  setStatus('preparing', isMultiHost ? `正在准备 ${requestTargets.length} 台服务器的操作` : '正在准备当前主机的上下文')
 
   try {
     slowThinkingTimer = window.setTimeout(() => {
@@ -636,16 +752,17 @@ async function sendMessageWithTools(content: string) {
     requestSignal.throwIfAborted()
 
     const userMsg = fromUserMessage(content)
+    userMsg.info.targets = requestTargets
     messages.value.push(userMsg)
 
     await nextTick()
     scrollToBottom(true)
 
     const serverEnvDocId = requestEnvDocId || requestConnectionId
-    await refreshSessionContext(false, requestConnectionId)
+    const requestContext = !isMultiHost ? await refreshSessionContext(false, requestConnectionId) : null
     requestSignal.throwIfAborted()
-    const currentConnection = cachedConnection.value
-    const serverEnvDoc = cachedServerEnvDoc.value
+    const currentConnection = requestContext?.connection || null
+    const serverEnvDoc = requestContext?.doc || null
     setStatus('thinking', '正在分析你的请求')
 
     const validMessages = filterValidMessages(messages.value)
@@ -662,11 +779,11 @@ async function sendMessageWithTools(content: string) {
     const modelMessages = [
       {
         role: 'system' as const,
-        content: buildSystemPrompt(currentConnection, serverEnvDoc, serverEnvDocId)
+        content: [buildMultiHostPrompt(requestTargets), !isMultiHost ? buildSystemPrompt(currentConnection, serverEnvDoc, serverEnvDocId) : ''].filter(Boolean).join('\n\n')
       },
       ...processorHistory.toModelMessages(
         compactedMessages,
-        JSON.stringify([requestProvider.id, requestProvider.endpoint, requestModel.id, requestConnectionId, requestSessionId]),
+        JSON.stringify([requestProvider.id, requestProvider.endpoint, requestModel.id, requestTargets.map(target => target.id).sort(), requestSessionId]),
         true // Missing or interrupted tool state is summarized instead of replaying incomplete calls.
       )
     ]
@@ -677,7 +794,9 @@ async function sendMessageWithTools(content: string) {
     const processor = new SessionProcessor(
       {
         messages: modelMessages,
-        tools: SSH_TOOLS,
+        tools: requestTools,
+        toolConcurrency: isMultiHost ? 3 : 1,
+        toolExecutionKey: (name, input) => !executionStageTools.has(name) && typeof input?.targetId === 'string' ? input.targetId : undefined,
         provider: requestProvider,
         model: requestModel,
         reasoning: requestReasoning,
@@ -715,6 +834,7 @@ async function sendMessageWithTools(content: string) {
                   requestSessionId,
                   'ssh-agent'
                 )
+                if (isMultiHost) currentMsg.info.targets = requestTargets
                 messages.value.push(currentMsg)
                 activeAssistantId.value = currentMsg.info.id
               }
@@ -751,7 +871,7 @@ async function sendMessageWithTools(content: string) {
                 ) {
                   setStatus(
                     'executing',
-                    `正在串行执行 ${performanceMetrics.value.toolCalls} 个工具步骤，请稍候`
+                    isMultiHost ? '正在处理所选服务器的任务' : `正在串行执行 ${performanceMetrics.value.toolCalls} 个工具步骤，请稍候`
                   )
                 }
               }, 2500)
@@ -762,6 +882,7 @@ async function sendMessageWithTools(content: string) {
                   requestSessionId,
                   'ssh-agent'
                 )
+                if (isMultiHost) currentMsg.info.targets = requestTargets
                 messages.value.push(currentMsg)
                 activeAssistantId.value = currentMsg.info.id
               }
@@ -773,12 +894,16 @@ async function sendMessageWithTools(content: string) {
                 break
               }
               performanceMetrics.value.toolCalls += 1
+              const toolTarget = requestTargets.find(target => target.id === event.input?.targetId)
               const tp: ToolPart = {
                 type: 'tool',
                 tool: event.toolName,
                 callID: event.toolCallId,
                 displayKind: event.toolName === 'ask_followup_question' ? 'inquiry' : 'tool',
-                state: { status: 'running', input: event.input, time: { start: Date.now() } }
+                state: { status: 'pending', input: event.input, metadata: toolTarget ? {
+                  targetId: event.input.targetId,
+                  targetName: toolTarget.name
+                } : undefined }
               }
               currentMsg.parts.push(tp)
               if (event.toolName === 'ask_followup_question') {
@@ -791,16 +916,32 @@ async function sendMessageWithTools(content: string) {
               break
             }
 
+            case 'tool-start': {
+              if (!currentMsg) break
+              const toolPart = currentMsg.parts.find((part): part is ToolPart => part.type === 'tool' && part.callID === event.toolCallId)
+              if (toolPart) toolPart.state = { ...toolPart.state, status: 'running', time: { start: Date.now() } }
+              setStatus('executing', isMultiHost ? '正在处理所选服务器的任务' : toolPart ? getStatusDescription(toolPart) : '正在执行工具')
+              messages.value = [...messages.value]
+              break
+            }
+
             case 'tool-result': {
               if (!currentMsg) break
               const completed = updateToolResult(currentMsg, event.toolCallId, {
                 output: event.output.output
               })
+              const stagePart = completed.parts.find((part): part is ToolPart => part.type === 'tool' && part.callID === event.toolCallId && executionStageTools.has(part.tool))
+              if (stagePart && deploymentStatus.value && deploymentStatus.value !== 'completed') {
+                stagePart.state.status = deploymentStatus.value === 'failed' ? 'error' : 'aborted'
+                stagePart.state.error = multiHostSummary.value
+              }
               const idx = messages.value.findIndex(m => m.info.id === completed.info.id)
               if (idx !== -1) messages.value[idx] = completed
               currentMsg = completed
-              if (event.output.output.includes('已更新文档内容')) {
-                void refreshSessionContext(true, requestConnectionId)
+              const updatedDocument = completed.parts.find((part): part is ToolPart => part.type === 'tool' && part.callID === event.toolCallId && part.tool === 'update_server_env_doc')
+              const documentTargetId = updatedDocument?.state.input?.targetId
+              if (typeof documentTargetId === 'string' && deploymentStatus.value === 'completed' && documentTargetId === props.connectionId) {
+                void refreshSessionContext(true, documentTargetId)
               }
               messages.value = [...messages.value]
               scrollToBottom()
@@ -809,15 +950,20 @@ async function sendMessageWithTools(content: string) {
 
             case 'tool-error': {
               if (!currentMsg) break
+              const errPart = currentMsg.parts.find(
+                p => p.type === 'tool' && p.callID === event.toolCallId
+              ) as ToolPart | undefined
+              if (errPart && executionStageTools.has(errPart.tool)) {
+                deploymentStatus.value = 'failed'
+                deploymentIssue.value = 'failed'
+              }
               const toolWasAborted =
                 stopRequested.value ||
+                Boolean(requestRun?.snapshot().some(host => host.id === errPart?.state.input?.targetId && host.status === 'stopped')) ||
                 String(event.error || '')
                   .toLowerCase()
                   .includes('aborted')
               const friendlyToolError = normalizeUserErrorMessage(event.error)
-              const errPart = currentMsg.parts.find(
-                p => p.type === 'tool' && p.callID === event.toolCallId
-              ) as ToolPart | undefined
               if (errPart) {
                 errPart.state = {
                   ...errPart.state,
@@ -849,7 +995,11 @@ async function sendMessageWithTools(content: string) {
                 }
               }
               if (event.finish === 'stop') {
-                setStatus('complete', '已完成这次请求')
+                requestRun?.finish()
+                sessionStatusExpanded.value = false
+                const hostFailures = requestRun?.snapshot().some(host => host.status === 'error' || host.status === 'unavailable')
+                const stageCancelled = deploymentIssue.value === 'rejected' || deploymentIssue.value === 'stopped'
+                setStatus(deploymentIssue.value === 'failed' || hostFailures ? 'error' : stageCancelled ? 'stopped' : 'complete', multiHostSummary.value || '已完成这次请求')
               } else {
                 setStatus('thinking', '正在继续处理下一步')
               }
@@ -873,10 +1023,10 @@ async function sendMessageWithTools(content: string) {
           }
         },
         onToolExecute: async (toolName, input) => {
-          const tool = SSH_TOOLS.find(t => t.id === toolName)
+          const tool = requestTools.find(t => t.id === toolName)
           if (!tool) throw new Error(`Unknown tool: ${toolName}`)
           const info = await tool.init()
-          return await info.execute(input, {
+          const result = await info.execute(input, {
             sessionID: requestSessionId || '',
             messageID: '',
             agent: 'ssh-agent',
@@ -887,6 +1037,14 @@ async function sendMessageWithTools(content: string) {
               serverEnvDocId: requestEnvDocId || ''
             }
           })
+          if (executionStageTools.has(toolName)) {
+            const stageResult = JSON.parse(result.output)
+            deploymentStatus.value = stageResult.status
+            if (stageResult.status === 'failed' || stageResult.status === 'rejected' || stageResult.status === 'stopped') {
+              if (!deploymentIssue.value || stageResult.status === 'failed') deploymentIssue.value = stageResult.status
+            }
+          }
+          return result
         }
       },
       () => {}
@@ -909,7 +1067,7 @@ async function sendMessageWithTools(content: string) {
       error.value = null
       performanceMetrics.value.totalMs = Date.now() - requestStartedAt
       captureInterruptionState('本次请求已停止，当前进度已保留')
-      setStatus('stopped', '已停止本次请求，可直接继续后续步骤')
+      setStatus('stopped', '已停止后续执行，继续前需核对远程状态')
       if (!performanceLogged) {
         logPerformanceSummary('aborted')
         performanceLogged = true
@@ -927,6 +1085,20 @@ async function sendMessageWithTools(content: string) {
     }
     throw err
   } finally {
+    flushExecutionLogs()
+    requestRun?.finish()
+    if (multiHostRun === requestRun) multiHostRun = null
+    if (requestSignal.aborted) {
+      for (const message of messages.value) {
+        if (message.info.id !== activeAssistantId.value) continue
+        for (const part of message.parts) {
+          if (part.type === 'tool' && (part.state.status === 'pending' || part.state.status === 'running')) {
+            part.state = { ...part.state, status: 'aborted', error: 'Command aborted', time: { start: part.state.time?.start || Date.now(), end: Date.now() } }
+          }
+        }
+      }
+      messages.value = [...messages.value]
+    }
     isGenerating.value = false
     isStopping.value = false
     stopDurationTimer()
@@ -1010,6 +1182,7 @@ function setStatus(
 }
 
 function toggleSessionStatusExpanded() {
+  if (sessionStatusExpanded.value) sessionStatusToggle.value?.focus({ preventScroll: true })
   sessionStatusExpanded.value = !sessionStatusExpanded.value
 }
 
@@ -1045,12 +1218,10 @@ function logPerformanceSummary(result: 'success' | 'error' | 'aborted') {
 }
 
 async function refreshSessionContext(force = false, connectionId = props.connectionId) {
-  if (cacheLoading.value) return
-
   if (!connectionId) {
     cachedConnection.value = null
     cachedServerEnvDoc.value = null
-    return
+    return { connection: null, doc: null }
   }
 
   if (!force && cachedConnection.value?.id === connectionId && cachedServerEnvDoc.value !== null) {
@@ -1059,7 +1230,7 @@ async function refreshSessionContext(force = false, connectionId = props.connect
       envDocSource: 'cache',
       lastRefreshedAt: Date.now()
     }
-    return
+    return { connection: cachedConnection.value, doc: cachedServerEnvDoc.value }
   }
 
   cacheLoading.value = true
@@ -1078,13 +1249,16 @@ async function refreshSessionContext(force = false, connectionId = props.connect
         : Promise.resolve(null)
     ])
 
-    cachedConnection.value = connections.find(connection => connection.id === connectionId) || null
-    cachedServerEnvDoc.value = serverEnvDoc?.content || null
+    const connection = connections.find(connection => connection.id === connectionId) || null
+    const doc = serverEnvDoc?.content || null
+    cachedConnection.value = connection
+    cachedServerEnvDoc.value = doc
     sessionContextStats.value = {
       connectionSource: cachedConnection.value ? 'fresh' : 'missing',
       envDocSource: serverEnvDoc?.content ? 'fresh' : 'missing',
       lastRefreshedAt: Date.now()
     }
+    return { connection, doc }
   } finally {
     cacheLoading.value = false
   }
@@ -1307,16 +1481,17 @@ function handlePointerDownOutsideMenu(event: PointerEvent) {
 
 function handleMessagesScroll() {
   const container = messagesContainer.value
-  if (!container) return
+  if (!container || displayMessages.value.length === 0) return
   followLatest.value = container.scrollHeight - container.scrollTop - container.clientHeight < 56
 }
 
 function scrollToBottom(force = false) {
+  if (displayMessages.value.length === 0) return
   if (force) followLatest.value = true
   if (!followLatest.value || scrollFrame) return
   scrollFrame = requestAnimationFrame(() => {
     scrollFrame = 0
-    if (!followLatest.value) return
+    if (!followLatest.value || displayMessages.value.length === 0) return
     const container = messagesContainer.value
     if (container) container.scrollTop = container.scrollHeight
   })
@@ -1347,16 +1522,17 @@ function messageStatus(msg: DisplayMessage): { label: string; kind: string } | n
   return msg.finish === 'stop' ? { label: ui.value.done, kind: 'success' } : null
 }
 
-const renderMarkdown = createMarkdownRenderCache(text => {
+const renderCachedMarkdown = createMarkdownRenderCache(text => {
   try {
-    const html = marked.parse(text, {
-      async: false
-    }) as string
-    return html
+    return renderChatMarkdown(text, ui.value.copyCode, ui.value.code)
   } catch {
     return text
   }
 })
+
+function renderMarkdown(text: string, key: string): string {
+  return renderCachedMarkdown(text, `${locale.value}:${key}`)
+}
 
 function getContent(msg: V2Message): string {
   return msg.parts
@@ -1459,6 +1635,10 @@ function getToolInfo(
   _metadata: Record<string, any> = {}
 ) {
   switch (toolName) {
+    case 'execute_deployment_stage':
+      return { icon: 'terminal', title: input.kind === 'rollback' ? '回滚' : input.kind === 'verify' ? '验证' : input.kind === 'command' ? '执行命令' : '部署', subtitle: input.name || '等待确认执行阶段', args: [] }
+    case 'inspect_server':
+      return { icon: 'terminal', title: '只读巡检', subtitle: Array.isArray(input.checks) ? input.checks.map((check: string) => ({ system: '系统', cpu: 'CPU', memory: '内存', disk: '磁盘', services: '服务', network: '端口' }[check] || check)).join('、') : '检查服务器状态', args: [] }
     case 'execute_ssh_command':
     case 'bash': {
       const cmd = input.command || ''
@@ -1654,20 +1834,35 @@ function isCollapsed(msg: DisplayMessage): boolean {
 async function copyToClipboard(text: string, id: string) {
   try {
     await navigator.clipboard.writeText(text)
+    clearTimeout(copyFeedbackTimer)
     copiedId.value = id
-    setTimeout(() => (copiedId.value = null), 2000)
+    copyFeedbackTimer = setTimeout(() => (copiedId.value = null), 2000)
   } catch (err) {
     console.error('Failed to copy:', err)
   }
 }
 
-async function copyResponse(text: string) {
+async function handleCodeCopy(event: MouseEvent) {
+  const target = event.target
+  if (!(target instanceof Element)) return
+  const button = target.closest<HTMLButtonElement>('button[data-code-copy]')
+  const code = button?.closest('.oc-code-block')?.querySelector('pre > code')
+  if (!button || !code || !event.currentTarget || !(event.currentTarget as Element).contains(button)) return
   try {
-    await navigator.clipboard.writeText(text)
-    responseCopied.value = true
-    setTimeout(() => (responseCopied.value = false), 2000)
+    await navigator.clipboard.writeText(code.textContent || '')
+    clearTimeout(codeCopyFeedback.get(button))
+    button.classList.add('is-copied')
+    button.setAttribute('aria-label', ui.value.copied)
+    const label = button.querySelector('span')
+    if (label) label.textContent = ui.value.copied
+    codeCopyFeedback.set(button, setTimeout(() => {
+      button.classList.remove('is-copied')
+      button.setAttribute('aria-label', ui.value.copyCode)
+      if (label) label.textContent = ui.value.copyCode
+      codeCopyFeedback.delete(button)
+    }, 2000))
   } catch (err) {
-    console.error('Failed to copy response:', err)
+    console.error('Failed to copy code:', err)
   }
 }
 
@@ -1724,6 +1919,18 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   if (totalWeight > 18000) return 16
   return 20
 }
+
+function toolOutputForDisplay(part: ToolPart): string {
+  const output = part.state.output || ''
+  if (!part.state.metadata?.targetId) return output
+  try {
+    const result = JSON.parse(output)
+    if (typeof result.output !== 'string') return output
+    const longest = Math.max(2, ...(result.output.match(/`+/g) || []).map((run: string) => run.length))
+    const fence = '`'.repeat(longest + 1)
+    return `${fence}text\n${result.output}\n${fence}${result.truncated ? '\n\n输出已截断，仅显示部分内容。' : ''}`
+  } catch { return output }
+}
 </script>
 
 <template>
@@ -1731,17 +1938,8 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
     class="oc-chat"
     :class="{ generating: isGenerating }"
   >
-    <div class="oc-context-strip">
-      <i class="bi bi-hdd-network" aria-hidden="true"></i>
-      <div class="oc-context-copy">
-        <span class="oc-context-label">{{ props.connectionId ? ui.context : ui.noConnection }}</span>
-        <span v-if="props.connectionId" class="oc-context-host" :data-prism-tooltip="`${currentConnectionDisplay.username}@${currentConnectionDisplay.host}:${currentConnectionDisplay.port}`">
-          {{ cachedConnection ? `${currentConnectionDisplay.username}@${currentConnectionDisplay.host}` : currentConnectionDisplay.name }}
-        </span>
-      </div>
-    </div>
     <div class="oc-conversation">
-    <div ref="messagesContainer" class="oc-messages" :class="{ 'is-empty': displayMessages.length === 0 }" @scroll.passive="handleMessagesScroll" tabindex="0" :aria-label="locale.startsWith('zh') ? '对话记录' : 'Conversation'">
+    <div ref="messagesContainer" class="oc-messages" :class="{ 'is-empty': displayMessages.length === 0 }" @scroll.passive="handleMessagesScroll" @click="handleCodeCopy" tabindex="0" :aria-label="locale.startsWith('zh') ? '对话记录' : 'Conversation'">
       <div v-if="displayMessages.length === 0" class="oc-empty">
         <div class="oc-empty-icon">
           <svg
@@ -1764,7 +1962,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
           <button v-for="prompt in quickPrompts" :key="prompt.title" type="button" class="oc-suggestion" @click="useQuickPrompt(prompt.prompt)">
             <i :class="['bi', prompt.icon]" aria-hidden="true"></i>
             <span>{{ prompt.title }}</span>
-            <i class="bi bi-plus" aria-hidden="true"></i>
+            <i class="bi bi-arrow-up-left" aria-hidden="true"></i>
           </button>
         </div>
         <p class="oc-suggestion-hint">{{ ui.promptHint }}</p>
@@ -1786,22 +1984,25 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
         <template v-for="msg in displayMessages" :key="msg.id">
           <div
             class="oc-turn"
+            role="article"
+            :aria-label="msg.role === 'user' ? ui.user : ui.assistant"
             :class="{
               collapsed: isCollapsed(msg),
               working: isGenerating && msg.id === activeAssistantId,
-              'oc-turn-user': msg.role === 'user'
+              'oc-turn-user': msg.role === 'user',
+              'oc-turn-multi-host': (msg.targets?.length || 0) > 1
             }"
             :data-msg-id="msg.id"
             :data-msg-role="msg.role"
           >
-            <div class="oc-turn-header">
+            <div v-if="msg.role === 'assistant'" class="oc-turn-header">
               <button
                 v-if="canCollapse(msg)"
                 class="oc-collapse-button"
                 type="button"
-                :aria-label="ui.details"
+                :aria-label="isCollapsed(msg) ? ui.showProcess : ui.hideProcess"
                 :aria-expanded="!isCollapsed(msg)"
-                :data-prism-tooltip="ui.details"
+                :data-prism-tooltip="isCollapsed(msg) ? ui.showProcess : ui.hideProcess"
                 @click="toggleTurn(getTurnId(msg))"
               >
                 <svg
@@ -1816,16 +2017,17 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                 >
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
+                <span>{{ isCollapsed(msg) ? ui.showProcess : ui.hideProcess }}</span>
               </button>
               <div class="oc-turn-title">
-                <span class="oc-turn-avatar" aria-hidden="true"><i :class="msg.role === 'user' ? 'bi bi-person' : 'bi bi-stars'"></i></span>
-                <span class="oc-turn-role">{{ msg.role === 'user' ? ui.user : ui.assistant }}</span>
+                <span class="oc-turn-avatar" aria-hidden="true"><i class="bi bi-stars"></i></span>
+                <span class="oc-turn-role">{{ ui.assistant }}</span>
                 <span class="oc-turn-time">{{ formatTime(msg.timestamp) }}</span>
                 <span v-if="msg.modelInfo" class="oc-model-badge">{{
                   msg.modelInfo.modelID
                 }}</span>
               </div>
-              <span v-if="messageStatus(msg)" class="oc-turn-badge" :class="`oc-badge-${messageStatus(msg)?.kind}`">
+              <span v-if="messageStatus(msg) && messageStatus(msg)?.kind !== 'success'" class="oc-turn-badge" :class="`oc-badge-${messageStatus(msg)?.kind}`">
                 {{ messageStatus(msg)?.label }}
               </span>
             </div>
@@ -1838,6 +2040,10 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                     class="oc-markdown oc-user-text"
                     v-html="renderMarkdown(msg.content, msg.id)"
                   ></div>
+                </div>
+                <div class="oc-message-actions oc-user-actions">
+                  <span v-if="msg.targets?.length" class="oc-message-targets" :title="msg.targets.map(host => `${host.name} (${host.host})`).join('、')"><i class="bi bi-hdd-network" aria-hidden="true"></i>{{ msg.targets.length }} {{ locale.startsWith('zh') ? '台' : 'hosts' }}</span>
+                  <span class="oc-message-time">{{ formatTime(msg.timestamp) }}</span>
                   <button
                     class="oc-copy-button"
                     type="button"
@@ -1870,6 +2076,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                     >
                       <polyline points="20 6 9 17 4 12"></polyline>
                     </svg>
+                    <span>{{ copiedId === msg.id ? ui.copied : ui.copy }}</span>
                   </button>
                 </div>
               </template>
@@ -1878,7 +2085,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                 <template v-for="block in msg.blocks" :key="block.id">
                   <div v-if="block.type === 'analysis'" class="oc-timeline-block">
                     <details v-if="block.compact && hasTools(msg)" class="oc-analysis-block">
-                      <summary>分析过程</summary>
+                      <summary><i class="bi bi-lightbulb" aria-hidden="true"></i>{{ ui.analysis }}<i class="bi bi-chevron-right" aria-hidden="true"></i></summary>
                       <div
                         class="oc-markdown oc-analysis-text"
                         v-html="renderMarkdown(block.text, block.id)"
@@ -1900,8 +2107,13 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                         'has-error': block.toolPart.state.status === 'error'
                       }"
                     >
+                      <DeploymentStageResult
+                        v-if="executionStageTools.has(block.toolPart.tool) && block.toolPart.state.output"
+                        :output="block.toolPart.state.output"
+                        :zh="locale.startsWith('zh')"
+                      />
                       <template
-                        v-if="block.toolPart.state.status === 'error' && block.toolPart.state.error"
+                        v-else-if="block.toolPart.state.status === 'error' && block.toolPart.state.error"
                       >
                         <div class="oc-tool-error-card">
                           <div class="oc-error-icon">
@@ -2114,6 +2326,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                             </svg>
                           </div>
                           <div class="oc-tool-info">
+                            <span v-if="block.toolPart.state.metadata?.targetName" class="oc-tool-host"><i class="bi bi-hdd-network" aria-hidden="true"></i>{{ block.toolPart.state.metadata.targetName }}</span>
                             <span class="oc-tool-title">{{
                               getToolInfo(
                                 block.toolPart.tool,
@@ -2163,7 +2376,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                             <div class="oc-tool-section-label">Plan</div>
                             <div
                               class="oc-tool-output-content"
-                              v-html="renderMarkdown(block.toolPart.state.output, block.id)"
+                              v-html="renderMarkdown(toolOutputForDisplay(block.toolPart), block.id)"
                             ></div>
                           </div>
                           <div
@@ -2209,7 +2422,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                             <div class="oc-tool-section-label">Output</div>
                             <div
                               class="oc-tool-output-content"
-                              v-html="renderMarkdown(block.toolPart.state.output, block.id)"
+                              v-html="renderMarkdown(toolOutputForDisplay(block.toolPart), block.id)"
                             ></div>
                           </div>
                         </div>
@@ -2310,20 +2523,24 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                   <div
                     v-else-if="(block.type === 'inquiry' || block.type === 'summary') && block.text"
                     class="oc-response"
+                    :class="{ 'is-standalone': block.type === 'summary' && msg.blocks.length === 1 }"
                   >
-                    <div class="oc-response-header">
+                    <div v-if="block.type === 'inquiry' || msg.blocks.length > 1" class="oc-response-header">
                       <span class="oc-response-title">{{
                         block.type === 'inquiry' ? '询问' : '总结'
                       }}</span>
+                    </div>
+                    <div class="oc-response-content" v-html="renderMarkdown(block.text, block.id)"></div>
+                    <div class="oc-response-actions">
                       <button
                         class="oc-copy-button"
                         type="button"
-                        @click="copyResponse(block.text)"
-                        :data-prism-tooltip="responseCopied ? ui.copied : ui.copy"
-                        :aria-label="responseCopied ? ui.copied : ui.copy"
+                        @click="copyToClipboard(block.text, block.id)"
+                        :data-prism-tooltip="copiedId === block.id ? ui.copied : ui.copyReply"
+                        :aria-label="copiedId === block.id ? ui.copied : ui.copyReply"
                       >
                         <svg
-                          v-if="!responseCopied"
+                          v-if="copiedId !== block.id"
                           xmlns="http://www.w3.org/2000/svg"
                           width="12"
                           height="12"
@@ -2347,15 +2564,23 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
                         >
                           <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
+                        <span>{{ copiedId === block.id ? ui.copied : ui.copyReply }}</span>
                       </button>
                     </div>
-                    <div class="oc-response-content" v-html="renderMarkdown(block.text, block.id)"></div>
                   </div>
                 </template>
               </template>
             </div>
           </div>
         </template>
+        <DeploymentApproval
+          v-if="pendingDeploymentApproval"
+          :stage="pendingDeploymentApproval.stage"
+          :targets="pendingDeploymentApproval.targets"
+          :zh="locale.startsWith('zh')"
+          @approve="pendingDeploymentApproval?.resolve(true)"
+          @reject="pendingDeploymentApproval?.resolve(false)"
+        />
       </div>
     </div>
     <button v-if="!followLatest && displayMessages.length > 0" class="oc-jump-latest" type="button" @click="scrollToBottom(true)">
@@ -2363,104 +2588,117 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
     </button>
     </div>
 
-    <div v-if="currentStatus || error" class="oc-session-status" :class="error ? 'is-error' : `is-${currentStage}`">
-      <div class="oc-session-status-main">
-        <i v-if="error" class="bi bi-exclamation-circle" aria-hidden="true"></i>
-        <span
-          v-else-if="isGenerating || currentStage === 'thinking' || currentStage === 'executing'"
-          class="oc-status-dot"
-        ></span>
-        <span class="oc-session-status-text" :role="error ? 'alert' : 'status'" :aria-live="error ? 'assertive' : 'polite'">{{ error ? normalizeUserErrorMessage(error.message || error) : currentStatus }}</span>
-        <span v-if="sessionDuration && isGenerating" class="oc-session-status-time">{{
-          sessionDuration
-        }}</span>
-        <button
-          class="oc-session-toggle"
-          type="button"
-          @click="toggleSessionStatusExpanded"
-          :aria-expanded="sessionStatusExpanded"
-          :aria-label="sessionStatusExpanded ? '收起会话状态' : '展开会话状态'"
-          :data-prism-tooltip="sessionStatusExpanded ? '收起会话状态' : '展开会话状态'"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            :class="{ expanded: sessionStatusExpanded }"
-          >
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </button>
-      </div>
-      <div v-if="sessionStatusExpanded">
-        <div class="oc-session-status-steps">
-          <div
-            v-for="step in sessionSteps"
-            :key="step.key"
-            class="oc-session-step"
-            :class="{ active: step.active, done: step.done }"
-          >
-            <span class="oc-session-step-dot"></span>
-            <span class="oc-session-step-label">{{ step.label }}</span>
-          </div>
-        </div>
-        <div v-if="performanceBadges.length > 0" class="oc-session-metrics">
-          <span v-for="badge in performanceBadges" :key="badge" class="oc-session-metric-badge">
-            {{ badge }}
-          </span>
-        </div>
-        <div v-if="performanceInsight" class="oc-session-insight">
-          {{ performanceInsight }}
-        </div>
-        <div v-if="interruptionState" class="oc-session-interruption">
-          <div class="oc-session-interruption-title">已保留当前进度</div>
-          <div class="oc-session-interruption-meta">
-            <span>已完成工具 {{ interruptionState.completedTools }} 次</span>
-            <span class="oc-hint-divider">·</span>
-            <span>最后一步: {{ interruptionState.lastTool }}</span>
-          </div>
-          <div v-if="interruptionState.partialResponse" class="oc-session-interruption-preview">
-            {{ interruptionState.partialResponse }}
-          </div>
-          <div v-if="interruptionState.canResume" class="oc-session-interruption-hint">
-            直接发送“继续”或补一句新要求，我会基于当前上下文接着处理。
-          </div>
-        </div>
-        <div v-if="debugFacts.length > 0 || debugToolChain.length > 0" class="oc-debug-panel">
-          <div class="oc-debug-panel-title">会话观测</div>
-          <div v-if="debugFacts.length > 0" class="oc-debug-facts">
-            <div v-for="fact in debugFacts" :key="fact.label" class="oc-debug-fact">
-              <span class="oc-debug-fact-label">{{ fact.label }}</span>
-              <span class="oc-debug-fact-value">{{ fact.value }}</span>
+    <LiquidSurface
+      v-if="currentStatus || error"
+      class="oc-session-status"
+      :class="[error ? 'is-error' : `is-${currentStage}`, { 'is-expanded': sessionStatusExpanded }]"
+      :radius="18"
+      :strength="40"
+      :blur="0.35"
+      :interactive="false"
+    >
+      <button
+        ref="sessionStatusToggle"
+        class="oc-session-status-main oc-session-toggle"
+        type="button"
+        :aria-expanded="sessionStatusExpanded"
+        :aria-controls="sessionDetailsId"
+        :title="sessionStatusExpanded ? sessionCopy.collapse : sessionCopy.expand"
+        @click="toggleSessionStatusExpanded"
+      >
+        <span class="oc-session-status-icon" aria-hidden="true">
+          <i v-if="error || currentStage === 'error'" class="bi bi-exclamation-circle"></i>
+          <i v-else-if="currentStage === 'complete'" class="bi bi-check2"></i>
+          <i v-else-if="currentStage === 'stopped'" class="bi bi-pause-fill"></i>
+          <span v-else class="oc-status-dot"></span>
+        </span>
+        <span class="oc-session-status-text" :role="error || currentStage === 'error' ? 'alert' : 'status'" :aria-live="error || currentStage === 'error' ? 'assertive' : 'polite'">{{ sessionErrorMessage || multiHostSummary || (currentStage === 'complete' ? ui.done : currentStatus) }}</span>
+        <span v-if="sessionElapsed" class="oc-session-status-time" :title="sessionCopy.duration">
+          <i class="bi bi-clock" aria-hidden="true"></i>{{ sessionElapsed }}
+        </span>
+        <i class="bi bi-chevron-down oc-session-chevron" aria-hidden="true"></i>
+      </button>
+      <div
+        :id="sessionDetailsId"
+        class="oc-session-details"
+        :inert="!sessionStatusExpanded"
+        :aria-hidden="!sessionStatusExpanded"
+      >
+        <div class="oc-session-details-clip">
+          <div class="oc-session-details-scroll">
+            <MultiHostProgress v-if="hasHostActivity" :hosts="multiHostStates" :active="isGenerating" @stop="multiHostRun?.stopTarget($event)" />
+            <ExecutionLogPanel v-if="hasExecutionLogs" :logs="executionLogs" :hosts="multiHostStates" :active="isGenerating" :zh="locale.startsWith('zh')" />
+            <p v-if="sessionErrorMessage" class="oc-session-error-detail">{{ sessionErrorMessage }}</p>
+            <ol class="oc-session-status-steps" :aria-label="sessionCopy.process">
+              <li
+                v-for="step in sessionSteps"
+                :key="step.key"
+                class="oc-session-step"
+                :class="{ active: step.active, done: step.done, skipped: step.skipped }"
+                :aria-current="step.active ? 'step' : undefined"
+              >
+                <span class="oc-session-step-dot" aria-hidden="true">
+                  <i v-if="step.done" class="bi bi-check2"></i>
+                  <i v-else-if="step.skipped" class="bi bi-dash"></i>
+                  <span v-else></span>
+                </span>
+                <span class="oc-session-step-label">{{ step.label }}</span>
+              </li>
+            </ol>
+            <dl class="oc-session-metrics">
+              <div v-for="item in performanceItems" :key="item.label" class="oc-session-metric">
+                <dt>{{ item.label }}</dt>
+                <dd>{{ item.value }}</dd>
+              </div>
+            </dl>
+            <div v-if="interruptionState" class="oc-session-interruption">
+              <div class="oc-session-interruption-title">已保留当前进度</div>
+              <div class="oc-session-interruption-meta">
+                <span>已完成工具 {{ interruptionState.completedTools }} 次</span>
+                <span class="oc-hint-divider">·</span>
+                <span>最后一步: {{ interruptionState.lastTool }}</span>
+              </div>
+              <div v-if="interruptionState.partialResponse" class="oc-session-interruption-preview">
+                {{ interruptionState.partialResponse }}
+              </div>
+              <div v-if="interruptionState.canResume" class="oc-session-interruption-hint">
+                直接发送“继续”或补一句新要求，我会基于当前上下文接着处理。
+              </div>
             </div>
-          </div>
-          <div v-if="debugToolChain.length > 0" class="oc-debug-chain">
-            <span class="oc-debug-chain-label">最近工具链</span>
-            <span
-              v-for="tool in debugToolChain"
-              :key="tool.id"
-              class="oc-debug-chain-item"
-              :class="`is-${tool.status}`"
-            >
-              {{ tool.label }}
-            </span>
+            <details v-if="debugFacts.length > 0 || debugToolChain.length > 0" class="oc-debug-panel">
+              <summary class="oc-debug-panel-title">
+                {{ sessionCopy.details }}<i class="bi bi-chevron-right" aria-hidden="true"></i>
+              </summary>
+              <dl v-if="debugFacts.length > 0" class="oc-debug-facts">
+                <div v-for="fact in debugFacts" :key="fact.label" class="oc-debug-fact">
+                  <dt class="oc-debug-fact-label">{{ fact.label }}</dt>
+                  <dd class="oc-debug-fact-value">{{ fact.value }}</dd>
+                </div>
+              </dl>
+              <div v-if="debugToolChain.length > 0" class="oc-debug-chain">
+                <span class="oc-debug-chain-label">{{ sessionCopy.toolChain }}</span>
+                <span
+                  v-for="tool in debugToolChain"
+                  :key="tool.id"
+                  class="oc-debug-chain-item"
+                  :class="`is-${tool.status}`"
+                >
+                  {{ tool.label }}
+                </span>
+              </div>
+              <p v-if="performanceInsight" class="oc-session-insight">{{ performanceInsight }}</p>
+            </details>
           </div>
         </div>
       </div>
-    </div>
+    </LiquidSurface>
 
     <div class="oc-composer-area">
     <div v-if="!hasModel" class="oc-model-notice">
       <span>{{ ui.modelHint }}</span>
       <button type="button" class="oc-configure-model" @click="openModelSettings">{{ ui.configure }}<i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
     </div>
-    <div class="oc-input-wrapper">
+    <LiquidSurface class="oc-input-wrapper" :radius="18" :strength="40" :blur="0.35" :interactive="false">
       <div class="oc-input-container">
         <textarea
           ref="inputRef"
@@ -2469,16 +2707,14 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
           :placeholder="isGenerating ? ui.draftPlaceholder : ui.placeholder"
           :aria-label="ui.placeholder"
           @keydown="handleInputKeydown"
-          rows="2"
+          rows="1"
         ></textarea>
       </div>
       <div class="oc-input-actions">
         <div class="oc-input-actions-left">
-          <span class="oc-composer-model" :class="{ 'is-unconfigured': !hasModel }" :data-prism-tooltip="modelLabel">
-            <i class="bi bi-cpu" aria-hidden="true"></i><span>{{ modelLabel }}</span>
-          </span>
+          <HostTargetPicker :model-value="effectiveHostIds" :connections="connectedHosts" :current-id="props.connectionId" :disabled="isGenerating" @update:model-value="selectedHostIds = $event" />
           <div
-            v-if="props.showServerEnvButton"
+            v-if="props.showServerEnvButton && effectiveHostIds.length === 1 && effectiveHostIds[0] === props.connectionId"
             ref="serverEnvMenuRef"
             class="oc-action-menu"
             @keydown.esc.stop.prevent="closeServerEnvMenu"
@@ -2491,7 +2727,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
               :aria-label="ui.environment"
               @click="serverEnvMenuOpen = !serverEnvMenuOpen"
             >
-              <i class="bi bi-three-dots"></i>
+              <i class="bi bi-file-earmark-text" aria-hidden="true"></i>
               <span>{{ ui.environment }}</span>
             </button>
 
@@ -2512,7 +2748,11 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
           </div>
         </div>
         <div class="oc-input-actions-right">
-          <ReasoningSlider v-model="reasoningSelection" :capability="reasoningCapability" :model-name="modelLabel" :disabled="isGenerating || !hasModel" />
+          <ReasoningSlider v-model="reasoningSelection" :capability="reasoningCapability" :model-name="modelLabel" :disabled="isGenerating">
+            <template #models>
+              <ComposerModelList :provider-id="props.currentProvider?.id" :model-id="props.currentModel?.id" :disabled="isGenerating" @configure="openModelSettings" />
+            </template>
+          </ReasoningSlider>
           <button
             v-if="!isGenerating"
             class="oc-send-button"
@@ -2539,7 +2779,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
           </button>
         </div>
       </div>
-    </div>
+    </LiquidSurface>
     <div class="oc-composer-hint"><span><kbd>Enter</kbd> {{ ui.sendHint }}</span><span><kbd>Shift + Enter</kbd> {{ ui.newlineHint }}</span></div>
     </div>
   </div>
@@ -2606,13 +2846,13 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 
 .oc-connection-banner-name {
   color: var(--text-base);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   font-weight: 600;
 }
 
 .oc-connection-banner-host {
   color: var(--text-weak);
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   word-break: break-all;
 }
 
@@ -2625,7 +2865,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 
 .oc-connection-banner-label {
   color: var(--text-interactive-base);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
 }
 
 .oc-connection-banner-id {
@@ -2633,7 +2873,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   border-radius: 999px;
   background: color-mix(in srgb, var(--prism-text) 8%, transparent);
   color: var(--text-base);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   font-family: 'Consolas', 'Monaco', monospace;
 }
 
@@ -2655,19 +2895,19 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   opacity: 0.5;
 }
 .oc-empty-title {
-  font-size: 18px;
+  font-size: var(--prism-font-18);
   font-weight: 600;
   color: var(--text-strong);
   margin-bottom: 8px;
 }
 .oc-empty-text {
-  font-size: 14px;
+  font-size: var(--prism-font-14);
   min-height: 24px;
 }
 
 .oc-empty-hint {
   margin-top: 16px;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   background: var(--surface-base);
   padding: 8px 16px;
   border-radius: 20px;
@@ -2679,7 +2919,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   padding: 2px 6px;
   border-radius: var(--prism-radius-small);
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
 }
 
 .oc-message-list {
@@ -2694,7 +2934,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   justify-content: center;
   padding: 16px;
   color: var(--text-weak);
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 
 .oc-loading-spinner {
@@ -2767,7 +3007,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   flex: 1;
 }
 .oc-turn-role {
@@ -2779,7 +3019,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   color: var(--text-weak);
 }
 .oc-model-badge {
-  font-size: 9px;
+  font-size: var(--prism-font-9);
   background: var(--surface-interactive-weak);
   color: var(--text-interactive-base);
   padding: 2px 6px;
@@ -2791,7 +3031,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   font-weight: 500;
   padding: 3px 8px;
   border-radius: 12px;
@@ -2856,7 +3096,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 }
 
 .oc-markdown {
-  font-size: 14px;
+  font-size: var(--prism-font-14);
   line-height: 1.6;
   color: var(--text-base);
   user-select: text;
@@ -2875,12 +3115,12 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   overflow-x: auto;
   margin: 10px 0;
   font-family: var(--font-family-mono);
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   line-height: 1.5;
 }
 .oc-markdown code {
   font-family: var(--font-family-mono);
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   background: var(--surface-inset-base);
   padding: 2px 5px;
   border-radius: var(--prism-radius-small);
@@ -2910,7 +3150,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 .oc-analysis-block summary {
   cursor: pointer;
   padding: 8px 12px;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   color: var(--text-weak);
   user-select: none;
 }
@@ -2932,7 +3172,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   gap: 6px;
   padding: 8px 12px;
   background: var(--surface-base-hover);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   font-weight: 500;
   color: var(--text-weak);
   border-bottom: 1px solid var(--surface-base);
@@ -2965,7 +3205,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   color: var(--text-success-base);
 }
 .oc-todo-content {
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   color: var(--text-base);
 }
 .oc-todo-item.completed .oc-todo-content {
@@ -3015,12 +3255,12 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   min-width: 0;
 }
 .oc-error-title {
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   font-weight: 500;
   margin-bottom: 2px;
 }
 .oc-error-message {
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   opacity: 0.9;
   word-break: break-word;
 }
@@ -3053,7 +3293,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   min-width: 0;
 }
 .oc-tool-title {
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   font-weight: 500;
   color: var(--text-base);
   white-space: nowrap;
@@ -3061,7 +3301,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   text-overflow: ellipsis;
 }
 .oc-tool-subtitle {
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   color: var(--text-weak);
   white-space: nowrap;
   overflow: hidden;
@@ -3072,7 +3312,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   font-weight: 500;
   text-transform: capitalize;
   flex-shrink: 0;
@@ -3136,7 +3376,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   border-radius: var(--prism-radius-control);
   margin: 6px 0 0;
   font-family: var(--font-family-mono);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   color: var(--text-base);
   overflow-x: auto;
   white-space: pre-wrap;
@@ -3147,7 +3387,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   -webkit-user-select: text;
 }
 .oc-tool-section-label {
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -3168,7 +3408,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   gap: 6px;
   padding: 8px 12px;
   background: var(--surface-base-hover);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   font-weight: 500;
   color: var(--text-weak);
   border-bottom: 1px solid var(--surface-base);
@@ -3186,7 +3426,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   color: var(--text-base);
 }
 .oc-diff-path {
@@ -3209,7 +3449,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   border-bottom: 1px solid var(--surface-base);
 }
 .oc-response-title {
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   font-weight: 500;
   color: var(--text-weak);
   text-transform: uppercase;
@@ -3217,7 +3457,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 }
 .oc-response-content {
   padding: 12px 14px;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   user-select: text;
   -webkit-user-select: text;
 }
@@ -3231,248 +3471,11 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   padding: 10px 14px;
   margin: 0 16px 8px;
   border-radius: var(--prism-radius-control);
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 .oc-error-icon {
   display: flex;
   align-items: center;
-}
-
-.oc-session-status {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 0 16px 8px;
-  padding: 10px 12px;
-  border-radius: var(--prism-radius-control);
-  background: color-mix(in srgb, var(--prism-text) 3%, transparent);
-  border: 1px solid var(--prism-border);
-  color: var(--text-weak);
-  font-size: 12px;
-}
-
-.oc-session-status.is-preparing,
-.oc-session-status.is-thinking,
-.oc-session-status.is-executing {
-  color: var(--text-interactive-base);
-}
-
-.oc-session-status.is-complete {
-  color: var(--text-success-base);
-}
-
-.oc-session-status.is-stopped {
-  color: var(--prism-warning);
-}
-
-.oc-session-status.is-error {
-  color: var(--text-critical-base);
-}
-
-.oc-session-status-steps {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.oc-session-step {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-weak);
-  opacity: 0.7;
-}
-
-.oc-session-step.active,
-.oc-session-step.done {
-  opacity: 1;
-}
-
-.oc-session-step.done {
-  color: var(--text-success-base);
-}
-
-.oc-session-step.active {
-  color: var(--text-interactive-base);
-}
-
-.oc-session-step-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: currentColor;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--prism-text) 5%, transparent);
-}
-
-.oc-session-status-main {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-
-.oc-session-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: transparent;
-  color: currentColor;
-  border-radius: var(--prism-radius-control);
-  cursor: pointer;
-  flex-shrink: 0;
-  opacity: 0.8;
-}
-
-.oc-session-toggle:hover {
-  background: color-mix(in srgb, var(--prism-text) 8%, transparent);
-  opacity: 1;
-}
-
-.oc-session-toggle svg {
-  transition: transform 0.15s ease;
-}
-
-.oc-session-toggle svg.expanded {
-  transform: rotate(180deg);
-}
-
-.oc-session-metrics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.oc-session-metric-badge {
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--prism-text) 6%, transparent);
-  color: var(--text-weak);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.oc-session-insight {
-  color: var(--text-weak);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.oc-session-interruption {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
-  border-radius: var(--prism-radius-control);
-  background: var(--prism-warning-bg);
-  border: 1px solid color-mix(in srgb, var(--prism-warning) 24%, transparent);
-}
-
-.oc-session-interruption-title {
-  color: var(--text-base);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.oc-session-interruption-meta,
-.oc-session-interruption-hint,
-.oc-session-interruption-preview {
-  color: var(--text-weak);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.oc-session-interruption-preview {
-  padding: 8px 10px;
-  border-radius: var(--prism-radius-control);
-  background: color-mix(in srgb, var(--prism-text) 4%, transparent);
-}
-
-.oc-debug-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 4px;
-  border-top: 1px dashed var(--prism-border);
-}
-
-.oc-debug-panel-title {
-  color: var(--text-base);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.oc-debug-facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 8px;
-}
-
-.oc-debug-fact {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px;
-  border-radius: var(--prism-radius-control);
-  background: color-mix(in srgb, var(--prism-text) 4%, transparent);
-}
-
-.oc-debug-fact-label {
-  color: var(--text-weak);
-  font-size: 11px;
-}
-
-.oc-debug-fact-value {
-  color: var(--text-base);
-  font-size: 12px;
-}
-
-.oc-debug-chain {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.oc-debug-chain-label {
-  color: var(--text-weak);
-  font-size: 11px;
-}
-
-.oc-debug-chain-item {
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--prism-text) 5%, transparent);
-  color: var(--text-base);
-  font-size: 11px;
-}
-
-.oc-debug-chain-item.is-completed {
-  background: var(--prism-success-bg);
-  color: var(--text-success-base);
-}
-
-.oc-debug-chain-item.is-running {
-  background: var(--prism-info-bg);
-  color: var(--text-interactive-base);
-}
-
-.oc-debug-chain-item.is-error {
-  background: var(--prism-danger-bg);
-  color: var(--text-critical-base);
-}
-
-.oc-session-status-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.oc-session-status-time {
-  font-variant-numeric: tabular-nums;
-  opacity: 0.8;
 }
 
 .oc-input-wrapper {
@@ -3509,7 +3512,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   opacity: 1;
   padding: 0;
   resize: none;
-  font-size: 14px;
+  font-size: var(--prism-font-14);
   font-family: inherit;
   line-height: 1.35;
   min-height: 48px;
@@ -3590,7 +3593,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   border-radius: var(--prism-radius-control);
   background: transparent;
   color: var(--text-base);
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   cursor: pointer;
   text-align: left;
 }
@@ -3600,7 +3603,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 }
 
 .oc-action-menu-item i {
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   color: var(--text-weak);
 }
 
@@ -3610,12 +3613,12 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
 }
 
 .oc-action-button i {
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   line-height: 1;
 }
 
 .oc-action-button span {
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 .oc-input:focus {
   outline: none;
@@ -3657,7 +3660,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   transform: none;
 }
 .oc-send-button i {
-  font-size: 14px;
+  font-size: var(--prism-font-14);
   line-height: 1;
 }
 .oc-btn-spinner {
@@ -3690,7 +3693,7 @@ function getAdaptiveCompactionLimit(msgs: V2Message[]): number {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   color: var(--text-weak);
   line-height: 1.2;
 }

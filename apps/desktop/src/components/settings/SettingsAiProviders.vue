@@ -7,7 +7,7 @@
     <header class="ai-settings-heading">
       <div>
         <h2 class="section-title">
-          <i class="bi bi-robot" aria-hidden="true"></i>{{ t('settings.aiProvidersTitle') }}
+          <AiProvidersIcon />{{ t('settings.aiProvidersTitle') }}
         </h2>
         <p class="section-description">{{ copy.description }}</p>
       </div>
@@ -59,7 +59,7 @@
             :data-provider-id="provider.id"
             @click="selectProvider(provider.id)"
           >
-            <span class="provider-glyph"><i :class="provider.icon" aria-hidden="true"></i></span>
+            <span class="provider-glyph"><ProviderLogo :provider-id="provider.id" :fallback-icon="provider.icon" /></span>
             <span class="provider-choice-name"
               >{{ provider.name
               }}<small>{{ provider.models.length }} {{ copy.modelsCount }}</small></span
@@ -102,7 +102,7 @@
             data-testid="provider-detail"
           >
             <header class="provider-detail-heading">
-              <span class="provider-emblem"><i :class="selected.icon" aria-hidden="true"></i></span>
+              <span class="provider-emblem"><ProviderLogo :provider-id="selected.id" :fallback-icon="selected.icon" /></span>
               <div class="provider-title">
                 <h3>{{ selected.name }}</h3>
                 <p>{{ selected.description }}</p>
@@ -480,6 +480,8 @@ import {
 import type { TestResult } from '@/services/ai-test.service'
 import { getModelCapabilities } from '@/utils/model-capabilities'
 import ModelParameters from './ModelParameters.vue'
+import AiProvidersIcon from '@/components/common/AiProvidersIcon.vue'
+import ProviderLogo from '@/components/common/ProviderLogo.vue'
 
 const providers = defineModel<AIProvider[]>('providers', { required: true })
 defineProps<{
@@ -828,18 +830,18 @@ function catalogIcon(provider: AIProvider) {
   align-items: center;
   gap: 10px;
   margin: 0 0 8px;
-  font-size: 23px;
+  font-size: var(--prism-font-23);
   font-weight: 620;
   letter-spacing: -0.5px;
 }
-.section-title > i {
-  font-size: 20px;
+.section-title > .ai-providers-icon {
+  font-size: var(--prism-font-20);
   color: var(--vscode-accent);
 }
 .section-description {
   margin: 0;
   color: var(--vscode-fg-muted);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   line-height: 1.7;
 }
 .saved-note {
@@ -848,7 +850,7 @@ function catalogIcon(provider: AIProvider) {
   gap: 6px;
   white-space: nowrap;
   color: var(--vscode-fg-muted);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   padding-top: 7px;
 }
 .saved-note > i {
@@ -895,7 +897,7 @@ function catalogIcon(provider: AIProvider) {
   color: var(--vscode-fg);
   background: transparent;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 input::placeholder {
   color: var(--vscode-fg-muted);
@@ -920,7 +922,7 @@ select {
   padding: 6px 4px;
   min-width: 0;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
 }
 .directory-filters select {
   width: 50%;
@@ -930,7 +932,7 @@ select {
   justify-content: space-between;
   padding: 22px 7px 10px;
   color: var(--vscode-fg-muted);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
 }
 .provider-directory-list {
   overflow-y: auto;
@@ -991,19 +993,19 @@ select {
   border-radius: 10px;
   background: color-mix(in srgb, var(--vscode-accent) 9%, transparent);
   color: var(--vscode-accent);
-  font-size: 16px;
+  font-size: var(--prism-font-16);
 }
 .provider-choice-name {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   font-weight: 550;
   overflow-wrap: anywhere;
 }
 .provider-choice-name small {
   display: block;
   margin-top: 3px;
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   font-weight: 400;
   color: var(--vscode-fg-muted);
 }
@@ -1017,11 +1019,11 @@ select {
 }
 .configured-icon {
   color: var(--vscode-accent);
-  font-size: 15px;
+  font-size: var(--prism-font-15);
 }
 .directory-footnote {
   color: var(--vscode-fg-muted);
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   text-align: center;
   margin: 14px 2px 0;
 }
@@ -1109,14 +1111,14 @@ select {
   background: var(--liquid-selected);
   box-shadow: inset 0 1px 0 var(--liquid-inner-light);
   color: var(--vscode-accent);
-  font-size: 23px;
+  font-size: var(--prism-font-23);
 }
 .provider-title {
   flex: 1;
   min-width: 0;
 }
 .provider-title h3 {
-  font-size: 21px;
+  font-size: var(--prism-font-21);
   letter-spacing: -0.4px;
   font-weight: 650;
   margin: 0 0 4px;
@@ -1126,7 +1128,7 @@ select {
   margin: 0;
   color: var(--vscode-fg-muted);
   line-height: 1.6;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
 }
 .glass-switch {
   position: relative;
@@ -1193,7 +1195,7 @@ select {
   gap: 4px;
   padding: 3px 7px;
   border-radius: 6px;
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   color: var(--vscode-fg-muted);
   background: var(--vscode-list-hoverBackground);
 }
@@ -1201,7 +1203,7 @@ select {
   color: var(--vscode-accent);
 }
 .verified-date {
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   color: var(--vscode-fg-muted);
 }
 .provider-docs {
@@ -1209,7 +1211,7 @@ select {
   display: inline-flex;
   gap: 4px;
   color: var(--vscode-accent);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   text-decoration: none;
 }
 .provider-notice {
@@ -1222,7 +1224,7 @@ select {
   background: var(--vscode-list-hoverBackground);
   border: 1px solid var(--vscode-border);
   color: var(--vscode-fg-muted);
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   line-height: 1.7;
 }
 .provider-notice > i {
@@ -1244,23 +1246,23 @@ select {
 .models-heading h4 {
   margin: 0;
   color: var(--vscode-fg);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   font-weight: 600;
 }
 .field-heading > span {
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   color: var(--vscode-fg-muted);
 }
 .connection-field {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   color: var(--vscode-fg-muted);
 }
 .connection-field small {
   margin-left: 6px;
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   font-weight: 400;
 }
 .connection-field > input,
@@ -1270,14 +1272,14 @@ select {
   border-radius: 10px;
   background: var(--vscode-bg-input);
   color: var(--vscode-fg);
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   box-sizing: border-box;
 }
 .connection-field > input {
   padding: 10px 12px;
   min-width: 0;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 .key-input {
   display: flex;
@@ -1293,7 +1295,7 @@ select {
   padding: 10px 12px;
   color: var(--vscode-fg);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 .key-input button {
   align-self: stretch;
@@ -1305,7 +1307,7 @@ select {
   border-radius: 0 9px 9px 0;
 }
 .field-hint {
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   line-height: 1.6;
   color: var(--vscode-fg-muted);
   margin: 7px 0 16px;
@@ -1322,7 +1324,7 @@ select {
   align-items: center;
   gap: 4px;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   color: var(--vscode-accent);
   border: 0;
   padding: 2px 0;
@@ -1351,7 +1353,7 @@ button:disabled {
 }
 .model-count {
   display: inline-block;
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   padding: 1px 6px;
   margin-left: 7px;
   border-radius: 6px;
@@ -1360,7 +1362,7 @@ button:disabled {
 }
 .models-heading p {
   margin: 5px 0 0;
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   color: var(--vscode-fg-muted);
 }
 .model-heading-actions {
@@ -1419,21 +1421,21 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   font-weight: 600;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
 .model-name > i {
   color: var(--prism-warning);
-  font-size: 9px;
+  font-size: var(--prism-font-9);
   flex-shrink: 0;
 }
 .model-identity code {
   display: block;
   margin-top: 2px;
   font:
-    10px/1.6 'Cascadia Code',
+    var(--prism-font-10)/1.6 'Cascadia Code',
     Consolas,
     monospace;
   color: var(--vscode-fg-muted);
@@ -1447,7 +1449,7 @@ button:disabled {
   gap: 4px 10px;
   margin-top: 6px;
   color: var(--vscode-fg-muted);
-  font-size: 10px;
+  font-size: var(--prism-font-10);
 }
 .model-capabilities span {
   display: inline-flex;
@@ -1472,7 +1474,7 @@ button:disabled {
   background: transparent;
   color: var(--vscode-fg-muted);
   font: inherit;
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   padding: 6px;
   cursor: pointer;
 }
@@ -1485,7 +1487,7 @@ button:disabled {
   border: 0;
   width: 23px;
   height: 26px;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
 }
 .model-disabled .model-name,
 .model-disabled .model-capabilities,
@@ -1496,7 +1498,7 @@ button:disabled {
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   line-height: 1.5;
   margin-top: 9px;
   overflow-wrap: anywhere;
@@ -1518,20 +1520,20 @@ button:disabled {
 .models-empty > i,
 .directory-empty > i,
 .provider-panel-empty > i {
-  font-size: 25px;
+  font-size: var(--prism-font-25);
   opacity: 0.55;
 }
 .models-empty p,
 .directory-empty p,
 .provider-panel-empty p {
   margin: 11px 0 7px;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 .models-empty > span {
   display: block;
   max-width: 310px;
   margin: auto;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   line-height: 1.8;
 }
 .provider-panel-empty {
@@ -1551,7 +1553,7 @@ button:disabled {
   gap: 5px;
   margin: 0;
   color: var(--vscode-fg-muted);
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   line-height: 1.6;
 }
 .test-connection {
@@ -1567,7 +1569,7 @@ button:disabled {
   box-shadow: inset 0 1px 0 var(--liquid-inner-light);
   color: var(--vscode-accent);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   font-weight: 550;
   cursor: pointer;
 }
@@ -1578,7 +1580,7 @@ button:disabled {
   height: 16px;
   border-radius: 5px;
   background: color-mix(in srgb, var(--vscode-accent) 10%, transparent);
-  font-size: 10px;
+  font-size: var(--prism-font-10);
 }
 .icon-action,
 .model-parameter-button,
@@ -1657,7 +1659,7 @@ select:focus-visible,
     width: 36px;
     height: 36px;
     border-radius: 12px;
-    font-size: 19px;
+    font-size: var(--prism-font-19);
   }
   .verified-date {
     display: none;
@@ -1671,7 +1673,7 @@ select:focus-visible,
     font-size: 0;
   }
   .saved-note i {
-    font-size: 14px;
+    font-size: var(--prism-font-14);
   }
   .provider-workspace {
     display: flex;
@@ -1706,10 +1708,10 @@ select:focus-visible,
     padding: 20px 16px 0;
   }
   .provider-title h3 {
-    font-size: 19px;
+    font-size: var(--prism-font-19);
   }
   .provider-title p {
-    font-size: 11px;
+    font-size: var(--prism-font-11);
   }
   .provider-footer {
     flex-direction: row;

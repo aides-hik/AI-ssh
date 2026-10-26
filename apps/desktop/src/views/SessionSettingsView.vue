@@ -394,11 +394,11 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   margin-top: 10px;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   color: var(--prism-muted);
 }
 .save-status i {
-  font-size: 14px;
+  font-size: var(--prism-font-14);
 }
 .save-status i.bi-hourglass-split {
   color: var(--vscode-accent);

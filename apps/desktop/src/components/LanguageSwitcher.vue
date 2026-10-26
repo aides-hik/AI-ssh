@@ -48,7 +48,7 @@ onMounted(() => {
   background-color: var(--prism-control);
   color: var(--prism-text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   cursor: pointer;
 }
 .language-select:focus-visible {

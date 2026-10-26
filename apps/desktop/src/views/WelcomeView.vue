@@ -62,8 +62,8 @@ async function importConnections() {
           type="button"
           class="welcome-settings"
           :radius="22"
-          :strength="32"
-          :blur="2"
+          :strength="44"
+          :blur="0.35"
           :motion="theme.animations.value"
           aria-label="打开应用设置"
           @click="openSettings()"
@@ -200,32 +200,32 @@ async function importConnections() {
 }
 .welcome-location {
   color: var(--vscode-fg-muted);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   display: flex;
   align-items: center;
   gap: 9px;
   margin-bottom: 9px;
 }
 .welcome-location > i {
-  font-size: 8px;
+  font-size: var(--prism-font-8);
   opacity: 0.7;
 }
 .welcome-heading h1 {
   margin: 0;
   color: var(--vscode-fg);
-  font-size: 30px;
+  font-size: var(--prism-font-30);
   font-weight: 600;
   line-height: 1.35;
   letter-spacing: -0.7px;
 }
 .welcome-heading p {
   margin: 8px 0 0;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   line-height: 1.7;
   color: var(--vscode-fg-muted);
 }
 .welcome-settings {
-  --liquid-tint: color-mix(in srgb, var(--vscode-bg-light) 28%, transparent);
+  --liquid-tint: color-mix(in srgb, var(--vscode-bg-light) 12%, transparent);
   --liquid-rim: color-mix(in srgb, var(--vscode-border) 40%, #ffffff66);
   color: var(--vscode-fg-muted);
   padding: 11px 15px;
@@ -235,10 +235,10 @@ async function importConnections() {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
 }
 .welcome-settings i {
-  font-size: 14px;
+  font-size: var(--prism-font-14);
 }
 .welcome-layout {
   display: grid;
@@ -251,11 +251,11 @@ async function importConnections() {
   flex-direction: column;
   min-width: 0;
   color: var(--prism-text);
-  background: var(--prism-surface);
+  background: color-mix(in srgb, var(--prism-surface) 60%, transparent);
   border: 1px solid var(--liquid-rim);
   border-radius: 21px;
   box-shadow: var(--prism-shadow);
-  backdrop-filter: blur(22px) saturate(140%);
+  backdrop-filter: blur(0.5px) saturate(112%);
   overflow: hidden;
 }
 .welcome-session-bar {
@@ -265,7 +265,7 @@ async function importConnections() {
   gap: 12px;
   padding: 15px 20px;
   border-bottom: 1px solid var(--prism-border);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   line-height: 1.4;
   background: var(--liquid-selected);
 }
@@ -276,11 +276,11 @@ async function importConnections() {
 }
 .welcome-session-bar > span:first-child > i {
   color: var(--vscode-accent);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
 }
 .welcome-session-bar > span:last-child {
   color: var(--prism-muted);
-  font-size: 10px;
+  font-size: var(--prism-font-10);
 }
 .welcome-session-empty {
   display: flex;
@@ -313,7 +313,7 @@ async function importConnections() {
   display: grid;
   place-items: center;
   color: var(--vscode-accent);
-  font-size: 23px;
+  font-size: var(--prism-font-23);
   border: 1px solid var(--liquid-rim);
   border-radius: 16px;
   background: var(--liquid-selected);
@@ -322,14 +322,14 @@ async function importConnections() {
 .welcome-session h2 {
   margin: 0;
   color: var(--prism-text);
-  font-size: 21px;
+  font-size: var(--prism-font-21);
   font-weight: 500;
   line-height: 1.5;
   letter-spacing: -0.3px;
 }
 .welcome-session-empty > p {
   color: var(--prism-muted);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   line-height: 1.9;
   margin: 10px 0 24px;
 }
@@ -347,7 +347,7 @@ async function importConnections() {
   gap: 8px;
   padding: 10px 17px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   line-height: 1.5;
   border-radius: var(--prism-radius-control);
   cursor: pointer;
@@ -377,7 +377,7 @@ async function importConnections() {
   margin: 20px 0 0;
   max-width: 340px;
   color: var(--prism-info);
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   overflow-wrap: anywhere;
 }
 .welcome-session-empty > .welcome-import-message.has-error {
@@ -392,7 +392,7 @@ async function importConnections() {
   border-top: 1px solid var(--prism-border);
   padding: 10px 20px;
   color: var(--prism-muted);
-  font-size: 9px;
+  font-size: var(--prism-font-9);
 }
 .welcome-session-foot > span:first-child {
   display: flex;
@@ -404,7 +404,7 @@ async function importConnections() {
   min-width: 0;
 }
 .welcome-guidance h2 {
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   font-weight: 600;
   color: var(--vscode-fg);
   margin: 0;
@@ -424,11 +424,11 @@ async function importConnections() {
   width: 23px;
   flex: 0 0 auto;
   color: color-mix(in srgb, var(--vscode-accent) 65%, var(--vscode-fg-muted));
-  font-size: 17px;
+  font-size: var(--prism-font-17);
   line-height: 1.4;
 }
 .welcome-workflow-item h3 {
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   font-weight: 600;
   margin: 0;
   line-height: 1.7;
@@ -436,7 +436,7 @@ async function importConnections() {
 }
 .welcome-guidance p {
   color: var(--vscode-fg-muted);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   line-height: 1.9;
   margin: 5px 0 0;
 }
@@ -444,7 +444,7 @@ async function importConnections() {
   padding-top: 24px;
 }
 .welcome-ai-icon {
-  font-size: 20px;
+  font-size: var(--prism-font-20);
   display: inline-flex;
   color: color-mix(in srgb, var(--vscode-accent) 70%, var(--vscode-fg-muted));
   margin-bottom: 11px;
@@ -457,7 +457,7 @@ async function importConnections() {
   align-items: center;
   gap: 15px;
   color: var(--vscode-accent);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   padding: 0;
   margin-top: 16px;
   border: 0;
@@ -467,7 +467,7 @@ async function importConnections() {
   touch-action: manipulation;
 }
 .welcome-ai button i {
-  font-size: 10px;
+  font-size: var(--prism-font-10);
 }
 .welcome-footer {
   color: var(--vscode-fg-muted);
@@ -475,14 +475,14 @@ async function importConnections() {
   align-items: center;
   flex-wrap: wrap;
   gap: 7px;
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   margin-top: auto;
   padding: 29px 0 0;
   opacity: 0.85;
   line-height: 1.7;
 }
 .welcome-footer > i {
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   margin-right: 1px;
 }
 .welcome-footer-divider {
@@ -523,7 +523,7 @@ async function importConnections() {
     gap: 23px;
   }
   .welcome-session h2 {
-    font-size: 19px;
+    font-size: var(--prism-font-19);
   }
   .welcome-session-actions {
     gap: 8px;
@@ -540,7 +540,7 @@ async function importConnections() {
     margin-bottom: 24px;
   }
   .welcome-heading h1 {
-    font-size: 27px;
+    font-size: var(--prism-font-27);
   }
   .welcome-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -575,10 +575,10 @@ async function importConnections() {
     gap: 12px;
   }
   .welcome-heading h1 {
-    font-size: 24px;
+    font-size: var(--prism-font-24);
   }
   .welcome-heading p {
-    font-size: 11px;
+    font-size: var(--prism-font-11);
   }
   .welcome-settings {
     padding: 10px;
@@ -590,7 +590,7 @@ async function importConnections() {
     padding-inline: 15px;
   }
   .welcome-session h2 {
-    font-size: 18px;
+    font-size: var(--prism-font-18);
   }
   .welcome-session-foot {
     padding-inline: 15px;

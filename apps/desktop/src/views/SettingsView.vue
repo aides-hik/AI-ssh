@@ -15,7 +15,8 @@
           :data-prism-tooltip="section.label"
           @click="scrollToSection(section.id)"
         >
-          <i :class="['nav-icon', section.icon]"></i>
+          <AiProvidersIcon v-if="section.id === 'ai-providers'" class="nav-icon" />
+          <i v-else :class="['nav-icon', section.icon]" aria-hidden="true"></i>
           <span class="nav-label">{{ section.label }}</span>
         </button>
       </nav>
@@ -501,6 +502,7 @@
             <p class="app-description">
               {{ $t('settings.appDescription') }}
             </p>
+            <AboutAppActions centered />
           </div>
         </section>
       </div>
@@ -774,12 +776,14 @@ import { fetchModelsForProvider } from '../services/model-fetcher.service'
 import { useUpdateClient } from '@/services/update-client'
 import SettingsAppearance from '@/components/settings/SettingsAppearance.vue'
 import SettingsAiProviders from '@/components/settings/SettingsAiProviders.vue'
+import AiProvidersIcon from '@/components/common/AiProvidersIcon.vue'
+import AboutAppActions from '@/components/common/AboutAppActions.vue'
 import { useInlineValidation } from '@/composables/useInlineValidation'
 
 // 设置分类
 const settingsSections = computed(() => [
   { id: 'appearance', label: $t('settings.navAppearance'), icon: 'bi bi-palette' },
-  { id: 'ai-providers', label: $t('settings.navAiProviders'), icon: 'bi bi-robot' },
+  { id: 'ai-providers', label: $t('settings.navAiProviders'), icon: '' },
   { id: 'ai-assistant', label: $t('settings.navAiAssistant'), icon: 'bi bi-chat-dots' },
   { id: 'updates', label: '应用更新', icon: 'bi bi-arrow-repeat' },
   { id: 'storage', label: $t('settings.navStorage'), icon: 'bi bi-database' },
@@ -1177,12 +1181,9 @@ const loadSettings = async () => {
     const settings = await settingsService.getSettings()
 
     if (settings) {
-      // 外观设置
-      if (settings.appearance) {
-        // themeService owns the preference; legacy appearance must not overwrite it.
-        fontSize.value = settings.appearance.fontSize || 'medium'
-        selectedColorScheme.value = settings.appearance.colorScheme || 'blue'
-      }
+      // Appearance has already been initialized from theme-settings, with legacy
+      // app-settings used only as a migration fallback. Its old mirror must not
+      // overwrite a newer font or color choice when this page opens.
 
       // SSH 设置
       if (settings.ssh) {
@@ -1803,7 +1804,7 @@ onBeforeUnmount(() => {
 }
 
 .dialog-title {
-  font-size: 16px;
+  font-size: var(--prism-font-16);
   font-weight: 600;
   color: var(--vscode-foreground);
   margin: 0;
@@ -1813,7 +1814,7 @@ onBeforeUnmount(() => {
 }
 
 .dialog-title i {
-  font-size: 18px;
+  font-size: var(--prism-font-18);
   color: var(--vscode-accent);
 }
 
@@ -1824,7 +1825,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   padding: 4px;
   border-radius: var(--prism-radius-small);
-  font-size: 20px;
+  font-size: var(--prism-font-20);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1850,7 +1851,7 @@ onBeforeUnmount(() => {
 
 .form-label {
   display: block;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   font-weight: 500;
   color: var(--vscode-foreground);
   margin-bottom: 8px;
@@ -1868,7 +1869,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--vscode-border);
   border-radius: 10px;
   color: var(--vscode-input-foreground);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   transition:
     border-color 120ms ease,
     background-color 120ms ease;
@@ -1885,7 +1886,7 @@ onBeforeUnmount(() => {
 
 .form-hint {
   margin-top: 6px;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   color: var(--vscode-descriptionForeground);
   display: flex;
   align-items: center;
@@ -1893,7 +1894,7 @@ onBeforeUnmount(() => {
 }
 
 .form-hint i {
-  font-size: 13px;
+  font-size: var(--prism-font-13);
 }
 
 .checkbox-group {
@@ -1923,7 +1924,7 @@ onBeforeUnmount(() => {
 }
 
 .checkbox-item span {
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   color: var(--vscode-foreground);
   user-select: none;
 }
@@ -1941,7 +1942,7 @@ onBeforeUnmount(() => {
 }
 
 .price-label {
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   color: var(--vscode-descriptionForeground);
 }
 
@@ -1958,7 +1959,7 @@ onBeforeUnmount(() => {
 .btn-confirm {
   padding: 8px 16px;
   border-radius: 10px;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   font-weight: 500;
   cursor: pointer;
   touch-action: manipulation;

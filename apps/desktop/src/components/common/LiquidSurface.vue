@@ -18,8 +18,8 @@ const props = withDefaults(
   {
     as: 'div',
     radius: 24,
-    strength: 22,
-    blur: 8,
+    strength: 44,
+    blur: 0.35,
     interactive: true,
     motion: true,
     refraction: true
@@ -43,6 +43,8 @@ const isRefracting = computed(
 const safeRadius = computed(() => Math.max(0, props.radius))
 const safeBlur = computed(() => Math.min(20, Math.max(0, props.blur)))
 const safeStrength = computed(() => Math.min(64, Math.max(0, props.strength)))
+// Give the lens room to sample outside its silhouette without a dark blur seam.
+const filterPadding = computed(() => Math.ceil(safeStrength.value / 2 + safeBlur.value * 3 + 2))
 const surfaceStyle = computed<CSSProperties>(
   () =>
     ({
@@ -282,15 +284,20 @@ onBeforeUnmount(() => {
       <defs>
         <filter
           :id="filterId"
-          x="0"
-          y="0"
-          :width="dimensions.width"
-          :height="dimensions.height"
+          :x="-filterPadding"
+          :y="-filterPadding"
+          :width="dimensions.width + filterPadding * 2"
+          :height="dimensions.height + filterPadding * 2"
           filterUnits="userSpaceOnUse"
           primitiveUnits="userSpaceOnUse"
           color-interpolation-filters="sRGB"
         >
-          <feGaussianBlur in="SourceGraphic" :stdDeviation="safeBlur" result="softened" />
+          <feGaussianBlur
+            in="SourceGraphic"
+            :stdDeviation="safeBlur"
+            edgeMode="duplicate"
+            result="softened"
+          />
           <feImage
             :href="displacementMap"
             x="0"
@@ -300,13 +307,17 @@ onBeforeUnmount(() => {
             preserveAspectRatio="none"
             result="edge-map"
           />
+          <!-- Smooth the lens field, keeping the scene itself optically clear. -->
+          <feGaussianBlur in="edge-map" stdDeviation="0.6" result="smooth-edge-map" />
           <feDisplacementMap
             in="softened"
-            in2="edge-map"
+            in2="smooth-edge-map"
             :scale="safeStrength"
             xChannelSelector="R"
             yChannelSelector="G"
+            result="refracted"
           />
+          <feColorMatrix in="refracted" type="saturate" values="1.12" />
         </filter>
       </defs>
     </svg>
@@ -325,12 +336,14 @@ onBeforeUnmount(() => {
    * Their fallbacks keep this primitive usable outside the application shell.
    * The default material is dark; .light/.light-modern supplies light fallbacks.
    */
-  --liquid-default-tint: rgb(226 242 255 / 10%);
-  --liquid-default-rim: rgb(255 255 255 / 25%);
-  --liquid-default-inner-light: rgb(255 255 255 / 47%);
-  --liquid-default-inner-edge: rgb(255 255 255 / 20%);
-  --liquid-default-reflection: rgb(255 255 255 / 15%);
-  --liquid-default-highlight: rgb(255 255 255 / 20%);
+  --liquid-default-tint: rgb(22 38 60 / 10%);
+  --liquid-default-rim: rgb(215 234 255 / 38%);
+  --liquid-default-inner-light: rgb(235 246 255 / 54%);
+  --liquid-default-inner-edge: rgb(255 255 255 / 12%);
+  --liquid-default-edge-shadow: rgb(0 8 25 / 44%);
+  --liquid-default-caustic: rgb(211 238 255 / 24%);
+  --liquid-default-reflection: rgb(220 239 255 / 3%);
+  --liquid-default-highlight: rgb(255 255 255 / 12%);
   --liquid-default-shadow: rgb(6 23 49 / 50%);
   --liquid-default-focus: #b7efff;
   position: relative;
@@ -342,12 +355,14 @@ onBeforeUnmount(() => {
 
 html.light .liquid-surface,
 html.light-modern .liquid-surface {
-  --liquid-default-tint: rgb(244 249 255 / 38%);
+  --liquid-default-tint: rgb(247 251 255 / 8%);
   --liquid-default-rim: rgb(255 255 255 / 72%);
   --liquid-default-inner-light: rgb(255 255 255 / 88%);
-  --liquid-default-inner-edge: rgb(255 255 255 / 42%);
-  --liquid-default-reflection: rgb(255 255 255 / 35%);
-  --liquid-default-highlight: rgb(255 255 255 / 42%);
+  --liquid-default-inner-edge: rgb(255 255 255 / 22%);
+  --liquid-default-edge-shadow: rgb(36 67 104 / 22%);
+  --liquid-default-caustic: rgb(255 255 255 / 62%);
+  --liquid-default-reflection: rgb(255 255 255 / 4%);
+  --liquid-default-highlight: rgb(255 255 255 / 18%);
   --liquid-default-shadow: rgb(39 61 91 / 24%);
   --liquid-default-focus: #1a6ccc;
 }
@@ -383,23 +398,57 @@ html.light-modern .liquid-surface {
   overflow: hidden;
   background: var(--liquid-tint, var(--liquid-default-tint));
   box-shadow:
-    inset 0 1px 0 var(--liquid-inner-light, var(--liquid-default-inner-light)),
-    inset 1px 0 0 var(--liquid-inner-edge, var(--liquid-default-inner-edge)),
-    inset -1px -1px 0 var(--liquid-inner-edge, var(--liquid-default-inner-edge)),
-    0 14px 40px -22px var(--liquid-shadow, var(--liquid-default-shadow));
+    inset 0 0 0 1px var(--liquid-inner-edge, var(--liquid-default-inner-edge)),
+    inset 0 -2px 3px -2px var(--liquid-edge-shadow, var(--liquid-default-edge-shadow)),
+    0 2px 6px -2px var(--liquid-shadow, var(--liquid-default-shadow)),
+    0 12px 32px -20px var(--liquid-shadow, var(--liquid-default-shadow));
 }
 
 .liquid-surface__shine {
   z-index: 1;
   overflow: hidden;
-  border: 1px solid var(--liquid-rim, var(--liquid-default-rim));
+  background: linear-gradient(
+    120deg,
+    var(--liquid-reflection, var(--liquid-default-reflection)),
+    transparent 30%,
+    transparent 72%,
+    var(--liquid-reflection-end, rgb(255 255 255 / 2%))
+  );
+}
+
+/* A lit upper lip and an opposing inner caustic describe a curved cross-section.
+ * Only the one-pixel rim reflects strongly; the broad face stays transparent. */
+.liquid-surface__shine::before,
+.liquid-surface__shine::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.liquid-surface__shine::before {
+  inset: 0;
+  padding: 1px;
   background: linear-gradient(
     145deg,
-    var(--liquid-reflection, var(--liquid-default-reflection)),
-    transparent 38%,
-    transparent 68%,
-    var(--liquid-reflection-end, rgb(255 255 255 / 8%))
+    var(--liquid-inner-light, var(--liquid-default-inner-light)) 4%,
+    var(--liquid-rim, var(--liquid-default-rim)) 20%,
+    var(--liquid-edge-shadow, var(--liquid-default-edge-shadow)) 45%,
+    var(--liquid-inner-edge, var(--liquid-default-inner-edge)) 65%,
+    var(--liquid-rim, var(--liquid-default-rim)) 88%
   );
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+}
+
+.liquid-surface__shine::after {
+  inset: 2px;
+  border-radius: max(0px, calc(var(--liquid-radius) - 2px));
+  box-shadow:
+    inset 0 1px 2px -1px var(--liquid-edge-shadow, var(--liquid-default-edge-shadow)),
+    inset 0 -2px 1px -1px var(--liquid-caustic, var(--liquid-default-caustic));
 }
 
 .liquid-surface__glow {

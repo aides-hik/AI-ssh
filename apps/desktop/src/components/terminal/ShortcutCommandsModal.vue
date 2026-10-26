@@ -445,7 +445,7 @@ if (props.visible) {
 
 .modal-title {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--prism-font-18);
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -456,7 +456,7 @@ if (props.visible) {
 .btn-close {
   background: none;
   border: none;
-  font-size: 20px;
+  font-size: var(--prism-font-20);
   cursor: pointer;
   color: var(--vscode-fg-muted);
   padding: 0;
@@ -499,7 +499,7 @@ if (props.visible) {
   border-radius: var(--prism-radius-control);
   background: var(--prism-control);
   color: var(--vscode-fg);
-  font-size: 14px;
+  font-size: var(--prism-font-14);
   min-height: 38px;
 }
 
@@ -521,7 +521,7 @@ if (props.visible) {
 }
 
 .stat-item {
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   color: var(--vscode-fg-muted);
   display: flex;
   align-items: center;
@@ -540,7 +540,7 @@ if (props.visible) {
   color: var(--vscode-fg-muted);
   border-radius: var(--prism-radius-small);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -572,7 +572,7 @@ if (props.visible) {
 }
 
 .empty-state i {
-  font-size: 48px;
+  font-size: var(--prism-font-48);
   margin-bottom: 16px;
   opacity: 0.5;
 }
@@ -582,7 +582,7 @@ if (props.visible) {
 }
 
 .empty-hint {
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   opacity: 0.7;
 }
 
@@ -619,7 +619,7 @@ if (props.visible) {
 
 .command-text {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   color: var(--vscode-fg);
   background: var(--prism-surface-raised);
   padding: 4px 8px;
@@ -635,7 +635,7 @@ if (props.visible) {
 }
 
 .usage-badge {
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   padding: 2px 8px;
   background: var(--vscode-accent);
   color: var(--vscode-button-foreground);
@@ -646,7 +646,7 @@ if (props.visible) {
 }
 
 .command-description {
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   color: var(--vscode-fg-muted);
   margin-bottom: 8px;
 }
@@ -659,7 +659,7 @@ if (props.visible) {
 }
 
 .tag {
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   padding: 2px 8px;
   background: var(--vscode-bg);
   color: var(--vscode-fg-muted);
@@ -671,7 +671,7 @@ if (props.visible) {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   color: var(--vscode-fg-muted);
 }
 
@@ -689,7 +689,7 @@ if (props.visible) {
   border-radius: var(--prism-radius-small);
   cursor: pointer;
   transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
-  font-size: 14px;
+  font-size: var(--prism-font-14);
   width: 32px;
   height: 32px;
   display: grid;
@@ -721,7 +721,7 @@ if (props.visible) {
   border-radius: var(--prism-radius-control);
   border: none;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--prism-font-14);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -754,7 +754,7 @@ if (props.visible) {
 .form-group label {
   display: block;
   margin-bottom: 6px;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   font-weight: 500;
   color: var(--vscode-fg);
 }
@@ -766,7 +766,7 @@ if (props.visible) {
   border-radius: var(--prism-radius-control);
   background: var(--prism-control);
   color: var(--vscode-fg);
-  font-size: 14px;
+  font-size: var(--prism-font-14);
   font-family: inherit;
   min-height: 38px;
 }
@@ -789,7 +789,7 @@ button:focus-visible { outline: 2px solid var(--vscode-accent); outline-offset: 
   .modal-wrapper, .edit-modal-wrapper { padding: 12px; }
   .modal-content, .modal-small { width: 100%; max-width: 100%; max-height: calc(100dvh - 24px); }
   .modal-header, .modal-body, .modal-footer { padding: 14px 16px; }
-  .modal-title { font-size: 16px; }
+  .modal-title { font-size: var(--prism-font-16); }
   .command-item { gap: 8px; }
   .command-actions { margin-left: 0; }
   .command-header { flex-wrap: wrap; gap: 8px; }

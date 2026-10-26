@@ -283,7 +283,7 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(24px) saturate(140%);
   box-shadow: var(--prism-shadow-raised);
   color: var(--prism-text);
-  font: 400 12px/1.65 var(--prism-font);
+  font: 400 var(--prism-font-12)/1.65 var(--prism-font);
   text-align: start;
   white-space: pre-line;
   overflow-wrap: anywhere;

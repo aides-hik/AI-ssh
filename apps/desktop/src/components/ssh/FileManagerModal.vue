@@ -686,7 +686,7 @@ const handleClose = () => {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 16px;
+  font-size: var(--prism-font-16);
   font-weight: 600;
   color: var(--vscode-fg);
 }
@@ -734,7 +734,7 @@ const handleClose = () => {
   border: 1px solid var(--vscode-border);
   border-radius: var(--prism-radius-control);
   color: var(--vscode-fg);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   cursor: pointer;
   transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
   min-height: 34px;
@@ -789,7 +789,7 @@ const handleClose = () => {
   border-radius: var(--prism-radius-control);
   color: var(--vscode-fg);
   font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   outline: none;
   min-width: 0;
   min-height: 36px;
@@ -818,7 +818,7 @@ const handleClose = () => {
 }
 
 .selected-info {
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   font-weight: 500;
 }
 
@@ -834,7 +834,7 @@ const handleClose = () => {
   padding: 10px 16px;
   background: color-mix(in srgb, var(--prism-control) 58%, transparent);
   border-bottom: 1px solid var(--vscode-border);
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   font-weight: 600;
   color: var(--vscode-fg-muted);
   text-transform: none;
@@ -876,7 +876,7 @@ const handleClose = () => {
 
 .loading-state i,
 .empty-state i {
-  font-size: 48px;
+  font-size: var(--prism-font-48);
 }
 
 .spinner {
@@ -927,14 +927,14 @@ const handleClose = () => {
 
 .file-icon {
   flex-shrink: 0;
-  font-size: 16px;
+  font-size: var(--prism-font-16);
 }
 
 .file-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
 }
 
 .file-col-size,
@@ -942,7 +942,7 @@ const handleClose = () => {
 .file-col-actions {
   display: flex;
   align-items: center;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   opacity: 1;
 }
 
@@ -990,7 +990,7 @@ const handleClose = () => {
   padding: 8px 20px;
   border-top: 1px solid var(--vscode-border);
   background: transparent;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   color: var(--vscode-fg-muted);
 }
 
@@ -1050,7 +1050,7 @@ const handleClose = () => {
   border: 1px solid var(--vscode-border);
   border-radius: var(--prism-radius-control);
   color: var(--vscode-fg);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   outline: none;
   min-height: 38px;
 }
@@ -1080,7 +1080,7 @@ const handleClose = () => {
 
 .vscode-button {
   padding: 6px 12px;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   border: 1px solid var(--vscode-border);
   border-radius: var(--prism-radius-control);
   background: var(--vscode-bg-light);
@@ -1128,7 +1128,7 @@ button { touch-action: manipulation; }
 @container file-workspace (max-width: 440px) {
   .file-list-header, .file-item { grid-template-columns: 24px minmax(0, 1fr) 74px; }
   .file-col-size { display: none; }
-  .toolbar-btn { padding-inline: 9px; font-size: 12px; }
+  .toolbar-btn { padding-inline: 9px; font-size: var(--prism-font-12); }
   .status-bar { gap: 8px; }
 }
 @media (hover: none) { .file-col-actions { opacity: 1; } }

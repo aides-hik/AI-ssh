@@ -67,7 +67,7 @@ onBeforeUnmount(() => {
   background: var(--prism-control);
   color: var(--prism-text);
   cursor: pointer;
-  font-size: 16px;
+  font-size: var(--prism-font-16);
   touch-action: manipulation;
   transition:
     background-color var(--prism-duration) var(--prism-ease),

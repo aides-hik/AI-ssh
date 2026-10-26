@@ -588,7 +588,7 @@ const handleDrop = (event: DragEvent) => {
   border: 1px solid transparent;
   border-radius: var(--prism-radius-control);
   position: relative;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   cursor: pointer;
   transition:
     background-color var(--prism-duration) var(--prism-ease),
@@ -632,7 +632,7 @@ const handleDrop = (event: DragEvent) => {
 .tree-node-icon {
   flex-shrink: 0;
   margin: 0 7px;
-  font-size: 15px;
+  font-size: var(--prism-font-15);
 }
 .tree-node-label-group {
   display: flex;
@@ -654,7 +654,7 @@ const handleDrop = (event: DragEvent) => {
   border-radius: var(--prism-radius-small);
   background: var(--prism-warning-bg);
   color: var(--prism-warning);
-  font-size: 10px;
+  font-size: var(--prism-font-10);
   line-height: 1.3;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -669,7 +669,7 @@ const handleDrop = (event: DragEvent) => {
   background: var(--prism-control);
   color: var(--prism-text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
 }
 .tree-node-input:focus-visible {
   outline: 2px solid var(--vscode-accent);
@@ -712,7 +712,7 @@ const handleDrop = (event: DragEvent) => {
   outline-offset: 1px;
 }
 .vscode-icon-button i {
-  font-size: 14px;
+  font-size: var(--prism-font-14);
 }
 .action-menu-wrapper {
   position: relative;
@@ -747,7 +747,7 @@ const handleDrop = (event: DragEvent) => {
   color: var(--prism-text);
   text-align: left;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   cursor: pointer;
   touch-action: manipulation;
   transition:
@@ -772,7 +772,7 @@ const handleDrop = (event: DragEvent) => {
 }
 .action-item i {
   width: 16px;
-  font-size: 14px;
+  font-size: var(--prism-font-14);
   text-align: center;
 }
 @media (hover: hover) and (pointer: fine) {

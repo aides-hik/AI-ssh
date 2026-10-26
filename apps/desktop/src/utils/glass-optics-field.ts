@@ -26,7 +26,7 @@ export function refractionGeometry(
   }
 }
 
-/** Preserve the original rounded-rectangle normal field and neutral flat centre. */
+/** A rounded bevel refracts the scene; the flat centre keeps it undistorted. */
 export function fillRefractionRows(
   geometry: RefractionGeometry,
   pixels: Uint8ClampedArray,
@@ -36,7 +36,10 @@ export function fillRefractionRows(
   const { width, height, radius, mapWidth, mapHeight } = geometry
   const halfWidth = width / 2
   const halfHeight = height / 2
-  const rim = Math.min(32, Math.max(9, Math.min(width, height) * 0.24))
+  // Bevel width follows the corner geometry, rather than growing with the panel.
+  // Keeping it inside the corner radius also avoids the SDF's medial-axis seam.
+  const rim = Math.min(32, Math.max(6, radius * 0.88), Math.min(width, height) * 0.35)
+  const inverseGlassIndex = 1 / 1.46
   for (let y = startRow; y < endRow; y++) {
     const py = ((y + 0.5) / mapHeight) * height - halfHeight
     for (let x = 0; x < mapWidth; x++) {
@@ -60,8 +63,26 @@ export function fillRefractionRows(
         } else if (qx > qy) normalX = Math.sign(px)
         else normalY = Math.sign(py)
         const depth = Math.min(1, -distance / rim)
-        const smoothDepth = depth * depth * (3 - 2 * depth)
-        const bend = 118 * Math.pow(1 - smoothDepth, 1.6)
+        const edge = 1 - depth
+        // A convex cross-section rises from the silhouette to a flat top:
+        // h = sqrt(1 - edge³). Its slope reaches zero smoothly at the flat join.
+        // Trace a perpendicular ray through that curved air/glass interface and
+        // the flat underside using Snell's law, with a glass index of 1.46.
+        const height = Math.sqrt(1 - edge * edge * edge)
+        const slopeX = 1.275 * edge * edge
+        const normalLength = Math.hypot(slopeX, height)
+        const sinIncident = slopeX / normalLength
+        const cosIncident = height / normalLength
+        const sinRefracted = sinIncident * inverseGlassIndex
+        const cosRefracted = Math.sqrt(1 - sinRefracted * sinRefracted)
+        const rayX = sinIncident * cosRefracted - cosIncident * sinRefracted
+        const rayZ = cosIncident * cosRefracted + sinIncident * sinRefracted
+        const displacement = (height * rayX) / rayZ
+        // The silhouette itself has no glass thickness. A short coverage ramp
+        // keeps the PNG's bilinear sampling continuous across rounded corners.
+        const coverage = Math.min(1, depth / 0.16)
+        const smoothCoverage = coverage * coverage * (3 - 2 * coverage)
+        const bend = Math.min(116, displacement * 480) * smoothCoverage
         red = Math.round(128 - normalX * bend)
         green = Math.round(128 - normalY * bend)
       }

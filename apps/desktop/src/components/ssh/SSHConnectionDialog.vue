@@ -561,11 +561,11 @@ const handleTest = async () => {
   border-radius: var(--prism-radius-row);
   background: color-mix(in srgb, var(--vscode-accent) 12%, transparent);
   color: var(--vscode-accent);
-  font-size: 21px;
+  font-size: var(--prism-font-21);
 }
 
 .modal-title {
-  font-size: 18px;
+  font-size: var(--prism-font-18);
   font-weight: 650;
   color: var(--vscode-fg);
   margin: 0;
@@ -574,7 +574,7 @@ const handleTest = async () => {
 .modal-description {
   margin: 5px 0 0;
   color: var(--vscode-fg-muted);
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   line-height: 1.5;
 }
 
@@ -609,7 +609,7 @@ const handleTest = async () => {
 }
 
 .close-button i {
-  font-size: 20px;
+  font-size: var(--prism-font-20);
 }
 
 .modal-body {
@@ -640,7 +640,7 @@ const handleTest = async () => {
 
 .form-label {
   display: block;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   font-weight: 550;
   color: var(--vscode-fg);
   margin-bottom: 8px;
@@ -658,7 +658,7 @@ const handleTest = async () => {
   background: var(--prism-control);
   color: var(--vscode-input-foreground);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   line-height: 1.4;
   transition:
     border-color 100ms ease-out,
@@ -699,7 +699,7 @@ const handleTest = async () => {
   border: 1px solid color-mix(in srgb, var(--prism-danger) 30%, transparent);
   border-radius: var(--prism-radius-control);
   color: var(--prism-danger);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   margin-bottom: 16px;
 }
 
@@ -713,7 +713,7 @@ const handleTest = async () => {
   border: 1px solid color-mix(in srgb, var(--prism-success) 30%, transparent);
   border-radius: var(--prism-radius-control);
   color: var(--prism-success);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   margin-bottom: 16px;
 }
 
@@ -732,7 +732,7 @@ const handleTest = async () => {
 .btn-test {
   min-height: 38px;
   padding: 9px 16px;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   border-radius: var(--prism-radius-control);
   cursor: pointer;
   transition:

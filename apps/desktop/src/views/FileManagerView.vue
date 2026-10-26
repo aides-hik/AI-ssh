@@ -2212,7 +2212,7 @@ onBeforeUnmount(() => {
 }
 
 .connection-name {
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   font-weight: 500;
   color: var(--vscode-fg);
 }
@@ -2223,12 +2223,12 @@ onBeforeUnmount(() => {
   gap: 4px;
   padding: 4px 9px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   font-weight: 500;
 }
 
 .status-badge i {
-  font-size: 8px;
+  font-size: var(--prism-font-8);
 }
 
 .status-badge.connected {
@@ -2267,7 +2267,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--vscode-border);
   border-radius: var(--prism-radius-control);
   color: var(--vscode-fg);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   cursor: pointer;
   transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
   min-height: 34px;
@@ -2322,7 +2322,7 @@ onBeforeUnmount(() => {
   border-radius: var(--prism-radius-control);
   color: var(--vscode-fg);
   font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   outline: none;
   min-width: 0;
   min-height: 36px;
@@ -2361,7 +2361,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  font-size: 14px;
+  font-size: var(--prism-font-14);
   text-align: center;
   z-index: 10;
   border: 2px dashed var(--vscode-accent);
@@ -2375,7 +2375,7 @@ onBeforeUnmount(() => {
 }
 
 .file-drop-overlay i {
-  font-size: 32px;
+  font-size: var(--prism-font-32);
 }
 
 .selected-count {
@@ -2386,7 +2386,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--vscode-accent);
   border-radius: var(--prism-radius-small);
   color: var(--vscode-badge-foreground);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   font-weight: 500;
   margin-right: 8px;
 }
@@ -2398,7 +2398,7 @@ onBeforeUnmount(() => {
   padding: 10px 16px;
   background: color-mix(in srgb, var(--prism-control) 58%, transparent);
   border-bottom: 1px solid var(--vscode-border);
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   font-weight: 600;
   color: var(--vscode-fg-muted);
   text-transform: none;
@@ -2438,7 +2438,7 @@ onBeforeUnmount(() => {
 }
 
 .empty-state i {
-  font-size: 48px;
+  font-size: var(--prism-font-48);
 }
 
 .spinner {
@@ -2491,7 +2491,7 @@ onBeforeUnmount(() => {
 
 .file-item.parent-dir .file-icon {
   color: var(--vscode-accent);
-  font-size: 16px;
+  font-size: var(--prism-font-16);
 }
 
 .file-item.parent-dir .file-name {
@@ -2500,7 +2500,7 @@ onBeforeUnmount(() => {
 }
 
 .parent-hint {
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   color: var(--vscode-fg-muted);
   font-style: italic;
 }
@@ -2520,14 +2520,14 @@ onBeforeUnmount(() => {
 
 .file-icon {
   flex-shrink: 0;
-  font-size: 14px;
+  font-size: var(--prism-font-14);
 }
 
 .file-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 
 .file-col-size,
@@ -2535,7 +2535,7 @@ onBeforeUnmount(() => {
 .file-col-actions {
   display: flex;
   align-items: center;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   color: var(--vscode-fg-muted);
   opacity: 1;
 }
@@ -2563,7 +2563,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   color: var(--vscode-fg-muted);
   transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 
 .action-btn:hover {
@@ -2605,7 +2605,7 @@ onBeforeUnmount(() => {
   padding: 8px 12px;
   border-top: 1px solid var(--vscode-border);
   background: transparent;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   color: var(--vscode-fg-muted);
 }
 
@@ -2639,7 +2639,7 @@ onBeforeUnmount(() => {
 
 .download-progress-indicator i {
   color: var(--vscode-accent);
-  font-size: 14px;
+  font-size: var(--prism-font-14);
   animation: bounce 2s infinite;
   flex-shrink: 0;
 }
@@ -2666,7 +2666,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   color: var(--vscode-fg);
 }
 
@@ -2748,7 +2748,7 @@ onBeforeUnmount(() => {
 
 .create-folder-dialog .modal-header h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--prism-font-16);
   font-weight: 600;
   color: var(--vscode-fg);
 }
@@ -2764,7 +2764,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--vscode-border);
   border-radius: var(--prism-radius-control);
   color: var(--vscode-fg);
-  font-size: 14px;
+  font-size: var(--prism-font-14);
   font-family: inherit;
   outline: none;
   transition: border-color 0.2s;
@@ -2793,7 +2793,7 @@ onBeforeUnmount(() => {
   padding: 8px 16px;
   border: none;
   border-radius: var(--prism-radius-small);
-  font-size: 14px;
+  font-size: var(--prism-font-14);
   font-weight: 500;
   cursor: pointer;
   transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
@@ -2836,7 +2836,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--vscode-accent);
   border-radius: var(--prism-radius-control);
   color: var(--prism-text);
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   font-weight: 500;
   margin-right: 8px;
   cursor: pointer;
@@ -2850,7 +2850,7 @@ onBeforeUnmount(() => {
 }
 
 .upload-progress-indicator i {
-  font-size: 14px;
+  font-size: var(--prism-font-14);
 }
 
 .upload-progress-indicator .progress-info {
@@ -2864,7 +2864,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  font-size: 12px;
+  font-size: var(--prism-font-12);
 }
 
 .upload-progress-indicator .upload-count {
@@ -2873,7 +2873,7 @@ onBeforeUnmount(() => {
 }
 
 .upload-progress-indicator .current-file {
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   color: var(--vscode-fg-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -2882,7 +2882,7 @@ onBeforeUnmount(() => {
 }
 
 .upload-progress-indicator .upload-status {
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   color: var(--vscode-fg-muted);
 }
 
@@ -2950,7 +2950,7 @@ onBeforeUnmount(() => {
 
 .upload-manager-modal .modal-header h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--prism-font-16);
   font-weight: 600;
   color: var(--vscode-fg);
 }
@@ -2998,7 +2998,7 @@ onBeforeUnmount(() => {
 
 .download-manager-modal .modal-header h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--prism-font-16);
   font-weight: 600;
   color: var(--vscode-fg);
 }
@@ -3038,7 +3038,7 @@ onBeforeUnmount(() => {
 }
 
 .empty-tasks i {
-  font-size: 48px;
+  font-size: var(--prism-font-48);
   margin-bottom: 16px;
 }
 
@@ -3075,7 +3075,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  font-size: 18px;
+  font-size: var(--prism-font-18);
 }
 
 .task-item.downloading .task-icon {
@@ -3108,7 +3108,7 @@ onBeforeUnmount(() => {
 }
 
 .task-name {
-  font-size: 13px;
+  font-size: var(--prism-font-13);
   font-weight: 500;
   color: var(--vscode-fg);
   overflow: hidden;
@@ -3121,7 +3121,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   color: var(--vscode-fg-muted);
   margin-bottom: 6px;
 }
@@ -3164,7 +3164,7 @@ onBeforeUnmount(() => {
 }
 
 .task-error {
-  font-size: 11px;
+  font-size: var(--prism-font-11);
   color: var(--vscode-error);
   margin-top: 4px;
 }
@@ -3217,7 +3217,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--vscode-border);
   border-radius: var(--prism-radius-small);
   color: var(--vscode-fg);
-  font-size: 12px;
+  font-size: var(--prism-font-12);
   cursor: pointer;
   transition: background-color var(--prism-duration) var(--prism-ease), border-color var(--prism-duration) var(--prism-ease), color var(--prism-duration) var(--prism-ease), opacity var(--prism-duration) var(--prism-ease), transform var(--prism-duration) var(--prism-ease);
 }
@@ -3261,7 +3261,7 @@ button { touch-action: manipulation; }
 @container file-workspace (max-width: 440px) {
   .file-list-header, .file-item { grid-template-columns: 24px minmax(0, 1fr) 74px; }
   .file-col-size { display: none; }
-  .toolbar-btn { padding-inline: 9px; font-size: 12px; }
+  .toolbar-btn { padding-inline: 9px; font-size: var(--prism-font-12); }
   .status-bar { gap: 8px; }
 }
 @media (hover: none) { .file-col-actions { opacity: 1; } }
