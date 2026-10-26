@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f8f9f6" />
+    <meta name="description" content="棱镜 Prism，将 SSH 终端、SFTP 文件管理与 AI 助手放进同一个桌面工作区。支持多服务器巡检与分阶段审核的 Docker / Compose 部署，桌面端无需账号或后端，自由配置模型。" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:title" content="棱镜 Prism · 让服务器管理，多一个 AI 助手。" />
+    <meta property="og:description" content="SSH、SFTP 与 AI，在同一个桌面工作区。连接你的服务器，使用你选择的模型。" />
+    <meta property="og:url" content="https://aides-hik.github.io/AI-ssh/" />
+    <meta property="og:image" content="https://aides-hik.github.io/AI-ssh/assets/social-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="棱镜 Prism：让服务器管理，多一个 AI 助手。支持 Windows、macOS 与 Linux。" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="color-scheme" content="light" />
+    <title>棱镜 Prism · 让服务器管理，多一个 AI 助手。</title>
+    <link rel="canonical" href="https://aides-hik.github.io/AI-ssh/" />
+    <link rel="icon" type="image/png" href="./assets/prism.png" />
+    <link rel="apple-touch-icon" href="./assets/prism.png" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./main.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳转到主要内容</a>
+    <svg class="svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+      <defs>
+        <symbol id="icon-arrow-right" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6" /></symbol>
+        <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M5 16v4h14v-4" /></symbol>
+        <symbol id="icon-external" viewBox="0 0 24 24"><path d="M14 4h6v6m0-6L10 14m0-9H5a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h13a1 1 0 0 0 1-1v-5" /></symbol>
+        <symbol id="icon-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3" /><path d="m7 9 3 3-3 3m6 0h4" /></symbol>
+        <symbol id="icon-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9H3Zm0 5h18" /></symbol>
+        <symbol id="icon-sparkle" viewBox="0 0 24 24"><path d="m12 3 2.8 6.2L21 12l-6.2 2.8L12 21l-2.8-6.2L3 12l6.2-2.8L12 3Z" /><path d="m20 2 .6 1.4L22 4l-1.4.6L20 6l-.6-1.4L18 4l1.4-.6L20 2Z" /></symbol>
+        <symbol id="icon-server" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2" /><rect x="3" y="14" width="18" height="7" rx="2" /><path d="M7 6.5h.01M7 17.5h.01M14 6.5h3M14 17.5h3" /></symbol>
+        <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" /></symbol>
+        <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5" /></symbol>
+        <symbol id="icon-github" viewBox="0 0 24 24"><path d="M9 19c-4.4 1.3-4.4-2-6-2.5M15 22v-3.4c0-1 .1-1.5-.5-2.1 3.3-.4 6.8-1.6 6.8-7.3a5.7 5.7 0 0 0-1.5-4c.2-1.1.2-2.2-.3-3.2 0 0-1.2-.4-4 1.5a14.5 14.5 0 0 0-7 0C5.8 1.6 4.5 2 4.5 2c-.5 1-.5 2.1-.3 3.2a5.7 5.7 0 0 0-1.5 4c0 5.7 3.5 6.9 6.8 7.3-.5.5-.6 1.1-.5 2.1V22" /></symbol>
+        <symbol id="icon-code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 18" /></symbol>
+        <symbol id="icon-layers" viewBox="0 0 24 24"><path d="m12 3 10 6-10 6L2 9l10-6Zm-9 11 9 5 9-5M3 18l9 5 9-5" /></symbol>
+        <symbol id="icon-windows" viewBox="0 0 24 24"><path d="m3 5 8-1v7H3V5Zm10-1 8-1v8h-8V4ZM3 13h8v7l-8-1v-6Zm10 0h8v8l-8-1v-7Z" /></symbol>
+        <symbol id="icon-apple" viewBox="0 0 24 24"><path d="M14.5 3c.6-1 .7-1.8.6-2.5-1.1.1-2.2.7-2.9 1.5-.6.7-1 1.6-.9 2.5 1.2.1 2.4-.6 3.2-1.5ZM18.5 12.6c0-2.8 2.3-4.2 2.4-4.3-1.3-1.9-3.3-2.2-4-2.2-1.7-.2-3.3 1-4.2 1-.8 0-2.1-1-3.5-1C7.3 6.1 5.6 7.2 4.7 9c-1.9 3.5-.5 8.6 1.4 11.4.9 1.4 2 2.9 3.5 2.8 1.4-.1 2-1 3.7-1 1.7 0 2.2 1 3.7 1 1.6 0 2.5-1.4 3.4-2.8 1.1-1.5 1.5-3 1.6-3.1-.1 0-3.5-1.3-3.5-4.7Z" /></symbol>
+        <symbol id="icon-linux" viewBox="0 0 24 24"><path d="M9 10c-1-2 0-7 3-7s4 5 3 7c2 2 4 5 3 8-1 3-11 3-12 0-1-3 1-6 3-8Z" /><path d="m10 10 2 1 2-1M10 7h.01M14 7h.01M5 18l-2 3h6m10-3 2 3h-6" /></symbol>
+      </defs>
+    </svg>
+
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="#" aria-label="棱镜 Prism 首页">
+          <img class="brand-icon" src="./assets/prism.png" alt="" width="36" height="36" />
+          <span class="brand-name">棱镜 <span>Prism</span></span>
+        </a>
+        <nav class="main-nav" aria-label="主导航">
+          <a href="#features">功能</a>
+          <a href="#workflow">工作流</a>
+          <a href="#faq">常见问题</a>
+          <a class="nav-github" href="https://github.com/aides-hik/AI-ssh">GitHub <svg class="icon" aria-hidden="true"><use href="#icon-external" /></svg></a>
+        </nav>
+        <a class="button button-small header-download" href="#download">下载棱镜 <svg class="icon" aria-hidden="true"><use href="#icon-download" /></svg></a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero container" aria-labelledby="hero-title">
+        <div class="hero-light" aria-hidden="true"></div>
+        <p class="eyebrow hero-eyebrow"><span class="eyebrow-line"></span> 你的服务器，你的 AI 工作区</p>
+        <h1 id="hero-title">让服务器管理，<br />多一个 <span class="hero-accent">AI 助手<span class="accent-dot">。</span></span></h1>
+        <p class="hero-description">SSH 终端、远程文件与 AI，在同一个窗口。<br class="desktop-break" />从日常命令到多机部署，让每一步操作更有头绪。</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#download">下载棱镜 <svg class="icon" aria-hidden="true"><use href="#icon-download" /></svg></a>
+          <a class="button button-quiet" href="#workflow">看看它如何工作 <svg class="icon" aria-hidden="true"><use href="#icon-arrow-right" /></svg></a>
+        </div>
+        <p class="hero-meta">Windows · macOS · Linux <span aria-hidden="true">/</span> 桌面端无需账号与后端</p>
+      </section>
+
+      <section class="product-preview container" id="workflow" aria-labelledby="preview-title">
+        <div class="preview-heading">
+          <h2 id="preview-title">少一点窗口切换，多一点上下文。</h2>
+          <p class="simulation-label"><span aria-hidden="true"></span> 交互示意 · 模拟数据</p>
+        </div>
+        <figure class="workspace" data-demo-root aria-label="棱镜工作区交互示意，使用模拟服务器和模拟输出">
+          <div class="workspace-chrome">
+            <div class="window-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+            <span class="window-name">棱镜 <span>/ Prism</span></span>
+            <span class="window-caption">DESKTOP WORKSPACE</span>
+          </div>
+          <div class="workspace-body">
+            <aside class="workspace-sidebar" aria-label="示例服务器">
+              <div class="sidebar-heading"><svg class="icon" aria-hidden="true"><use href="#icon-layers" /></svg> 我的工作区</div>
+              <div class="sidebar-group">示例环境 <span>2</span></div>
+              <div class="server-row is-current"><svg class="icon" aria-hidden="true"><use href="#icon-server" /></svg><div><strong>web-01</strong><small>Ubuntu · 示例主机</small></div><span class="status-dot" aria-label="模拟已连接"></span></div>
+              <div class="server-row"><svg class="icon" aria-hidden="true"><use href="#icon-server" /></svg><div><strong>web-02</strong><small>Ubuntu · 示例主机</small></div><span class="status-dot" aria-label="模拟已连接"></span></div>
+              <div class="sidebar-note"><svg class="icon" aria-hidden="true"><use href="#icon-sparkle" /></svg><span>终端、文件与 AI<br />在这里协作。</span></div>
+              <div class="sidebar-bottom"><span class="status-dot"></span> 模拟连接 · 未连接真实服务器</div>
+            </aside>
+            <div class="workspace-main">
+              <div class="demo-tabs" role="tablist" aria-label="选择产品演示场景" data-demo-tabs hidden>
+                <button class="demo-tab" id="tab-inspect" type="button" role="tab" aria-selected="true" aria-controls="demo-inspect" tabindex="0" data-demo-tab="inspect"><svg class="icon" aria-hidden="true"><use href="#icon-sparkle" /></svg> 多机巡检</button>
+                <button class="demo-tab" id="tab-deploy" type="button" role="tab" aria-selected="false" aria-controls="demo-deploy" tabindex="-1" data-demo-tab="deploy"><svg class="icon" aria-hidden="true"><use href="#icon-code" /></svg> 审核部署</button>
+                <button class="demo-tab" id="tab-files" type="button" role="tab" aria-selected="false" aria-controls="demo-files" tabindex="-1" data-demo-tab="files"><svg class="icon" aria-hidden="true"><use href="#icon-folder" /></svg> 远程文件</button>
+                <span class="demo-tabs-note" aria-hidden="true">试着切换场景 <span>↖</span></span>
+              </div>
+
+              <section class="demo-panel" id="demo-inspect" role="tabpanel" aria-label="多服务器巡检模拟演示" tabindex="0" data-demo-panel="inspect">
+                <div class="inspect-layout">
+                  <div class="terminal-pane">
+                    <div class="pane-heading"><span><svg class="icon" aria-hidden="true"><use href="#icon-terminal" /></svg> 终端 <span class="pane-heading-muted">/ web-01</span></span><span class="terminal-live"><span class="status-dot"></span> 模拟输出</span></div>
+                    <div class="terminal-content" aria-label="磁盘检查的模拟终端输出">
+                      <p><span class="terminal-prompt">user@web-01</span><span class="terminal-muted">:~$</span> df -h /</p>
+                      <p class="terminal-muted">Filesystem &nbsp; Size &nbsp; Used &nbsp; Avail &nbsp; Use%</p>
+                      <p>/dev/vda1 &nbsp;&nbsp; 40G &nbsp; 33G &nbsp;&nbsp; 7G &nbsp; <span class="terminal-warning">82%</span></p>
+                      <p class="terminal-space"><span class="terminal-prompt">user@web-01</span><span class="terminal-muted">:~$</span> systemctl is-active nginx</p>
+                      <p class="terminal-success">active</p>
+                      <p class="terminal-space"><span class="terminal-prompt">user@web-01</span><span class="terminal-muted">:~$</span> <span class="terminal-cursor" aria-hidden="true"></span></p>
+                    </div>
+                    <div class="terminal-footer"><span>SSH</span><span>UTF-8</span><span>仅用于展示</span></div>
+                  </div>
+                  <div class="assistant-pane">
+                    <div class="pane-heading"><span><svg class="icon" aria-hidden="true"><use href="#icon-sparkle" /></svg> AI 助手</span><span class="model-badge">你选择的模型</span></div>
+                    <div class="assistant-conversation">
+                      <div class="mock-user-message">检查这两台服务器的磁盘和服务状态。</div>
+                      <div class="assistant-message"><span class="assistant-avatar" aria-hidden="true">✳</span><div><p class="assistant-message-title">巡检结果已整理</p><p class="assistant-copy">web-01 的磁盘使用率偏高，建议进一步检查日志目录。</p></div></div>
+                      <div class="inspection-results" aria-label="模拟巡检结果">
+                        <div class="inspection-row"><div><svg class="icon" aria-hidden="true"><use href="#icon-server" /></svg><strong>web-01</strong></div><span class="result-warning">磁盘 82%</span><span class="result-good">Nginx 运行中</span></div>
+                        <div class="inspection-row"><div><svg class="icon" aria-hidden="true"><use href="#icon-server" /></svg><strong>web-02</strong></div><span class="result-neutral">磁盘 36%</span><span class="result-good">Nginx 运行中</span></div>
+                      </div>
+                      <p class="assistant-next-step">下一步：先读取日志目录占用，再决定如何处理。</p>
+                    </div>
+                    <div class="mock-composer"><span class="composer-target"><svg class="icon" aria-hidden="true"><use href="#icon-server" /></svg> 2 台目标</span><span>从同一段对话，继续操作…</span><span class="composer-send" aria-hidden="true">↑</span></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="demo-panel" id="demo-deploy" role="tabpanel" aria-label="审核部署模拟演示" tabindex="0" data-demo-panel="deploy">
+                <div class="deploy-layout">
+                  <div class="deploy-overview">
+                    <div class="demo-panel-kicker"><svg class="icon" aria-hidden="true"><use href="#icon-code" /></svg> Docker Compose 部署</div>
+                    <h3>执行之前，<br />先看清这一步。</h3>
+                    <p>目标服务器、命令与验证步骤一并展开。确认后，再继续执行。</p>
+                    <ol class="deploy-step-list"><li class="is-done"><span>01</span> 检查环境 <svg class="icon" aria-hidden="true"><use href="#icon-check" /></svg></li><li class="is-active"><span>02</span> 审核部署阶段</li><li><span>03</span> 执行与验证</li></ol>
+                  </div>
+                  <div class="approval-card">
+                    <div class="approval-card-heading"><span class="approval-tag">阶段审核 · 模拟</span><span class="approval-stage">阶段 02</span></div>
+                    <h4>更新服务并验证状态</h4>
+                    <p class="approval-target"><svg class="icon" aria-hidden="true"><use href="#icon-server" /></svg> 操作目标 <strong>web-01</strong><span>超时 5 分钟</span></p>
+                    <pre class="approval-code"><code><span class="code-comment"># 部署命令 · 示例</span>
+docker compose up -d
+
+<span class="code-comment"># 验证命令 · 示例</span>
+docker compose ps
+curl --fail http://localhost:8080/health</code></pre>
+                    <div class="approval-footer"><p data-demo-deploy-status role="status" aria-live="polite">此处只演示流程，不执行命令。</p><button class="button button-primary button-small" type="button" data-demo-approve hidden>确认并模拟执行 <svg class="icon" aria-hidden="true"><use href="#icon-arrow-right" /></svg></button></div>
+                    <div class="demo-execution-log" data-demo-deploy-log aria-label="模拟执行日志" aria-live="polite" hidden></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="demo-panel" id="demo-files" role="tabpanel" aria-label="SFTP 文件管理模拟演示" tabindex="0" data-demo-panel="files">
+                <div class="file-manager">
+                  <div class="file-toolbar"><span><svg class="icon" aria-hidden="true"><use href="#icon-folder" /></svg><strong>文件管理</strong><span class="file-toolbar-host">web-01</span></span><span class="file-operation-hint">浏览 · 上传 · 下载</span></div>
+                  <div class="file-breadcrumb"><span>/</span><span>srv</span><span>/</span><strong>example-app</strong><span class="file-breadcrumb-label">SFTP · 模拟目录</span></div>
+                  <div class="file-table-wrap"><table class="file-table"><caption class="sr-only">模拟远程文件目录，包含名称、类型和大小</caption><thead><tr><th scope="col">名称</th><th scope="col">类型</th><th scope="col">大小</th><th scope="col">修改时间</th></tr></thead><tbody><tr><td><svg class="icon folder-icon" aria-hidden="true"><use href="#icon-folder" /></svg> logs</td><td>文件夹</td><td>—</td><td>今天 09:30</td></tr><tr><td><svg class="icon folder-icon" aria-hidden="true"><use href="#icon-folder" /></svg> data</td><td>文件夹</td><td>—</td><td>今天 09:20</td></tr><tr><td><svg class="icon" aria-hidden="true"><use href="#icon-code" /></svg> compose.yaml</td><td>YAML</td><td>1.2 KB</td><td>今天 09:15</td></tr><tr><td><svg class="icon" aria-hidden="true"><use href="#icon-code" /></svg> README.md</td><td>Markdown</td><td>2.4 KB</td><td>昨天 16:42</td></tr></tbody></table></div>
+                  <p class="file-manager-note"><svg class="icon" aria-hidden="true"><use href="#icon-folder" /></svg> 连接服务器后，即可在桌面端管理远程文件。以上名称、大小与时间均为模拟数据。</p>
+                </div>
+              </section>
+            </div>
+          </div>
+          <figcaption class="workspace-caption"><span>从连接到理解，再到确认执行。</span><span>网页演示不会连接服务器或调用模型，非真实产品截图。</span></figcaption>
+        </figure>
+        <div class="preview-footnotes"><span><svg class="icon" aria-hidden="true"><use href="#icon-check" /></svg> SSH 与 SFTP</span><span><svg class="icon" aria-hidden="true"><use href="#icon-check" /></svg> 自选模型服务</span><span><svg class="icon" aria-hidden="true"><use href="#icon-check" /></svg> 多服务器协作</span><span><svg class="icon" aria-hidden="true"><use href="#icon-check" /></svg> 分阶段审核部署</span></div>
+      </section>
+
+      <section class="features section-space container" id="features" aria-labelledby="features-title">
+        <div class="section-heading"><div><p class="eyebrow">BUILT AROUND YOUR WORKFLOW</p><h2 id="features-title">熟悉的工具，<br />更连贯的工作流。</h2></div><p class="section-description">把终端、文件和对话连起来。<br />日常操作有趁手的工具，复杂任务有 AI 一起梳理。</p></div>
+        <div class="feature-grid">
+          <article class="feature-card feature-terminal">
+            <div class="feature-card-top"><span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#icon-terminal" /></svg></span><span class="feature-number">01 / SSH</span></div>
+            <h3>从连接，到下一条命令。</h3><p>管理服务器与分组，在多标签终端之间切换。<br class="desktop-break" />命令自动补全和快捷命令，让熟悉的操作触手可及。</p>
+            <div class="mini-terminal" aria-hidden="true"><div><span>web-01</span><span>web-02</span><span>＋</span></div><code><span>user@web-01</span> ~ <b>❯</b> docker compose ps<span class="mini-cursor"></span></code></div>
+          </article>
+          <article class="feature-card feature-files">
+            <div class="feature-card-top"><span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#icon-folder" /></svg></span><span class="feature-number">02 / SFTP</span></div>
+            <h3>远程文件，顺手管理。</h3><p>浏览目录、上传下载、创建和删除。<br />文件管理，就在终端旁边。</p>
+            <div class="mini-files" aria-hidden="true"><div class="mini-file"><svg class="icon" aria-hidden="true"><use href="#icon-folder" /></svg><span>本地文件</span></div><span class="file-transfer">⇄</span><div class="mini-file"><svg class="icon" aria-hidden="true"><use href="#icon-server" /></svg><span>远程服务器</span></div></div>
+          </article>
+          <article class="feature-card feature-multi">
+            <div class="feature-card-top"><span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#icon-server" /></svg></span><span class="feature-number">03 / MULTI-SERVER</span></div>
+            <h3>一段对话，多台服务器。</h3><p>选中已连接的主机，检查 CPU、内存、磁盘、服务与端口，按服务器查看结果。</p>
+            <div class="server-chips" aria-hidden="true"><span><i></i> web-01</span><span><i></i> web-02</span><span class="server-chip-add">＋</span></div>
+          </article>
+          <article class="feature-card feature-ai">
+            <div class="feature-card-top"><span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#icon-sparkle" /></svg></span><span class="feature-number">04 / YOUR AI</span></div>
+            <h3>模型，由你选择。</h3><p>解释命令、分析终端输出、辅助服务器操作。配置自己的模型服务，也可使用本地 Ollama。</p>
+            <div class="model-chips" aria-hidden="true"><span>OpenAI 兼容</span><span>Claude</span><span>Ollama</span></div>
+          </article>
+          <article class="feature-card feature-deploy">
+            <div class="feature-card-top"><span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#icon-code" /></svg></span><span class="feature-number">05 / REVIEW & DEPLOY</span></div>
+            <h3>每一步执行，先看清楚。</h3><p>Docker / Compose 按阶段审核目标和命令，包含部署与回滚验证，执行进度和日志随时可查。</p>
+            <div class="mini-approval" aria-hidden="true"><span><svg class="icon" aria-hidden="true"><use href="#icon-check" /></svg> 确认目标</span><i>→</i><span>审核命令</span><i>→</i><span>执行验证</span></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="control-section section-space" aria-labelledby="control-title">
+        <div class="container control-inner"><div class="control-intro"><p class="eyebrow">UNDERSTAND. REVIEW. EXECUTE.</p><h2 id="control-title">有 AI 协助，<br />也有你的判断。</h2><p>让助手整理信息，把需要确认的目标和执行内容展开。每一步为什么做、会做什么，都值得先看一眼。</p><a class="text-link" href="https://github.com/aides-hik/AI-ssh#多服务器巡检与部署">阅读巡检与部署说明 <svg class="icon" aria-hidden="true"><use href="#icon-arrow-right" /></svg></a></div><ol class="control-steps"><li><span class="control-step-index">01</span><div><h3>先了解，再行动</h3><p>专用巡检与读取工具直接执行，整理各服务器的状态和上下文。</p></div></li><li><span class="control-step-index">02</span><div><h3>目标和命令，逐项审核</h3><p>自定义命令、部署阶段与服务器环境文档修改，先展示确切内容，确认后执行。</p></div></li><li><span class="control-step-index">03</span><div><h3>执行之后，查看验证结果</h3><p>跟随实时输出、复制日志或停止执行。命令完成后，继续用验证结果判断服务状态。</p></div></li></ol></div>
+      </section>
+
+      <section class="getting-started section-space container" id="start" aria-labelledby="start-title">
+        <div class="section-heading"><div><p class="eyebrow">A FEW STEPS TO YOUR WORKSPACE</p><h2 id="start-title">从你的第一台服务器开始。</h2></div><a class="text-link" href="https://github.com/aides-hik/AI-ssh#连接第一台服务器">查看完整指南 <svg class="icon" aria-hidden="true"><use href="#icon-arrow-right" /></svg></a></div>
+        <ol class="start-grid"><li><span class="start-step">01 <span aria-hidden="true">↘</span></span><h3>安装棱镜</h3><p>下载适合当前系统的安装包。桌面端独立运行，无需注册账号或部署后端。</p><a class="text-link" href="#download">选择你的平台 <svg class="icon" aria-hidden="true"><use href="#icon-arrow-right" /></svg></a></li><li><span class="start-step">02 <span aria-hidden="true">↘</span></span><h3>连接服务器</h3><p>新建连接，填写地址、端口与用户名，使用密码认证。连接后即可打开终端和文件管理。</p><span class="start-note">当前建议使用密码认证</span></li><li><span class="start-step">03 <span aria-hidden="true">↗</span></span><h3>按需配置 AI</h3><p>在设置中添加模型服务地址和 API Key，启用支持工具调用的模型，再选择操作目标。</p><span class="start-note">也可接入本地 Ollama</span></li></ol>
+      </section>
+
+      <section class="download-section container" id="download" aria-labelledby="download-title">
+        <div class="download-heading"><div class="download-brand"><img src="./assets/prism.png" alt="" width="60" height="60" loading="lazy" /><span>棱镜 <span>Prism</span></span></div><p class="eyebrow">YOUR NEXT WORKSPACE</p><h2 id="download-title">让下一次连接，<br />多一点可能。</h2><p>选择你的系统，开始使用棱镜。</p></div>
+        <div class="download-grid">
+          <article class="download-card"><div class="platform-title"><svg class="icon platform-icon" aria-hidden="true"><use href="#icon-windows" /></svg><h3>Windows</h3></div><p>Windows 10 / 11 · x64</p><a class="button button-platform" href="https://github.com/aides-hik/AI-ssh/releases/latest" data-download="windows">下载 Windows 版 <svg class="icon" aria-hidden="true"><use href="#icon-download" /></svg></a><span class="package-note">EXE 安装程序</span></article>
+          <article class="download-card"><div class="platform-title"><svg class="icon platform-icon apple-icon" aria-hidden="true"><use href="#icon-apple" /></svg><h3>macOS</h3></div><p>macOS 13 及以上</p><div class="platform-downloads"><a class="button button-platform" href="https://github.com/aides-hik/AI-ssh/releases/latest" data-download="mac-arm64">Apple Silicon <svg class="icon" aria-hidden="true"><use href="#icon-download" /></svg></a><a class="platform-secondary-link" href="https://github.com/aides-hik/AI-ssh/releases/latest" data-download="mac-x64">Intel 芯片版 <svg class="icon" aria-hidden="true"><use href="#icon-download" /></svg></a></div><span class="package-note">DMG 安装包 · arm64 / x64</span></article>
+          <article class="download-card"><div class="platform-title"><svg class="icon platform-icon" aria-hidden="true"><use href="#icon-linux" /></svg><h3>Linux</h3></div><p>x64 · 兼容 Electron 的发行版</p><div class="platform-downloads"><a class="button button-platform" href="https://github.com/aides-hik/AI-ssh/releases/latest" data-download="linux-appimage">下载 AppImage <svg class="icon" aria-hidden="true"><use href="#icon-download" /></svg></a><a class="platform-secondary-link" href="https://github.com/aides-hik/AI-ssh/releases/latest" data-download="linux-deb">下载 DEB <svg class="icon" aria-hidden="true"><use href="#icon-download" /></svg></a></div><span class="package-note">AppImage / DEB</span></article>
+        </div>
+        <div class="download-footer"><span data-download-notice>下载入口指向 GitHub 最新 Release，请选择对应系统与架构的安装包。</span><a href="https://github.com/aides-hik/AI-ssh/releases/latest">全部安装包与更新说明 <svg class="icon" aria-hidden="true"><use href="#icon-external" /></svg></a></div>
+      </section>
+
+      <section class="faq section-space container" id="faq" aria-labelledby="faq-title">
+        <div class="faq-intro"><p class="eyebrow">GOOD TO KNOW</p><h2 id="faq-title">开始之前，<br />你可能想知道。</h2><p>更多使用说明和当前实现细节，<br />都可以在项目文档中找到。</p><a class="text-link" href="https://github.com/aides-hik/AI-ssh#readme">阅读项目文档 <svg class="icon" aria-hidden="true"><use href="#icon-arrow-right" /></svg></a></div>
+        <div class="faq-list">
+          <details class="faq-item" open><summary>需要注册账号或部署后端吗？<svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="faq-answer"><p>不需要。桌面端的 SSH、SFTP 和自定义模型功能可独立使用。下载安装后，添加自己的服务器即可；AI 功能需要另行配置模型服务。</p></div></details>
+          <details class="faq-item"><summary>可以使用哪些 AI 模型？<svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="faq-answer"><p>可配置自己的模型服务，包括 OpenAI 兼容接口、Claude 原生 Messages，以及本地 Ollama。参与终端操作的模型需要支持流式输出和工具调用。具体可用模型、访问权限、额度和费用由所选服务决定。</p><p><a href="https://github.com/aides-hik/AI-ssh#配置-ai">查看模型配置说明 <span aria-hidden="true">↗</span></a></p></div></details>
+          <details class="faq-item"><summary>AI 会看到我的终端内容吗？<svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="faq-answer"><p>使用外部模型时，对话内容及参与分析的终端输出会发送到你配置的模型服务。请留意输出中是否包含敏感信息，并自行了解服务商的数据处理方式；也可配置本地 Ollama。</p></div></details>
+          <details class="faq-item"><summary>支持 SSH 私钥和 SSH Agent 吗？<svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="faq-answer"><p>当前私钥路径读取与 SSH Agent 接入尚未完善，建议按文档使用密码认证。请以项目文档及后续版本说明为准。</p></div></details>
+          <details class="faq-item"><summary>连接凭据和 API Key 保存在哪里？<svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="faq-answer"><p>连接与模型配置保存在本机的应用用户数据目录或应用本地存储中。当前 SSH 凭据和 AI API Key 没有统一的应用层加密保护，请将本地数据库、用户数据目录及导出连接文件按敏感数据保管。</p><p><a href="https://github.com/aides-hik/AI-ssh#数据保存在什么地方">了解存储与备份 <span aria-hidden="true">↗</span></a></p></div></details>
+          <details class="faq-item"><summary>助手会直接执行所有命令吗？<svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="faq-answer"><p>专用巡检和读取工具会直接执行。自定义命令、部署阶段及服务器环境文档修改会先展示确切目标与内容，确认后执行。部署和回滚包含验证命令；命令完成不等于服务健康，仍需查看实际验证结果。</p></div></details>
+        </div>
+      </section>
+
+      <section class="community container" aria-labelledby="community-title"><div class="community-mark" aria-hidden="true"><svg class="icon"><use href="#icon-github" /></svg></div><div class="community-copy"><h2 id="community-title">让棱镜，继续变得趁手。</h2><p>查看源码、反馈问题，或分享你的使用建议。</p></div><a class="button button-outline" href="https://github.com/aides-hik/AI-ssh/issues">在 GitHub 反馈 <svg class="icon" aria-hidden="true"><use href="#icon-external" /></svg></a></section>
+    </main>
+
+    <footer class="site-footer container"><a class="brand footer-brand" href="#" aria-label="回到棱镜首页"><img class="brand-icon" src="./assets/prism.png" alt="" width="28" height="28" loading="lazy" /><span class="brand-name">棱镜 <span>Prism</span></span></a><p>把连接、理解与操作，放在一起。</p><nav aria-label="页脚导航"><a href="https://github.com/aides-hik/AI-ssh">GitHub</a><a href="https://github.com/aides-hik/AI-ssh/releases">版本记录</a><a href="https://github.com/aides-hik/AI-ssh/issues">问题反馈</a></nav></footer>
+  </body>
+</html>
