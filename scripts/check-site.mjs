@@ -106,7 +106,7 @@ try {
     const downloads = tags.filter(({ name, attrs }) => name === 'a' && /^https:\/\/github\.com\/aides-hik\/AI-ssh\/releases\/latest(?:[#/?]|$)/.test(attrs.get('href') ?? ''))
     check(downloads.length > 0, '必须提供无需 JavaScript 的最新 Release 下载链接')
     const content = source.replace(/<(?:script|style)\b[\s\S]*?<\/(?:script|style)>/gi, '').replace(/<[^>]+>/g, ' ')
-    for (const term of [/棱镜/, /Prism/, /SSH/, /SFTP/, /AI/, /Docker|Compose/, /Windows/, /macOS/, /Linux/, /下载/, /常见问题|FAQ/, /模拟数据/, /私钥/, /SSH\s*Agent/i, /应用层加密/]) {
+    for (const term of [/棱镜/, /Prism/, /SSH/, /SFTP/, /AI/, /Docker|Compose/, /Windows/, /macOS/, /Linux/, /下载/, /常见问题|FAQ/, /模拟数据/, /私钥/, /SSH\s*Agent/i, /系统安全存储/]) {
       check(term.test(content), `缺少必要的可直接阅读的产品内容：${term}`)
     }
     check(/外部模型/.test(content) && /终端输出会发送/.test(content), '必须说明外部模型会收到参与分析的终端输出')
