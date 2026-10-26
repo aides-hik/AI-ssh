@@ -42,6 +42,8 @@ node scripts/check-site.mjs tmp/prism-site
 
 首次创建 Pages 站点不能仅依赖普通工作流的 `GITHUB_TOKEN`。官方 `configure-pages` 的 `enablement` 需要另外具备相应权限的管理员 PAT 或 GitHub App token，因此工作流保留 `enablement: false`，不读取保存的个人密钥。
 
+如果首次发布在 **Configure Pages** 步骤失败，先确认上述 Source 设置，再从 Actions 页面重新运行失败的 **Prism website** 工作流；也可在修改官网文件后推送主分支重新触发。开启 Pages 本身不会自动重跑之前失败的任务。以工作流部署任务成功、官网地址返回 HTTP 200 且样式和资源加载正常作为上线完成标准。
+
 参考：<https://github.com/actions/configure-pages/blob/main/action.yml>；<https://github.com/actions/starter-workflows/blob/main/pages/static.yml>。
 
 ## 内容维护
