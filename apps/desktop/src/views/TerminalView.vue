@@ -137,10 +137,11 @@
     <div class="terminal-main">
       <!-- 终端容器 -->
       <div
-        ref="terminalContainer"
         class="terminal-container"
         :class="{ 'with-ai-panel': showAIAssistant && !isAIAssistantMinimized }"
-      ></div>
+      >
+        <div ref="terminalContainer" class="terminal-viewport"></div>
+      </div>
 
       <!-- AI助手面板 -->
       <div
@@ -1728,6 +1729,7 @@ onBeforeUnmount(() => {
 }
 
 .terminal-container {
+  display: flex;
   flex: 1;
   padding: 0 0;
   overflow: hidden;
@@ -1738,6 +1740,15 @@ onBeforeUnmount(() => {
 
 .terminal-container.with-ai-panel {
   flex: 1;
+}
+
+/* FitAddon measures its direct parent. Keep the mount free of the shell's
+   decorative padding so every calculated row fits inside the visible area. */
+.terminal-viewport {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* AI 助手面板样式 */
