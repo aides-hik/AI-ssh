@@ -243,8 +243,13 @@ class Application {
   }
 
   private createWindow(): void {
+    const iconPath = app.isPackaged
+      ? join(process.resourcesPath, 'icons/prism.png')
+      : join(__dirname, '../../resources/icons/prism.png')
+
     // 创建浏览器窗口
     this.mainWindow = new BrowserWindow({
+      icon: iconPath,
       width: 1450,
       height: 900,
       minWidth: 800,

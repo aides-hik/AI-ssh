@@ -493,7 +493,7 @@
 
           <div class="about-info">
             <div class="app-logo">
-              <i class="bi bi-terminal-fill"></i>
+              <AppIcon :size="64" />
             </div>
             <h3 class="app-name">{{ $t('welcome.appTitle') }}</h3>
             <p class="app-version">
@@ -778,6 +778,7 @@ import SettingsAppearance from '@/components/settings/SettingsAppearance.vue'
 import SettingsAiProviders from '@/components/settings/SettingsAiProviders.vue'
 import AiProvidersIcon from '@/components/common/AiProvidersIcon.vue'
 import AboutAppActions from '@/components/common/AboutAppActions.vue'
+import AppIcon from '@/components/common/AppIcon.vue'
 import { useInlineValidation } from '@/composables/useInlineValidation'
 
 // 设置分类
@@ -1737,6 +1738,11 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.app-logo {
+  display: flex;
+  justify-content: center;
+}
+
 /* ==================== 添加模型对话框样式 ==================== */
 .dialog-overlay {
   position: fixed;

@@ -191,3 +191,7 @@ Thumbs.db
 ssh-keys/
 certificates/
 secrets/
+
+# Application icon sources (Icon? above also matches icons on Windows).
+!/resources/icons/
+!/resources/icons/**

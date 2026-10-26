@@ -4,7 +4,10 @@ publish: null
 compression: maximum
 directories:
   output: release/${version}
-  buildResources: build
+  buildResources: resources/icons
+extraResources:
+  - from: resources/icons/prism.png
+    to: icons/prism.png
 files:
   - dist/**/*
   - dist-electron/**/*
@@ -51,8 +54,9 @@ buildDependenciesFromSource: false
 beforePack: "./build-scripts/before-pack.js"
 afterPack: "./build-scripts/after-pack.js"
 afterSign: "./build-scripts/after-sign.js"
-icon: build/icon.ico
+icon: resources/icons/prism.png
 win:
+  icon: resources/icons/prism.ico
   target:
     - target: nsis
       arch:
@@ -67,7 +71,7 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
 mac:
-  icon: build/icon.icns
+  icon: resources/icons/prism.icns
   target:
     - dmg
     - zip
@@ -77,6 +81,7 @@ mac:
 dmg:
   artifactName: prism-${version}-macos-${arch}.${ext}
 linux:
+  icon: resources/icons/prism-linux.png
   executableName: prism
   maintainer: Local Maintainers
   target:

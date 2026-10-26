@@ -2,7 +2,7 @@
   <div class="about-view">
     <div class="about-content">
       <header class="about-heading">
-        <span class="about-mark" aria-hidden="true"><i class="bi bi-diamond-half" /></span>
+        <AppIcon class="about-mark" :size="60" />
         <div>
           <h1>{{ $t('welcome.appTitle') }}</h1>
           <p>智能的 SSH 连接和管理工具</p>
@@ -68,6 +68,7 @@
 import { ref, onMounted } from 'vue'
 import { APP_VERSION } from '@ai-ssh/shared'
 import AboutAppActions from '@/components/common/AboutAppActions.vue'
+import AppIcon from '@/components/common/AppIcon.vue'
 
 const appVersion = ref(APP_VERSION)
 const isDesktop = !!window.electronAPI
@@ -112,16 +113,7 @@ onMounted(async () => {
   margin-bottom: 28px;
 }
 .about-mark {
-  display: grid;
-  place-items: center;
-  width: 60px;
-  height: 60px;
-  border-radius: 18px;
-  color: var(--vscode-accent);
-  background: var(--liquid-selected);
-  border: 1px solid var(--liquid-rim);
-  box-shadow: inset 0 1px var(--liquid-inner-light);
-  font-size: var(--prism-font-29);
+  flex-shrink: 0;
 }
 .about-heading h1 {
   margin: 0;

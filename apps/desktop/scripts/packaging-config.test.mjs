@@ -26,7 +26,7 @@ function linuxPackager(config, metadata) {
   // native tools, target downloads, signing or filesystem changes are invoked.
   return new LinuxPackager({
     config, metadata, devMetadata: metadata, projectDir: desktopRoot,
-    appDir: desktopRoot, buildResourcesDir: join(desktopRoot, 'build')
+    appDir: desktopRoot, buildResourcesDir: join(desktopRoot, config.directories.buildResources)
   })
 }
 

@@ -4,18 +4,7 @@
     <div class="titlebar-leading flex items-center space-x-4 pl-4">
       <!-- 应用图标和名称 -->
       <div class="titlebar-brand flex items-center space-x-2">
-        <svg
-          class="text-vscode-accent"
-          fill="currentColor"
-          viewBox="0 0 16 16"
-          style="width: 20px; height: 20px"
-        >
-          <!-- SSH/Terminal 图标设计 -->
-          <path
-            d="M2 3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H2zm0 1h12v8H2V4z"
-          />
-          <path d="M3 6l2 1.5L3 9v1l3-2V7L3 5v1zm4 3h3v1H7V9z" />
-        </svg>
+        <AppIcon />
         <span class="text-sm font-medium" data-testid="app-brand">{{
           $t('welcome.appTitle')
         }}</span>
@@ -160,6 +149,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, useId } from 'vue'
+import AppIcon from '@/components/common/AppIcon.vue'
 import LiquidSurface from '@/components/common/LiquidSurface.vue'
 import { useI18n } from 'vue-i18n'
 import { themeService } from '../../services/theme.service'
