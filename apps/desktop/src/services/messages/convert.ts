@@ -114,6 +114,16 @@ export function toModelMessages(msgs: Message[]): ModelMessage[] {
   let toolIndex = 0
 
   for (const msg of msgs) {
+    if (msg.info.role === 'system') {
+      result.push({
+        role: 'system',
+        content: msg.parts
+          .filter((p): p is TextPart => p.type === 'text')
+          .map(p => p.text)
+          .join('\n')
+      })
+    }
+
     if (msg.info.role === 'user') {
       const userContent = msg.parts
         .filter((p): p is TextPart => p.type === 'text')
@@ -122,7 +132,7 @@ export function toModelMessages(msgs: Message[]): ModelMessage[] {
 
       result.push({
         role: 'user',
-        content: (msg.info.targets?.length ? `[操作目标: ${msg.info.targets.map(target => `${target.name} (${target.id})`).join('、')}]\n` : '') + summarizeForModel(userContent, MAX_MODEL_TEXT_LENGTH)
+        content: (msg.info.targets?.length ? `[操作目标: ${msg.info.targets.map(target => `${target.name} (${target.id})`).join('、')}]\n` : '') + userContent
       })
     }
 
@@ -152,7 +162,9 @@ export function toModelMessages(msgs: Message[]): ModelMessage[] {
         .join('\n')
 
       if (textParts) {
-        assistantMsg.content = summarizeForModel(textParts, MAX_MODEL_TEXT_LENGTH)
+        assistantMsg.content = isHistorySummary(msg)
+          ? textParts
+          : summarizeForModel(textParts, MAX_MODEL_TEXT_LENGTH)
       }
 
       if (assistantMsg.tool_calls?.length || assistantMsg.content !== null) {
@@ -242,103 +254,111 @@ export function updateToolResult(
 
 /**
  * 过滤已压缩的消息
- * 保留未被压缩的消息，用于发送给 LLM
+ * 保留未压缩的原始消息及摘要，避免再次发送已被摘要替代的消息。
  */
 export function filterCompactedMessages(msgs: Message[]): Message[] {
-  return msgs.filter(msg => !msg.info.compacted)
+  return msgs.filter(msg => !msg.info.compacted || msg.info.role === 'user' || msg.info.role === 'system' || isHistorySummary(msg))
 }
 
 /**
- * 压缩消息
- * 将多条旧消息合并为一条摘要消息
+ * 压缩旧助手回复和工具记录，始终完整保留用户要求与系统上下文。
+ * 摘要保留在原来的时间位置和助手角色中，不提升远端输出的权限。
  * @param msgs 所有消息
- * @param maxMessages 保留的最大消息数（超出部分会被压缩）
+ * @param maxMessages 保留的最近原始消息数；用户和系统消息不受此限制
  * @returns 压缩后的消息数组
  */
 export function compactMessages(msgs: Message[], maxMessages: number = 20): Message[] {
-  if (msgs.length <= maxMessages) {
+  const recentLimit = Number.isFinite(maxMessages) ? Math.max(1, Math.floor(maxMessages)) : 20
+  if (msgs.length <= recentLimit) {
     return msgs
   }
 
-  // 保留最近的消息
-  const recentMessages = msgs.slice(-maxMessages)
+  let boundary = msgs.length - recentLimit
+  // Keep a standalone tool result with its preceding assistant call.
+  while (boundary > 0 && msgs[boundary].info.role === 'tool') boundary--
 
-  // 旧消息需要被压缩
-  const oldMessages = msgs.slice(0, -maxMessages)
-
-  if (oldMessages.length === 0) {
-    return recentMessages
-  }
-
-  // 生成摘要
-  const summary = generateMessageSummary(oldMessages)
-
-  // 创建压缩后的系统消息
-  const compactedMsg: Message = {
-    info: {
-      id: `compacted_${Date.now()}`,
-      role: 'system',
-      createdAt: Date.now(),
-      compacted: true,
-      summary: summary
-    },
-    parts: [
-      {
-        type: 'text',
-        text: `[历史对话摘要]\n${summary}`
-      }
-    ]
-  }
-
-  // 返回：压缩消息 + 最近的消息
-  return [compactedMsg, ...recentMessages]
-}
-
-/**
- * 生成消息摘要
- */
-function generateMessageSummary(msgs: Message[]): string {
-  const userMsgs = msgs.filter(m => m.info.role === 'user')
-  const assistantMsgs = msgs.filter(m => m.info.role === 'assistant')
-
-  let summary = ''
-
-  // 统计用户请求
-  if (userMsgs.length > 0) {
-    summary += `用户共提出 ${userMsgs.length} 个问题\\n`
-    // 显示前3个用户问题
-    userMsgs.slice(0, 3).forEach((msg, idx) => {
-      const text = msg.parts
-        .filter((p): p is TextPart => p.type === 'text')
-        .map(p => p.text)
-        .join(' ')
-        .substring(0, 100)
-      summary += `${idx + 1}. ${text}${text.length >= 100 ? '...' : ''}\\n`
+  const compacted: Message[] = []
+  let segment: Message[] = []
+  const flushSegment = () => {
+    if (!segment.length) return
+    const first = segment[0]
+    const last = segment[segment.length - 1]
+    const summary = generateMessageSummary(segment)
+    compacted.push({
+      info: {
+        id: `compacted_${first.info.id}_${last.info.id}`,
+        role: 'assistant',
+        createdAt: last.info.createdAt,
+        finish: 'stop',
+        compacted: true,
+        summary
+      },
+      parts: [{ type: 'text', text: `[历史执行记录摘要]\n${summary}` }]
     })
-    if (userMsgs.length > 3) {
-      summary += `... 还有 ${userMsgs.length - 3} 个问题\\n`
+    segment = []
+  }
+
+  for (const msg of msgs.slice(0, boundary)) {
+    if (msg.info.role === 'user' || msg.info.role === 'system' || isHistorySummary(msg)) {
+      flushSegment()
+      compacted.push(msg)
+    } else {
+      segment.push(msg)
     }
   }
+  flushSegment()
+  return [...compacted, ...msgs.slice(boundary)]
+}
 
-  // 统计助手响应
-  if (assistantMsgs.length > 0) {
-    summary += `\\n助手响应了 ${assistantMsgs.length} 次，执行了以下操作：\\n`
+function isHistorySummary(msg: Message): boolean {
+  return msg.info.role === 'assistant' && msg.info.compacted === true && typeof msg.info.summary === 'string'
+}
 
-    // 统计工具调用
-    const toolCounts: Record<string, number> = {}
-    assistantMsgs.forEach(msg => {
-      msg.parts.forEach(part => {
-        if (part.type === 'tool') {
-          const key = part.state.metadata?.targetId ? `${part.state.metadata.targetName} (${part.state.metadata.targetId}) / ${part.tool} [${part.state.status}]` : part.tool
-          toolCounts[key] = (toolCounts[key] || 0) + 1
+/** Keep observed outcomes and host identity, rather than only counting tool calls. */
+function generateMessageSummary(msgs: Message[]): string {
+  const entries: string[] = []
+  const seenToolCallIds = new Set<string>()
+  const toolResults = new Map<string, ToolPart>()
+  for (const msg of msgs) {
+    for (const part of msg.parts) {
+      if (part.type !== 'tool') continue
+      const previous = toolResults.get(part.callID)
+      // A standalone result may complete an earlier pending call. Keep its outcome
+      // together with the parameters and host metadata from the original call.
+      const terminal = part.state.status !== 'pending' && part.state.status !== 'running'
+      const keepPrevious = previous && previous.state.status !== 'pending' && previous.state.status !== 'running' && !terminal
+      const preferred = keepPrevious ? previous : part
+      const fallback = keepPrevious ? part : previous
+      toolResults.set(part.callID, {
+        ...preferred,
+        state: {
+          ...fallback?.state,
+          ...preferred.state,
+          input: preferred.state.input ?? fallback?.state.input,
+          output: preferred.state.output ?? fallback?.state.output,
+          error: preferred.state.error ?? fallback?.state.error,
+          metadata: { ...fallback?.state.metadata, ...preferred.state.metadata }
         }
       })
-    })
-
-    Object.entries(toolCounts).forEach(([tool, count]) => {
-      summary += `- ${tool}: ${count} 次\\n`
-    })
+    }
   }
-
-  return summarizeForModel(summary || '无详细历史记录', 2000)
+  for (const msg of msgs) {
+    if (msg.info.targets?.length) {
+      entries.push(`[操作目标: ${msg.info.targets.map(target => `${target.name} (${target.id})`).join('、')}]`)
+    }
+    const text = msg.parts.filter((part): part is TextPart => part.type === 'text').map(part => part.text).join('\n')
+    if (text) entries.push(summarizeForModel(text, MAX_MODEL_TEXT_LENGTH))
+    for (const part of msg.parts) {
+      if (part.type !== 'tool' || seenToolCallIds.has(part.callID)) continue
+      seenToolCallIds.add(part.callID)
+      const result = toolResults.get(part.callID) ?? part
+      const targetId = result.state.metadata?.targetId || result.state.input?.targetId
+      const target = targetId ? ` / ${result.state.metadata?.targetName || targetId} (${targetId})` : ''
+      entries.push(`[工具 ${result.tool}${target} / ${result.state.status}]`)
+      if (result.state.input) entries.push(`参数: ${summarizeForModel(JSON.stringify(result.state.input), 1000)}`)
+      const output = result.state.output || result.state.error
+      if (output) entries.push(summarizeToolOutput(result.tool, output))
+    }
+  }
+  return entries.join('\n\n') || '无详细历史执行记录'
 }

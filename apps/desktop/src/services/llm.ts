@@ -336,8 +336,8 @@ export class LLMSession {
         }
       }
 
-      if (typeof msg.content === 'string') {
-        const invokeMatch = msg.content.match(/<invoke><(\w+)>\n(.*?)\n<\/\1><\/invoke>/s)
+      if (msg.role === 'assistant' && typeof msg.content === 'string') {
+        const invokeMatch = msg.content.match(/^\s*<invoke><(\w+)>\r?\n(.*?)\r?\n<\/\1><\/invoke>\s*$/s)
         if (invokeMatch) {
           const toolName = invokeMatch[1]
           const argsStr = invokeMatch[2]

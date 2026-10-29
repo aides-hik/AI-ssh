@@ -766,13 +766,13 @@ async function sendMessageWithTools(content: string) {
     setStatus('thinking', '正在分析你的请求')
 
     const validMessages = filterValidMessages(messages.value)
-    // 过滤已压缩的消息（避免重复发送给 LLM）
+    // 保留已有摘要，仅过滤已被摘要替代的原始消息。
     const uncompactedMessages = filterCompactedMessages(validMessages)
     const adaptiveCompactionLimit = getAdaptiveCompactionLimit(uncompactedMessages)
     performanceMetrics.value.compactionLimit = adaptiveCompactionLimit
     performanceMetrics.value.contextCompacted = adaptiveCompactionLimit < 20
     if (adaptiveCompactionLimit < 20) {
-      setStatus('thinking', '当前会话较长，正在压缩历史上下文')
+      setStatus('thinking', '当前会话较长，正在压缩历史执行记录并保留完整用户要求')
     }
     // 如果消息太多，自动压缩旧消息
     const compactedMessages = compactMessages(uncompactedMessages, adaptiveCompactionLimit)

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import type { AIModel, AIProvider } from '../../types/ai-providers.types'
 import { SessionProcessor, type ProcessorConfig, type ProcessorResult } from '../../services/processor'
-import { createAssistantMessage, type Message } from '../../services/messages/message'
+import { createAssistantMessage, createUserMessage, type Message } from '../../services/messages/message'
 import { compactMessages, filterCompactedMessages, filterValidMessages, fromUserMessage, type ModelMessage } from '../../services/messages/convert'
 import { ProcessorHistory } from '../../services/messages/processor-history'
 import { getReasoningCapability, type ReasoningSelection } from '../../utils/model-reasoning'
@@ -541,6 +541,76 @@ test('tool requests retain the clicked model and effort across asynchronous sett
   ])
   assert.equal(state.isGenerating.value, false)
   assert.equal(state.abortController.value, null)
+})
+
+test('the real send handler preserves a long user request on initial, same-model and switched-model sends', async context => {
+  let timestamp = Date.now()
+  context.mock.method(Date, 'now', () => ++timestamp)
+  const { state, send } = await loadToolSendFixture()
+  const content = `${'deployment context\n'.repeat(320)}MIDDLE_REQUEST_CONSTRAINT: keep production traffic on port 8443\n${'deployment appendix\n'.repeat(320)}`
+  assert(content.length > 4000)
+  await send(content)
+  await send('Continue using my original deployment constraints')
+  state.props.currentModel = { ...state.props.currentModel, id: 'different-context-model' }
+  await send('Continue after switching models')
+  assert.equal(state.configs.length, 3)
+  for (const config of state.configs) {
+    const firstUser = config.messages.find(message => message.role === 'user')
+    assert(firstUser && typeof firstUser.content === 'string')
+    assert(firstUser.content.endsWith(content), 'the complete submitted request must reach every processor input')
+    assert.match(firstUser.content, /MIDDLE_REQUEST_CONSTRAINT: keep production traffic on port 8443/)
+  }
+  assert.match(JSON.stringify(state.configs[1].messages), /fixture-encrypted-state/, 'the same model must replay its opaque cached turn')
+  assert.doesNotMatch(JSON.stringify(state.configs[2].messages), /fixture-encrypted-state|encrypted_content|responseItems/, 'switching models drops provider state without dropping user instructions')
+  assert.deepEqual(state.messages.value.find(message => message.info.role === 'user')?.parts, [{ type: 'text', text: content }])
+  assert.doesNotMatch(JSON.stringify(state.messages.value), /fixture-encrypted-state|encrypted_content|responseItems/)
+})
+
+test('the real send compaction path carries old user constraints and its summary through the actual model request', async context => {
+  let timestamp = Date.now()
+  context.mock.method(Date, 'now', () => ++timestamp)
+  const requests: ModelMessage[][] = []
+  context.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+    const body = JSON.parse(String(init.body))
+    assert(Array.isArray(body.messages), 'the real LLM request must include converted conversation messages')
+    requests.push(body.messages)
+    return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Completed with earlier constraints' }, finish_reason: 'stop' }] })}\n\n`)
+  })
+  const { state, history, hooks, send } = await loadToolSendFixture()
+  const originalConstraint = `${'original deployment details '.repeat(200)}MIDDLE_OLD_CONSTRAINT: preserve /srv/customer-data${' original appendix'.repeat(250)}`
+  await send(originalConstraint)
+  assert.equal(state.remembered.length, 1, 'the initial turn must have populated real in-memory processor history')
+  const olderRequests = Array.from({ length: 14 }, (_, index) =>
+    `OLDER_REQUEST_${index}: retain original constraints; never restart service-${index} without approval`)
+  for (let index = 0; index < olderRequests.length; index += 1) {
+    state.messages.value.push(
+      createUserMessage(`older-user-${index}`, olderRequests[index]),
+      {
+        info: { id: `older-assistant-${index}`, role: 'assistant', createdAt: index + 1, finish: 'stop' },
+        parts: [{ type: 'text', text: `Completed read-only inspection ${index}` }]
+      }
+    )
+  }
+  const beforeRequest = structuredClone(state.messages.value)
+  state.props.currentModel = { ...state.props.currentModel, id: 'context-model-fixture', reasoning: undefined }
+  hooks.process = config => new SessionProcessor({ ...config, tools: [] }).process()
+  await send('Continue the deployment with every original restriction')
+  assert.equal(requests.length, 1)
+  const request = requests[0]
+  const summary = request.find(message => message.role === 'assistant' && message.content?.includes('[历史执行记录摘要]'))
+  assert(summary, 'generated history summaries must reach the actual HTTP request')
+  assert.match(summary.content || '', /Completed fixture answer/, 'earlier assistant outcomes must survive alongside user restrictions')
+  const requestText = request.map(message => message.content || '').join('\n')
+  assert(requestText.includes(originalConstraint), 'the oldest complete user request must survive real send-path compaction')
+  for (let index = 0; index < 5; index += 1) {
+    assert(requestText.includes(olderRequests[index]), `old request ${index} must survive beyond the first three summarized questions`)
+  }
+  assert(request.findLast(message => message.role === 'user')?.content?.endsWith('Continue the deployment with every original restriction'))
+  assert.deepEqual(state.messages.value.slice(0, beforeRequest.length), beforeRequest, 'request compaction must preserve visible and persistable conversation history')
+  assert.equal(state.messages.value.filter(message => message.info.role === 'system').length, 0)
+  assert.doesNotMatch(JSON.stringify(request), /fixture-encrypted-state|encrypted_content|responseItems/)
+  assert.doesNotMatch(JSON.stringify(state.messages.value), /fixture-encrypted-state|encrypted_content|responseItems/)
+  assert.equal(JSON.stringify(history), '{}')
 })
 
 for (const targetCount of [1, 2]) {

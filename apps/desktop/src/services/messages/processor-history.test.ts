@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { toModelMessages, type ModelMessage } from './convert.ts'
+import { compactMessages, toModelMessages, type ModelMessage } from './convert.ts'
 import { createUserMessage, type Message } from './message.ts'
 import { ProcessorHistory } from './processor-history.ts'
+import { SessionProcessor } from '../processor.ts'
+import type { AIModel, AIProvider } from '../../types/ai-providers.types.ts'
 
 function assistant(id: string, toolId = `call_${id}`): Message {
   return {
@@ -264,4 +266,120 @@ test('unknown compatible models retain legacy conversion when no opaque state is
     new ProcessorHistory().toModelMessages(visible, 'scope'),
     toModelMessages(visible)
   )
+})
+
+test('complete user and system instructions survive first requests, cached turns and model switches', () => {
+  const instruction = `${'request preface\n'.repeat(260)}MIDDLE_USER_CONSTRAINT: never delete /srv/customer-data\n${'request appendix\n'.repeat(260)}`
+  const policy = `${'system context\n'.repeat(300)}MIDDLE_SYSTEM_CONSTRAINT: require deployment approval\n${'system appendix\n'.repeat(300)}`
+  assert(instruction.length > 4000)
+  assert(policy.length > 4000)
+  const system: Message = {
+    info: { id: 'system-context', role: 'system', createdAt: 1 },
+    parts: [{ type: 'text', text: policy }]
+  }
+  const user = createUserMessage('long-user', instruction)
+  const history = new ProcessorHistory()
+  const first = history.toModelMessages([system, user], 'model-a', true)
+  assert.deepEqual(first, [
+    { role: 'system', content: policy },
+    { role: 'user', content: instruction }
+  ])
+  history.remember('long-answer', [...first, ...rawTurn('long-answer')])
+  const visible = [system, user, assistant('long-answer'), createUserMessage('follow-up', 'Continue under the original constraints')]
+  const snapshot = structuredClone(visible)
+  for (const scope of ['model-a', 'model-b', 'model-a']) {
+    const request = history.toModelMessages(visible, scope, true)
+    assert.equal(request.find(message => message.role === 'system')?.content, policy)
+    assert.equal(request.find(message => message.role === 'user')?.content, instruction)
+    assert.equal(request.findLast(message => message.role === 'user')?.content, 'Continue under the original constraints')
+  }
+  assert.deepEqual(visible, snapshot, 'model conversion must not rewrite the visible or persisted message source')
+})
+
+function assertPairedToolCalls(messages: ModelMessage[]): void {
+  const pending = new Set<string>()
+  for (const message of messages) {
+    if (message.role === 'tool') {
+      assert(message.tool_call_id && pending.delete(message.tool_call_id), 'every tool result needs its preceding call')
+      continue
+    }
+    assert.equal(pending.size, 0, 'tool calls must be resolved before a later conversation message')
+    for (const call of message.tool_calls || []) {
+      assert(!pending.has(call.id), 'tool call ids must be unique within a round')
+      pending.add(call.id)
+    }
+  }
+  assert.equal(pending.size, 0, 'a request cannot end with unresolved historical tool calls')
+}
+
+test('real compaction reaches the processor request with old constraints and matched cached tools, then survives recompaction', async context => {
+  const requests: ModelMessage[][] = []
+  context.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+    const body = JSON.parse(String(init.body))
+    assert(Array.isArray(body.messages), 'the real processor must produce chat completion messages')
+    requests.push(body.messages)
+    return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Visible final answer' }, finish_reason: 'stop' }] })}\n\n`)
+  })
+  const provider: AIProvider = {
+    id: 'context-fixture', name: 'Context fixture', description: '', icon: '', website: '',
+    endpoint: 'https://context.fixture.invalid/v1', apiKey: 'fixture-only',
+    enabled: true, isDefault: false, models: []
+  }
+  const model: AIModel = {
+    id: 'context-model-a', name: 'Context model', providerId: provider.id, contextWindow: 128000,
+    capabilities: { text: true, image: false, functionCall: true, vision: false }
+  }
+  const oldRequests = Array.from({ length: 6 }, (_, index) =>
+    `${'background '.repeat(index === 4 ? 600 : 15)}OLD_CONSTRAINT_${index}: preserve service-${index} and require approval${' appendix'.repeat(index === 4 ? 600 : 15)}`)
+  const visible = oldRequests.flatMap((text, index) => [createUserMessage(`u${index}`, text), assistant(`a${index}`)])
+  visible.push(createUserMessage('u6', 'Continue while retaining every earlier constraint'))
+  const original = structuredClone(visible)
+  const history = new ProcessorHistory()
+  const beforeLastAnswer = history.toModelMessages(visible.slice(0, -2), 'model-a', true)
+  history.remember('a5', [...beforeLastAnswer, ...rawTurn('a5', 'opaque-retained-a5')])
+  const compacted = compactMessages(visible, 4)
+  assert(compacted.some(message => message.info.role === 'assistant' && message.info.compacted))
+  const visibleOutputs: string[] = []
+  for (const scope of ['model-a', 'model-b']) {
+    const converted = history.toModelMessages(compacted, scope, true)
+    await new SessionProcessor({
+      provider, model: { ...model, id: `context-${scope}` }, tools: [], messages: converted,
+      onEvent: event => { if (event.type === 'text-delta') visibleOutputs.push(event.delta) }
+    }).process()
+    const request = requests.at(-1)
+    assert(request)
+    const summary = request.find(message => message.role === 'assistant' && message.content?.includes('[历史执行记录摘要]'))
+    assert(summary, 'the actual request must contain the generated history summary')
+    assert.match(summary.content || '', /Visible answer a0[\s\S]*read_file[\s\S]*Visible tool result a0/)
+    assert.equal(request.some(message => message.role === 'system'), false, 'assistant and remote tool summaries cannot acquire system instruction authority')
+    const requestText = request.map(message => message.content || '').join('\n')
+    for (let index = 0; index < 5; index += 1) {
+      assert(requestText.includes(oldRequests[index]), `compacted request ${index} must retain its complete user constraints`)
+    }
+    assertPairedToolCalls(request)
+    assert.equal(request.findLast(message => message.role === 'user')?.content, 'Continue while retaining every earlier constraint')
+    if (scope === 'model-a') {
+      assert.deepEqual(request.find(message => message.tool_calls)?.tool_calls?.map(call => call.id), ['call_a5'])
+      assert.match(JSON.stringify(request), /opaque-retained-a5/)
+    } else {
+      assert.doesNotMatch(JSON.stringify(request), /opaque-retained-a5|reasoning_content|tool_call_id|thought_signature/)
+    }
+  }
+  const recompacted = compactMessages([
+    ...compacted, assistant('a6'), createUserMessage('u7', 'NEW_CONSTRAINT: keep the audit trail'),
+    assistant('a7'), createUserMessage('u8', 'Continue again')
+  ], 4)
+  await new SessionProcessor({
+    provider, model, tools: [], messages: history.toModelMessages(recompacted, 'model-b', true)
+  }).process()
+  const repeatedRequest = requests.at(-1)
+  assert(repeatedRequest)
+  const repeatedText = repeatedRequest.map(message => message.content || '').join('\n')
+  for (const text of oldRequests) assert(repeatedText.includes(text))
+  assert.match(JSON.stringify(repeatedRequest), /NEW_CONSTRAINT: keep the audit trail/)
+  assertPairedToolCalls(repeatedRequest)
+  assert.deepEqual(visible, original)
+  assert.deepEqual(visibleOutputs, ['Visible final answer', 'Visible final answer'])
+  assert.doesNotMatch(JSON.stringify(compacted), /opaque-retained-a5|reasoning_content|encrypted_content|thought_signature/)
+  assert.equal(JSON.stringify(history), '{}', 'opaque processor state cannot leak through JSON persistence')
 })

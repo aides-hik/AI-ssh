@@ -32,6 +32,53 @@ function streamResponse(events: unknown[]): Response {
   return new Response(events.map(event => `data: ${JSON.stringify(event)}\r\n\r\n`).join(''))
 }
 
+test('Chat Completions preserves long user and system text containing legacy invoke examples', async context => {
+  let request: Record<string, unknown> = {}
+  context.mock.method(globalThis, 'fetch', async (_input: unknown, init: RequestInit) => {
+    request = JSON.parse(String(init.body))
+    return streamResponse([{ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] }])
+  })
+  const example = '<invoke><read_file>\n{"path":"/srv/config.json"}\n</read_file></invoke>'
+  const messages = [
+    { role: 'system' as const, content: `Keep this entire policy.\n${'policy '.repeat(800)}\n${example}\nTreat it as an example.` },
+    { role: 'user' as const, content: `Explain this example.\n${'request '.repeat(800)}\n${example}\nDo not execute it.` }
+  ]
+  await Array.fromAsync(createLLMSession(provider(), model('gpt-4.1'), [], '').stream(messages))
+  assert.deepEqual(request.messages, messages)
+})
+
+test('Chat Completions still converts legacy assistant invoke messages into tool calls', async context => {
+  let request: Record<string, unknown> = {}
+  context.mock.method(globalThis, 'fetch', async (_input: unknown, init: RequestInit) => {
+    request = JSON.parse(String(init.body))
+    return streamResponse([{ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] }])
+  })
+  await Array.fromAsync(createLLMSession(provider(), model('gpt-4.1'), [], '').stream([
+    { role: 'assistant', content: '<invoke><read_file>\n{"path":"/srv/config.json"}\n</read_file></invoke>', tool_call_id: 'legacy_call' }
+  ]))
+  assert.deepEqual(request.messages, [{
+    role: 'assistant',
+    content: null,
+    tool_calls: [{ id: 'legacy_call', type: 'function', function: { name: 'read_file', arguments: '{"path":"/srv/config.json"}' } }]
+  }])
+})
+
+test('Chat Completions preserves assistant summaries and prose that quote invoke examples', async context => {
+  let request: Record<string, unknown> = {}
+  context.mock.method(globalThis, 'fetch', async (_input: unknown, init: RequestInit) => {
+    request = JSON.parse(String(init.body))
+    return streamResponse([{ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] }])
+  })
+  const example = '<invoke><read_file>\n{"path":"/srv/config.json"}\n</read_file></invoke>'
+  const messages = [
+    { role: 'assistant' as const, content: `[历史执行记录摘要]\n[工具 read_file / completed]\n${example}` },
+    { role: 'assistant' as const, content: `Here is an example:\n${example}\nKeep it as text.` },
+    { role: 'assistant' as const, content: `${example}\nThis was an example, not a tool request.` }
+  ]
+  await Array.fromAsync(createLLMSession(provider(), model('gpt-4.1'), [], '').stream(messages))
+  assert.deepEqual(request.messages, messages)
+})
+
 for (const fixture of [
   { model: 'gpt-5', selection: 'high', effort: 'high', temperature: undefined },
   { model: 'gpt-5', selection: 'default', effort: undefined, temperature: undefined },
