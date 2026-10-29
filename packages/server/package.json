@@ -1,6 +1,6 @@
 {
   "name": "@ai-ssh/server",
-  "version": "1.9.7",
+  "version": "1.9.8",
   "description": "Prism Server API",
   "main": "dist/index.js",
   "private": true,

@@ -1,6 +1,6 @@
 {
   "name": "@ai-ssh/database",
-  "version": "1.9.7",
+  "version": "1.9.8",
   "description": "Prism Database Layer",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
