@@ -23,6 +23,7 @@ export interface HostToolPhase {
 
 export interface MultiHostToolOptions {
   approveDeployment?: (stage: FrozenDeploymentStage, signal: AbortSignal) => Promise<boolean>
+  approveReadOnly?: (stage: FrozenDeploymentStage, signal: AbortSignal) => Promise<boolean>
   onOutput?: (event: HostToolOutput) => void
   onPhase?: (event: HostToolPhase) => void
 }
@@ -136,11 +137,13 @@ export function createMultiHostTools(run: MultiHostRun, options: MultiHostToolOp
           // backups and exact-replacement semantics in one place.
           const parameters = JSON.parse(command) as Record<string, unknown>
           const tool = await UpdateServerEnvDocTool.init()
+          signal.throwIfAborted()
           const changed = await tool.execute(parameters, {
             ...ctx, abort: signal, extra: { ...ctx.extra, connectionId: id, serverEnvDocId: id }
           })
-          signal.throwIfAborted()
-          result = { success: true, exitCode: 0, output: changed.output }
+          if (changed.metadata.committed !== true) signal.throwIfAborted()
+          result = { success: true, exitCode: 0, output: changed.output,
+            ...(changed.metadata.committed === true ? { committed: true } : {}) }
         } else {
           result = await executeSSHCommand(id, `set -e\n${command}`, signal, {
             timeoutMs: execution.timeoutMs, onOutput: output(id)
@@ -159,7 +162,21 @@ export function createMultiHostTools(run: MultiHostRun, options: MultiHostToolOp
       return { title: target.name, metadata: { targetId: id, targetName: target.name, host: target.host },
         output: JSON.stringify({ targetId: id, targetName: target.name, host: target.host, ...result }) }
     })
+  let readApprovalQueue: Promise<unknown> = Promise.resolve()
   const command = async (id: string, script: string, readLimit?: number) => remote(id, async signal => {
+    if (options.approveReadOnly) {
+      const approve = options.approveReadOnly
+      const stage: FrozenDeploymentStage = Object.freeze({ name: '只读检查', kind: 'command', strategy: 'rolling', operation: 'shell', timeoutSeconds: 300,
+        steps: Object.freeze([Object.freeze({ targetId: id, label: '读取服务器信息', command: script })]) })
+      // Independent hosts may request reads together; present each review in order.
+      const pending = readApprovalQueue.then(async () => {
+        signal.throwIfAborted()
+        return approve(stage, signal)
+      })
+      readApprovalQueue = pending.catch(() => {})
+      if (!await pending) throw new Error('用户未批准只读检查，未读取远程信息')
+    }
+    signal.throwIfAborted()
     phase({ targetId: id, phase: 'inspecting', label: '读取服务器状态', stageName: '只读检查' })
     const result = await executeSSHCommand(id, script, signal, { onOutput: output(id) })
     if (!result.success) throw new Error(`${result.error || '巡检失败'}${result.output ? `\n${result.output.slice(0, 12000)}` : ''}`)

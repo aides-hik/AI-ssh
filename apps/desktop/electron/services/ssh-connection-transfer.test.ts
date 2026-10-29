@@ -6,7 +6,7 @@ import {
   prepareConnectionImport
 } from './ssh-connection-transfer'
 
-test('import skips normalized host duplicates against existing records and within the file', () => {
+test('import skips only the same normalized host, port and username against existing records and within the file', () => {
   const prepared = prepareConnectionImport(
     {
       format: SSH_CONNECTION_EXPORT_FORMAT,
@@ -33,13 +33,20 @@ test('import skips normalized host duplicates against existing records and withi
           port: 22,
           username: 'other',
           authType: 'PASSWORD'
+        },
+        {
+          name: 'Same identity with another authentication method',
+          host: '10.0.0.8',
+          port: 2222,
+          username: 'admin',
+          authType: 'SSH_AGENT'
         }
       ]
     },
-    ['server.example.com']
+    [{ host: 'server.example.com', port: 22, username: 'root' }]
   )
 
-  assert.deepEqual(prepared.result, { imported: 1, skipped: 2, invalid: 0 })
+  assert.deepEqual(prepared.result, { imported: 2, skipped: 2, invalid: 0 })
   assert.deepEqual(prepared.connections, [
     {
       name: 'New',
@@ -48,8 +55,24 @@ test('import skips normalized host duplicates against existing records and withi
       username: 'admin',
       authType: 'PASSWORD',
       password: 'secret'
-    }
+    },
+    { name: 'Duplicate new', host: '10.0.0.8', port: 22, username: 'other', authType: 'PASSWORD' }
   ])
+})
+
+test('import retains different ports and case-sensitive SSH usernames on the same host', () => {
+  const prepared = prepareConnectionImport({
+    format: SSH_CONNECTION_EXPORT_FORMAT,
+    version: SSH_CONNECTION_EXPORT_VERSION,
+    connections: [
+      { name: 'Other port', host: 'server.example.com', port: 2222, username: 'root', authType: 'PASSWORD' },
+      { name: 'Other user', host: 'SERVER.EXAMPLE.COM', username: 'deploy', authType: 'PASSWORD' },
+      { name: 'Case-sensitive user', host: 'server.example.com', port: 22, username: 'Root', authType: 'PASSWORD' },
+      { name: 'Default port duplicate', host: 'server.example.com', username: 'root', authType: 'PASSWORD' }
+    ]
+  }, [{ host: ' server.example.com ', port: 22, username: ' root ' }])
+  assert.deepEqual(prepared.result, { imported: 3, skipped: 1, invalid: 0 })
+  assert.deepEqual(prepared.connections.map(({ port, username }) => [port, username]), [[2222, 'root'], [22, 'deploy'], [22, 'Root']])
 })
 
 test('import preserves credentials while ignoring exported system fields', () => {

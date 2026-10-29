@@ -91,38 +91,6 @@
             </div>
           </div>
 
-          <!-- 命令风险等级 -->
-          <div class="setting-row">
-            <div class="setting-left">
-              <label class="setting-label">{{ $t('settings.commandRiskLevel') }}</label>
-              <p class="setting-hint">{{ $t('settings.commandRiskLevelHint') }}</p>
-            </div>
-            <div class="setting-right">
-              <select
-                :aria-label="$t('settings.commandRiskLevel')"
-                v-model.number="commandRiskLevel"
-                @change="saveSettings"
-                class="form-select"
-              >
-                <option :value="0">{{ $t('settings.riskLevel0') }}</option>
-                <option :value="1">{{ $t('settings.riskLevel1') }}</option>
-                <option :value="2">{{ $t('settings.riskLevel2') }}</option>
-                <option :value="3">{{ $t('settings.riskLevel3') }}</option>
-                <option :value="4">{{ $t('settings.riskLevel4') }}</option>
-                <option :value="5">{{ $t('settings.riskLevel5') }}</option>
-              </select>
-              <p class="setting-info">
-                <i class="bi bi-info-circle"></i>
-                <span v-if="commandRiskLevel === 0">{{ $t('settings.riskLevelInfo0') }}</span>
-                <span v-else-if="commandRiskLevel === 1">{{ $t('settings.riskLevelInfo1') }}</span>
-                <span v-else-if="commandRiskLevel === 2">{{ $t('settings.riskLevelInfo2') }}</span>
-                <span v-else-if="commandRiskLevel === 3">{{ $t('settings.riskLevelInfo3') }}</span>
-                <span v-else-if="commandRiskLevel === 4">{{ $t('settings.riskLevelInfo4') }}</span>
-                <span v-else>{{ $t('settings.riskLevelInfo5') }}</span>
-              </p>
-            </div>
-          </div>
-
           <!-- 对话历史 -->
           <div class="setting-row">
             <div class="setting-left">
@@ -886,7 +854,6 @@ const enableAutocomplete = ref(false) // 默认禁用自动补全（功能尚未
 
 // AI 助手设置
 const autoApproveReadOnly = ref(true)
-const commandRiskLevel = ref(2) // 命令风险等级：1-5，自动通过此等级及以下的命令
 const enableChatHistory = ref(true)
 const maxHistoryMessages = ref(50)
 
@@ -1136,7 +1103,6 @@ const saveSettings = async () => {
       },
       aiAssistant: {
         autoApproveReadOnly: autoApproveReadOnly.value,
-        commandRiskLevel: commandRiskLevel.value,
         enableChatHistory: enableChatHistory.value,
         maxHistoryMessages: maxHistoryMessages.value
       },
@@ -1213,10 +1179,6 @@ const loadSettings = async () => {
           settings.aiAssistant.autoApproveReadOnly !== undefined
             ? settings.aiAssistant.autoApproveReadOnly
             : true
-        commandRiskLevel.value =
-          settings.aiAssistant.commandRiskLevel !== undefined
-            ? settings.aiAssistant.commandRiskLevel
-            : 2
         enableChatHistory.value =
           settings.aiAssistant.enableChatHistory !== undefined
             ? settings.aiAssistant.enableChatHistory
@@ -1285,7 +1247,6 @@ watch(
     cursorBlink,
     // AI 助手设置
     autoApproveReadOnly,
-    commandRiskLevel,
     enableChatHistory,
     maxHistoryMessages,
     // 高级设置

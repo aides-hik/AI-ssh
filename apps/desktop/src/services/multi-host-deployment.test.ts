@@ -30,6 +30,24 @@ function fixture() {
   return { controller, run, calls, options }
 }
 
+test('Stop during the final atomic document commit preserves its observed success and stops later hosts', async () => {
+  const { controller, run, options, calls } = fixture()
+  options.execute = async (id, command, signal) => {
+    calls.push({ id, command, signal })
+    controller.abort()
+    return { ...ok('document saved'), committed: true }
+  }
+  const result = await executeDeploymentStage(run, {
+    name: 'Save documents', kind: 'command', strategy: 'rolling', operation: 'environment-document',
+    steps: ['a', 'b'].map(targetId => ({ targetId, label: 'Save env.md', command: '{"content":"observations"}' }))
+  }, options)
+  assert.deepEqual(result.steps.map(step => step.status), ['completed', 'stopped'])
+  assert.equal(result.steps[0].commandResult?.committed, true)
+  assert.equal(run.snapshot()[0].status, 'complete')
+  assert.equal(calls.length, 1)
+  run.finish()
+})
+
 test('all targets, duplicate nodes, commands and health checks are validated before approval or execution', async () => {
   const { run, calls, options } = fixture()
   let approvals = 0

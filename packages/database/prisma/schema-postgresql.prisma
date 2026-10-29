@@ -35,8 +35,22 @@ model User {
   subscription   UserSubscription?
   paymentOrders  PaymentOrder[]
   managedAiUsages ManagedAiUsage[]
+  authSessions   AuthSession[]
 
   @@map("users")
+}
+
+model AuthSession {
+  id        String    @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("auth_sessions")
 }
 
 // 用户设置表

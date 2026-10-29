@@ -63,21 +63,26 @@ class DocStorageService {
   /**
    * 保存 SSH 连接的服务器环境文档
    */
-  async saveServerEnvDoc(connectionId: string, content: string): Promise<DocFile> {
+  async saveServerEnvDoc(connectionId: string, content: string, signal?: AbortSignal): Promise<DocFile> {
     console.info('[DocStorage] 保存服务器环境文档', {
       connectionId,
       contentLength: content.length
     })
-    const doc = await window.electronAPI.ssh.writeEnvDoc(connectionId, content)
+    const doc = await this.envDocRequest(signal, requestId =>
+      window.electronAPI.ssh.writeEnvDoc(connectionId, content, requestId))
+    // A successful response means the final rename completed. A cancellation
+    // rejected by the main process during that commit cannot erase its result.
     return this.toRemoteEnvDoc(doc)
   }
 
   /**
    * 读取 SSH 连接的服务器环境文档
    */
-  async readServerEnvDoc(connectionId: string): Promise<DocFile | null> {
+  async readServerEnvDoc(connectionId: string, signal?: AbortSignal): Promise<DocFile | null> {
     console.info('[DocStorage] 读取服务器环境文档', { connectionId })
-    const doc = await window.electronAPI.ssh.readEnvDoc(connectionId)
+    const doc = await this.envDocRequest(signal, requestId =>
+      window.electronAPI.ssh.readEnvDoc(connectionId, requestId))
+    signal?.throwIfAborted()
     return doc ? this.toRemoteEnvDoc(doc) : null
   }
 
@@ -105,14 +110,16 @@ class DocStorageService {
   async editServerEnvDoc(
     connectionId: string,
     oldString: string,
-    newString: string
+    newString: string,
+    signal?: AbortSignal
   ): Promise<DocFile> {
     console.info('[DocStorage] 编辑服务器环境文档', {
       connectionId,
       oldLength: oldString.length,
       newLength: newString.length
     })
-    const existingDoc = await this.readServerEnvDoc(connectionId)
+    const existingDoc = await this.readServerEnvDoc(connectionId, signal)
+    signal?.throwIfAborted()
     const currentContent = existingDoc?.content || ''
 
     if (!currentContent.includes(oldString)) {
@@ -123,7 +130,20 @@ class DocStorageService {
     }
 
     const updatedContent = currentContent.replace(oldString, newString)
-    return await this.saveServerEnvDoc(connectionId, updatedContent)
+    return await this.saveServerEnvDoc(connectionId, updatedContent, signal)
+  }
+
+  private async envDocRequest<T>(signal: AbortSignal | undefined, invoke: (requestId: string) => Promise<T>): Promise<T> {
+    signal?.throwIfAborted()
+    const requestId = crypto.randomUUID()
+    const cancel = () => { void window.electronAPI.ssh.cancelEnvDoc(requestId).catch(() => {}) }
+    signal?.addEventListener('abort', cancel, { once: true })
+    try {
+      signal?.throwIfAborted()
+      return await invoke(requestId)
+    } finally {
+      signal?.removeEventListener('abort', cancel)
+    }
   }
 
   private toRemoteEnvDoc(doc: { content: string; fullPath: string }): DocFile {

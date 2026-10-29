@@ -82,7 +82,9 @@ export async function autoMigrateIfEnabled(enabled: boolean): Promise<void> {
   if (!enabled) return
 
   try {
-    const hasMigrations = existsSync(migrationsDir) && readdirSync(migrationsDir).length > 0
+    const hasMigrations = existsSync(migrationsDir) && readdirSync(migrationsDir).some(name =>
+      existsSync(resolve(migrationsDir, name, 'migration.sql'))
+    )
     logger.info(
       { migrationsDir, hasMigrations, databasePackageDir, prismaSchemaPath },
       'AUTO_MIGRATE inspection result'
@@ -95,12 +97,7 @@ export async function autoMigrateIfEnabled(enabled: boolean): Promise<void> {
       return
     }
 
-    logger.warn(
-      'AUTO_MIGRATE enabled but no prisma migrations found, running prisma db push instead'
-    )
-    // Prisma 7 no longer generates a client during db push.
-    await runPrisma(['db', 'push', '--schema', prismaSchemaPath])
-    logger.info('Prisma db push completed')
+    throw new Error('No versioned PostgreSQL migrations found. Restore prisma/migrations; refusing automatic db push. See docs/postgresql-migrations.md.')
   } catch (error) {
     logger.error({ error }, 'Prisma migrate deploy failed')
     throw error

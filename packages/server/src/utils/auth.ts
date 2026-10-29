@@ -1,10 +1,11 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
 import { logger } from './safe-logger.js'
+import { accessClaims, authSessionService, isAuthToken } from '../services/auth-session.service.js'
 
 // 扩展 Fastify 类型
 declare module 'fastify' {
   interface FastifyInstance {
-    authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>
+    authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<unknown>
   }
 }
 
@@ -12,13 +13,25 @@ declare module 'fastify' {
 export async function authenticate(request: FastifyRequest, reply: FastifyReply) {
   try {
     await request.jwtVerify()
-  } catch (error) {
-    logger.warn('JWT verification failed: %s', String(error))
-    reply.status(401).send({
+    if (!isAuthToken(request.user, 'access')) throw new Error('Invalid access token purpose')
+  } catch {
+    logger.warn('Access token verification failed')
+    return reply.status(401).send({
       success: false,
       message: '认证失败，请重新登录',
       code: 'AUTHENTICATION_FAILED'
     })
+  }
+  try {
+    const claims = request.user as { sessionId: string; userId: string }
+    const user = await authSessionService.getActiveUser(claims.sessionId, claims.userId)
+    if (!user) {
+      return reply.status(401).send({ success: false, message: '登录已失效，请重新登录', code: 'AUTHENTICATION_FAILED' })
+    }
+    // Use current account claims, so disabled accounts and role changes take effect immediately.
+    request.user = accessClaims(user, claims.sessionId)
+  } catch {
+    return reply.status(503).send({ success: false, message: '暂时无法验证登录状态', code: 'AUTHENTICATION_UNAVAILABLE' })
   }
 }
 
@@ -51,8 +64,12 @@ export function requireRole(roles: string | string[]) {
 export async function optionalAuth(request: FastifyRequest, _reply: FastifyReply) {
   try {
     await request.jwtVerify()
+    if (!isAuthToken(request.user, 'access')) throw new Error('Invalid access token purpose')
+    const user = await authSessionService.getActiveUser(request.user.sessionId, request.user.userId)
+    if (!user) throw new Error('Inactive authentication session')
+    request.user = accessClaims(user, request.user.sessionId)
   } catch {
-    // 忽略认证错误，允许匿名访问
+    request.user = undefined
   }
 }
 

@@ -1,5 +1,15 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FastifyInstance } from 'fastify'
+
+vi.mock('dotenv', () => ({ config: vi.fn() }))
+
+const fixture = vi.hoisted(() => ({
+  user: { id: 'user_1', uuid: 'uuid_1', username: 'tester', email: 'user@example.test',
+    role: 'USER', isActive: true, avatar: null, createdAt: new Date(), updatedAt: new Date() },
+  sessions: new Map<string, { id: string; userId: string; expiresAt: Date; revokedAt: Date | null }>(),
+  redisHealthy: true,
+  databaseUnavailable: false
+}))
 
 const mockOfficialGetStatus = vi.fn().mockReturnValue({
   enabled: true,
@@ -31,8 +41,8 @@ vi.mock('../services/user.service.js', async () => {
     userService: {
       ...actual.userService,
       validateEmailFormat: vi.fn().mockReturnValue(true),
-      findUserByEmail: vi.fn().mockResolvedValue(null),
-      validatePassword: vi.fn().mockResolvedValue(false),
+      findUserByEmail: vi.fn(async () => fixture.user),
+      validatePassword: vi.fn().mockResolvedValue(true),
       updateLastLogin: vi.fn().mockResolvedValue(undefined),
       isEmailExists: vi.fn().mockResolvedValue(false),
       isUsernameExists: vi.fn().mockResolvedValue(false),
@@ -50,7 +60,28 @@ vi.mock('@fastify/rate-limit', () => ({
 vi.mock('../config/database.js', () => ({
   default: {
     getInstance: () => ({
-      $queryRaw: vi.fn().mockResolvedValue(1)
+      $queryRaw: vi.fn().mockResolvedValue(1),
+      authSession: {
+        create: vi.fn(async ({ data }) => {
+          const session = { id: `session_${fixture.sessions.size}`, ...data, revokedAt: null }
+          fixture.sessions.set(session.id, session)
+          return session
+        }),
+        findFirst: vi.fn(async ({ where }) => {
+          if (fixture.databaseUnavailable) throw new Error('Database unavailable')
+          const session = fixture.sessions.get(where.id)
+          return session && session.userId === where.userId && !session.revokedAt &&
+            session.expiresAt > where.expiresAt.gt && fixture.user.isActive
+            ? { user: { ...fixture.user } } : null
+        }),
+        updateMany: vi.fn(async ({ where, data }) => {
+          if (fixture.databaseUnavailable) throw new Error('Database unavailable')
+          const session = fixture.sessions.get(where.id)
+          if (!session || session.userId !== where.userId || session.revokedAt) return { count: 0 }
+          session.revokedAt = data.revokedAt
+          return { count: 1 }
+        })
+      }
     })
   }
 }))
@@ -67,7 +98,7 @@ vi.mock('../config/redis.js', () => ({
       pttl: vi.fn(),
       pexpire: vi.fn()
     }),
-    healthCheck: vi.fn().mockResolvedValue(true)
+    healthCheck: vi.fn(async () => fixture.redisHealthy)
   }
 }))
 
@@ -114,6 +145,23 @@ describe('App', () => {
     }
   })
 
+  beforeEach(() => {
+    fixture.sessions.clear()
+    fixture.user.isActive = true
+    fixture.user.username = 'tester'
+    fixture.user.role = 'USER'
+    fixture.redisHealthy = true
+    fixture.databaseUnavailable = false
+    vi.clearAllMocks()
+  })
+
+  async function login() {
+    const response = await app.inject({ method: 'POST', url: '/api/v1/auth/login',
+      payload: { email: 'user@example.test', password: 'fixture123' } })
+    expect(response.statusCode).toBe(200)
+    return response.json().data as { accessToken: string; refreshToken: string }
+  }
+
   it('serves health endpoint', async () => {
     const response = await app.inject({
       method: 'GET',
@@ -121,6 +169,14 @@ describe('App', () => {
     })
 
     expect(response.statusCode).toBe(200)
+    expect(response.json().status).toBe('healthy')
+  })
+
+  it('reports HTTP 503 and an unhealthy aggregate when Redis is unavailable', async () => {
+    fixture.redisHealthy = false
+    const response = await app.inject({ method: 'GET', url: '/health' })
+    expect(response.statusCode).toBe(503)
+    expect(response.json()).toMatchObject({ status: 'unhealthy', services: { database: 'healthy', redis: 'unhealthy' } })
   })
 
   it('validates authentication payloads with the current Fastify schema compiler', async () => {
@@ -135,7 +191,7 @@ describe('App', () => {
   })
 
   it('verifies tokens issued by the current JWT plugin', async () => {
-    const token = app.jwt.sign({ userId: 'user_1', username: 'tester', role: 'USER' })
+    const { accessToken: token } = await login()
     const response = await app.inject({
       method: 'GET',
       url: '/api/v1/auth/verify',
@@ -144,6 +200,77 @@ describe('App', () => {
 
     expect(response.statusCode).toBe(200)
     expect(response.json().data.user).toEqual({ id: 'user_1', username: 'tester', role: 'USER' })
+  })
+
+  it('rejects refresh tokens at protected endpoints and access tokens at refresh', async () => {
+    const { accessToken, refreshToken } = await login()
+    const protectedResponse = await app.inject({ method: 'GET', url: '/api/v1/auth/verify',
+      headers: { authorization: `Bearer ${refreshToken}` } })
+    expect(protectedResponse.statusCode).toBe(401)
+    const refreshResponse = await app.inject({ method: 'POST', url: '/api/v1/auth/refresh',
+      payload: { refreshToken: accessToken } })
+    expect(refreshResponse.statusCode).toBe(401)
+    const legacyToken = app.jwt.sign({ userId: fixture.user.id, role: 'ADMIN' })
+    expect((await app.inject({ method: 'GET', url: '/api/v1/auth/verify',
+      headers: { authorization: `Bearer ${legacyToken}` } })).statusCode).toBe(401)
+  })
+
+  it('refreshes current account claims and rejects disabled or expired sessions', async () => {
+    const { refreshToken } = await login()
+    fixture.user.username = 'updated'
+    fixture.user.role = 'ADMIN'
+    const refresh = () => app.inject({ method: 'POST', url: '/api/v1/auth/refresh', payload: { refreshToken } })
+    const response = await refresh()
+    expect(response.statusCode).toBe(200)
+    expect(app.jwt.verify(response.json().data.accessToken)).toMatchObject({ type: 'access',
+      userId: fixture.user.id, uuid: fixture.user.uuid, email: fixture.user.email, username: 'updated', role: 'ADMIN' })
+    const verify = () => app.inject({ method: 'GET', url: '/api/v1/auth/verify',
+      headers: { authorization: `Bearer ${response.json().data.accessToken}` } })
+    expect((await verify()).json().data.user).toMatchObject({ username: 'updated', role: 'ADMIN' })
+    fixture.user.isActive = false
+    expect((await refresh()).statusCode).toBe(401)
+    expect((await verify()).statusCode).toBe(401)
+    fixture.user.isActive = true
+    fixture.sessions.values().next().value!.expiresAt = new Date(0)
+    expect((await refresh()).statusCode).toBe(401)
+    expect((await verify()).statusCode).toBe(401)
+  })
+
+  it('fails closed instead of trusting a signed token when session storage is unavailable', async () => {
+    const { accessToken, refreshToken } = await login()
+    fixture.databaseUnavailable = true
+    expect((await app.inject({ method: 'GET', url: '/api/v1/auth/verify',
+      headers: { authorization: `Bearer ${accessToken}` } })).statusCode).toBe(503)
+    expect((await app.inject({ method: 'POST', url: '/api/v1/auth/refresh',
+      payload: { refreshToken } })).statusCode).toBe(401)
+    expect((await app.inject({ method: 'POST', url: '/api/v1/auth/logout',
+      headers: { authorization: `Bearer ${accessToken}` } })).statusCode).toBe(503)
+  })
+
+  it('logout revokes both token types for that session while another device remains signed in', async () => {
+    const first = await login()
+    const second = await login()
+    const verify = (token: string) => app.inject({ method: 'GET', url: '/api/v1/auth/verify',
+      headers: { authorization: `Bearer ${token}` } })
+    expect((await app.inject({ method: 'POST', url: '/api/v1/auth/logout',
+      headers: { authorization: `Bearer ${first.accessToken}` } })).statusCode).toBe(200)
+    expect((await verify(first.accessToken)).statusCode).toBe(401)
+    expect((await app.inject({ method: 'POST', url: '/api/v1/auth/refresh',
+      payload: { refreshToken: first.refreshToken } })).statusCode).toBe(401)
+    expect((await verify(second.accessToken)).statusCode).toBe(200)
+  })
+
+  it('rejects expired JWTs, unknown sessions and mismatched session ownership', async () => {
+    const { accessToken } = await login()
+    const claims = app.jwt.verify(accessToken) as Record<string, unknown>
+    for (const token of [
+      app.jwt.sign({ type: 'access', userId: fixture.user.id, sessionId: 'missing' }),
+      app.jwt.sign({ type: 'access', userId: 'another_user', sessionId: claims.sessionId }),
+      app.jwt.sign({ type: 'access', userId: fixture.user.id, sessionId: claims.sessionId }, { expiresIn: -1 })
+    ]) {
+      expect((await app.inject({ method: 'GET', url: '/api/v1/auth/verify',
+        headers: { authorization: `Bearer ${token}` } })).statusCode).toBe(401)
+    }
   })
 
   it('does not expose removed system routes', async () => {
@@ -191,7 +318,7 @@ describe('App', () => {
   })
 
   it('serves fresh official model status for authenticated users', async () => {
-    const token = app.jwt.sign({ userId: 'user_1', uuid: 'uuid_1', role: 'USER' })
+    const { accessToken: token } = await login()
     const response = await app.inject({
       method: 'GET',
       url: '/api/v1/ai/official/status',
@@ -205,7 +332,7 @@ describe('App', () => {
   })
 
   it('creates official model chat for authenticated user', async () => {
-    const token = app.jwt.sign({ userId: 'user_1', uuid: 'uuid_1', role: 'USER' })
+    const { accessToken: token } = await login()
     const response = await app.inject({
       method: 'POST',
       url: '/api/v1/ai/official/chat',

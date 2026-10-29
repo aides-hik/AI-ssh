@@ -3,7 +3,7 @@
 export const APP_NAME = 'Prism'
 export const APP_NAME_ZH = '棱镜'
 export const APP_DISPLAY_NAME = `${APP_NAME_ZH}（${APP_NAME}）`
-export const APP_VERSION = '1.9.6'
+export const APP_VERSION = '1.9.7'
 
 export const DEFAULT_SSH_PORT = 22
 export const DEFAULT_PAGE_SIZE = 20

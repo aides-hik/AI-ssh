@@ -115,6 +115,76 @@ const statusLabels = {
   stopping: 'Stopping', thinking: 'Thinking', failed: 'Failed', stopped: 'Stopped', done: 'Done'
 }
 
+test('reaching the tool round budget keeps the reply unfinished in the chat UI', async () => {
+  const { state, hooks, send } = await loadToolSendFixture()
+  hooks.process = async config => {
+    config.onEvent?.({ type: 'text-delta', delta: 'Partial observations' })
+    config.onEvent?.({ type: 'done', finish: 'step-limit' })
+    return { finish: 'step-limit', messages: config.messages }
+  }
+  await send('inspect')
+  assert.equal(state.currentStage.value, 'error')
+  assert.equal(state.messages.value.at(-1)?.info.finish, 'step-limit')
+  const { messageStatus } = await loadComponentFunctions(['messageStatus'], {
+    ui: { value: statusLabels }, activeAssistantId: { value: null }
+  })
+  assert.deepEqual(messageStatus({ role: 'assistant', finish: 'step-limit', blocks: [] }), { label: 'Failed', kind: 'error' })
+})
+
+test('changing host while history is loading queues the selected host instead of reusing stale history', async () => {
+  const initial = Promise.withResolvers<Record<string, unknown>>()
+  let settingsReads = 0
+  const props = { connectionId: 'runtime-a', historyId: 'saved-a' }
+  const messages = { value: [] as Message[] }
+  const functions = await loadComponentFunctions(['loadConversationHistory'], {
+    props, messages, historyLoading: undefined, historySettings: {}, loadedHistoryId: '',
+    settingsService: { getSettings: () => ++settingsReads === 1 ? initial.promise : Promise.resolve({}) },
+    localStorage: {},
+    ChatHistoryStore: class {
+      applySettings() {}
+      load(id: string) { return [createUserMessage(id, `request for ${id}`)] }
+    },
+    processorHistory: { clear() {} }
+  })
+  const pendingA = functions.loadConversationHistory()
+  await Promise.resolve()
+  props.connectionId = 'runtime-b'
+  props.historyId = 'saved-b'
+  const pendingB = functions.loadConversationHistory()
+  initial.resolve({})
+  await Promise.all([pendingA, pendingB])
+  assert.equal(messages.value[0].info.id, 'saved-b')
+  assert.equal(settingsReads, 2)
+})
+
+test('closing a chat uses the latest history setting and cannot resurrect disabled records', async () => {
+  const saved: unknown[] = []
+  const { saveConversationHistory } = await loadComponentFunctions(['saveConversationHistory'], {
+    loadedHistoryId: 'saved-host', messages: { value: [createUserMessage('user', 'request')] },
+    historySettings: { enableChatHistory: true }, localStorage: {},
+    settingsService: { getSettings: async () => ({ aiAssistant: { enableChatHistory: false } }) },
+    ChatHistoryStore: class {
+      save(id: string, _messages: Message[], settings: unknown) { saved.push({ id, settings }) }
+    }
+  })
+  await saveConversationHistory()
+  assert.deepEqual(saved, [{ id: 'saved-host', settings: { enableChatHistory: false } }])
+})
+
+test('disabling automatic read approval also prevents background environment document reads', async () => {
+  let reads = 0
+  const { refreshSessionContext } = await loadComponentFunctions(['refreshSessionContext'], {
+    props: { connectionId: 'runtime' },
+    settingsService: { getSettings: async () => ({ aiAssistant: { autoApproveReadOnly: false } }) },
+    cachedConnection: { value: null }, cachedServerEnvDoc: { value: null }, cacheLoading: { value: false }, sessionContextStats: { value: {} },
+    sshService: { getConnections: async () => [{ id: 'runtime' }] },
+    docStorageService: { readServerEnvDoc: async () => { reads++; return { content: 'remote contents' } } }
+  })
+  const context = await refreshSessionContext() as { doc: unknown }
+  assert.equal(context.doc, null)
+  assert.equal(reads, 0)
+})
+
 test('user messages and unfinished historical messages do not claim completion', async () => {
   const { messageStatus } = await loadComponentFunctions(['messageStatus'], {
     activeAssistantId: { value: 'active' }, isGenerating: { value: false }, isStopping: { value: false },
@@ -484,6 +554,7 @@ async function loadToolSendFixture(getSettings?: () => Promise<RequestSettings>,
     setTimeout: () => ++timerId,
     nextTick: async () => {}, scrollToBottom() {}, startDurationTimer() {}, stopDurationTimer() {},
     refreshSessionContext: async () => {}, getAdaptiveCompactionLimit: () => 20,
+    loadConversationHistory: async () => {}, saveConversationHistory() {},
     buildSystemPrompt: () => 'Fixture system prompt', updateStatus() {}, logPerformanceSummary() {},
     captureInterruptionState() {}, normalizeUserErrorMessage: (message: string) => message,
     setStatus: (stage: string) => { state.currentStage.value = stage }, console: { error() {} }
@@ -931,6 +1002,7 @@ for (const completedFirst of ['a', 'b'] as const) {
     const { refreshSessionContext, buildSystemPrompt } = await loadComponentFunctions([
       'refreshSessionContext', 'buildSystemPrompt', 'summarizeServerEnvDoc'
     ], {
+      settingsService: { getSettings: async () => ({}) },
       props, cacheLoading, cachedConnection: { value: null }, cachedServerEnvDoc: { value: null },
       sessionContextStats: { value: {} },
       sshService: { getConnections: async () => connections },
@@ -944,9 +1016,11 @@ for (const completedFirst of ['a', 'b'] as const) {
     })
     type Context = { connection: typeof connections[number] | null; doc: string | null }
     const pendingA = refreshSessionContext(false, 'runtime-a') as Promise<Context>
+    await Promise.resolve()
     assert.equal(cacheLoading.value, true)
     props.connectionId = 'runtime-b'
     const pendingB = refreshSessionContext(false, 'runtime-b') as Promise<Context>
+    await Promise.resolve()
     assert.deepEqual(requests, ['runtime-a', 'runtime-b'], 'a background A load must not suppress the selected B load')
     const pending = { a: pendingA, b: pendingB }
     docs[completedFirst].resolve({ content: `# Environment ${completedFirst.toUpperCase()} only` })

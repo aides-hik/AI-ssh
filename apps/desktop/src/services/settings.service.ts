@@ -7,6 +7,7 @@ import { createService } from './base/service-factory'
 import { BaseLocalImpl } from './base/base-api-impl'
 import type { AIModel } from '../types/ai-providers.types'
 import { ProtectedSettingsPersistence } from './settings-persistence'
+import { ChatHistoryStore } from './chat-history'
 
 // ============= 接口定义 =============
 export interface ISettingsService {
@@ -82,11 +83,15 @@ class SettingsLocalImpl extends BaseLocalImpl implements ISettingsService {
   }
 
   async saveSettings(settings: AppSettings): Promise<{ success: boolean }> {
-    return this.persistence.save(settings)
+    const result = await this.persistence.save(settings)
+    if (result.success) new ChatHistoryStore(localStorage).applySettings(settings.aiAssistant || {})
+    return result
   }
 
   async resetSettings(): Promise<{ success: boolean }> {
-    return this.persistence.reset()
+    const result = await this.persistence.reset()
+    if (result.success) new ChatHistoryStore(localStorage).applySettings({ enableChatHistory: false })
+    return result
   }
 
   async exportSettings(exportPath: string): Promise<{ success: boolean }> {
@@ -94,7 +99,9 @@ class SettingsLocalImpl extends BaseLocalImpl implements ISettingsService {
   }
 
   async importSettings(importPath: string): Promise<{ success: boolean; settings?: AppSettings }> {
-    return this.persistence.import(importPath)
+    const result = await this.persistence.import(importPath)
+    if (result.success) new ChatHistoryStore(localStorage).applySettings((result.settings || await this.persistence.get()).aiAssistant || {})
+    return result
   }
 }
 

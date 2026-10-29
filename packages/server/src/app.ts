@@ -140,7 +140,13 @@ export async function buildApp(): Promise<FastifyInstance> {
             properties: {
               status: { type: 'string' },
               timestamp: { type: 'string' },
-              error: { type: 'string' }
+              error: { type: 'string' },
+              uptime: { type: 'number' },
+              version: { type: 'string' },
+              services: {
+                type: 'object',
+                properties: { database: { type: 'string' }, redis: { type: 'string' } }
+              }
             }
           }
         }
@@ -154,12 +160,13 @@ export async function buildApp(): Promise<FastifyInstance> {
 
         // 检查 Redis 连接
         const redisStatus = (await RedisManager.healthCheck()) ? 'healthy' : 'unhealthy'
+        if (redisStatus !== 'healthy') reply.status(503)
 
         return {
-          status: 'healthy',
+          status: redisStatus === 'healthy' ? 'healthy' : 'unhealthy',
           timestamp: new Date().toISOString(),
           uptime: process.uptime(),
-          version: process.env.APP_VERSION || process.env.npm_package_version || '1.0.0',
+          version: process.env.APP_VERSION || APP_VERSION,
           services: {
             database: dbStatus,
             redis: redisStatus

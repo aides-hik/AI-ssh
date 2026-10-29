@@ -14,6 +14,7 @@ interface ElectronAPI {
   updater: {
     getState: () => Promise<any>
     startBackgroundCheck: () => Promise<any>
+    cancelBackgroundCheck: () => Promise<any>
     installDownloadedUpdate: () => Promise<boolean>
   }
 
@@ -62,8 +63,9 @@ interface ElectronAPI {
     execute: (id: string, command: string, requestId?: string, options?: SSHExecutionOptions) => Promise<any>
     onExecuteOutput: (callback: (event: SSHExecuteOutputEvent) => void) => () => void
     cancelExecute: (requestId: string) => Promise<boolean>
-    readEnvDoc: (id: string) => Promise<{ content: string; fullPath: string } | null>
-    writeEnvDoc: (id: string, content: string) => Promise<{ content: string; fullPath: string }>
+    readEnvDoc: (id: string, requestId?: string) => Promise<{ content: string; fullPath: string } | null>
+    writeEnvDoc: (id: string, content: string, requestId?: string) => Promise<{ content: string; fullPath: string }>
+    cancelEnvDoc: (requestId: string) => Promise<boolean>
     executeSilent: (
       id: string,
       command: string

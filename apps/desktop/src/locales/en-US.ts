@@ -447,7 +447,7 @@ export default {
     aiAssistantDesc: 'Configure AI assistant behavior and interaction',
     autoApproveReadOnly: 'Auto-approve Read-only Operations',
     autoApproveReadOnlyHint:
-      'Automatically approve read operations like viewing files and directories',
+      'Approve dedicated read tools automatically; disabling requires review and skips automatic environment reads',
     commandRiskLevel: 'Command Auto-execution Risk Level',
     commandRiskLevelHint:
       'Automatically execute commands at or below this risk level without confirmation',
@@ -464,9 +464,9 @@ export default {
     riskLevelInfo4: 'Auto-execute delete and modify commands (use with caution!)',
     riskLevelInfo5: 'Auto-execute all commands including system-level operations (dangerous!)',
     saveChatHistory: 'Save Chat History',
-    saveChatHistoryHint: 'Save AI assistant conversation records',
+    saveChatHistoryHint: 'Save conversations locally and restore on reconnect; disabling clears saved conversations',
     maxHistoryMessages: 'Max History Messages',
-    maxHistoryMessagesHint: 'Maximum number of conversation messages to retain',
+    maxHistoryMessagesHint: 'Local history limit, retaining complete turns; the open conversation is unaffected',
     defaultModel: 'Default Model',
     modelGpt4: 'GPT-4',
     modelGpt35: 'GPT-3.5',

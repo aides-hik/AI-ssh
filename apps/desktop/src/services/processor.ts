@@ -9,7 +9,7 @@ export type StreamEvent =
   | { type: 'tool-start'; toolCallId: string; toolName: string; input: any }
   | { type: 'tool-result'; toolCallId: string; output: { output: string } }
   | { type: 'tool-error'; toolCallId: string; error: string }
-  | { type: 'done'; finish: 'stop' | 'tool-calls' }
+  | { type: 'done'; finish: 'stop' | 'tool-calls' | 'step-limit' }
   | { type: 'error'; error: Error }
 
 import type { ModelMessage } from './messages/convert'
@@ -29,6 +29,7 @@ export interface ProcessorConfig {
   abortSignal?: AbortSignal
   reasoning?: ReasoningSelection
   toolConcurrency?: number
+  maxSteps?: number
   /** Calls with the same key run in order; undefined creates an exclusive barrier. */
   toolExecutionKey?: (toolName: string, input: any) => string | undefined
   onEvent?: (event: StreamEvent) => void
@@ -37,7 +38,7 @@ export interface ProcessorConfig {
 
 // 处理器结果
 export interface ProcessorResult {
-  finish: 'stop' | 'tool-calls'
+  finish: 'stop' | 'tool-calls' | 'step-limit'
   toolCalls?: Array<{ callId: string; name: string; input: any }>
   messages?: ModelMessage[]
   usage?: {
@@ -105,7 +106,9 @@ export class SessionProcessor {
     this.throwIfAborted()
     this.state.stepCount = 0
 
-    while (this.state.stepCount < MAX_STEPS && !this.state.aborted) {
+    const maxSteps = Number.isFinite(this.config.maxSteps)
+      ? Math.min(MAX_STEPS, Math.max(1, Math.floor(this.config.maxSteps ?? MAX_STEPS))) : MAX_STEPS
+    while (this.state.stepCount < maxSteps && !this.state.aborted) {
       this.state.stepCount++
       this.state.toolCalls.clear()
 
@@ -130,7 +133,9 @@ export class SessionProcessor {
       }
     }
 
-    return { finish: 'stop', messages: this.messages }
+    this.throwIfAborted()
+    this.emit({ type: 'done', finish: 'step-limit' })
+    return { finish: 'step-limit', messages: this.messages }
   }
 
   private async processOneRound(): Promise<{

@@ -12,7 +12,7 @@ export interface MessageInfo {
   role: MessageRole
   parentID?: string
   sessionID?: string
-  finish?: 'stop' | 'tool-calls' | 'unknown'
+  finish?: 'stop' | 'tool-calls' | 'step-limit' | 'unknown'
   createdAt: number
   agent?: string
   model?: {

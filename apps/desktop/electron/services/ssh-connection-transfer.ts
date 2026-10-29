@@ -29,6 +29,15 @@ export function normalizeConnectionHost(host: unknown): string {
   return typeof host === 'string' ? host.trim().toLowerCase() : ''
 }
 
+function connectionIdentity(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null
+  const { host, port = 22, username } = value as Record<string, unknown>
+  const normalizedHost = normalizeConnectionHost(host)
+  const normalizedUser = typeof username === 'string' ? username.trim() : ''
+  if (!normalizedHost || !normalizedUser || !Number.isInteger(port) || Number(port) < 1 || Number(port) > 65535) return null
+  return JSON.stringify([normalizedHost, port, normalizedUser])
+}
+
 export function normalizeStoredAuthType(authType: unknown): SSHConnectionExportItem['authType'] {
   if (authType === 'PRIVATE_KEY' || authType === 'privateKey') return 'PRIVATE_KEY'
   if (authType === 'SSH_AGENT' || authType === 'agent') return 'SSH_AGENT'
@@ -37,13 +46,13 @@ export function normalizeStoredAuthType(authType: unknown): SSHConnectionExportI
 
 export function prepareConnectionImport(
   value: unknown,
-  existingHosts: unknown[]
+  existingConnections: unknown[]
 ): { connections: SSHConnectionExportItem[]; result: SSHConnectionImportResult } {
   if (!isConnectionExportEnvelope(value)) {
     throw new Error('Unsupported or invalid connection export file')
   }
 
-  const knownHosts = new Set(existingHosts.map(normalizeConnectionHost).filter(Boolean))
+  const knownConnections = new Set(existingConnections.map(connectionIdentity).filter(Boolean))
   const connections: SSHConnectionExportItem[] = []
   const result: SSHConnectionImportResult = { imported: 0, skipped: 0, invalid: 0 }
 
@@ -54,13 +63,13 @@ export function prepareConnectionImport(
       continue
     }
 
-    const normalizedHost = normalizeConnectionHost(connection.host)
-    if (knownHosts.has(normalizedHost)) {
+    const identity = connectionIdentity(connection)
+    if (knownConnections.has(identity)) {
       result.skipped++
       continue
     }
 
-    knownHosts.add(normalizedHost)
+    knownConnections.add(identity)
     connections.push(connection)
     result.imported++
   }

@@ -16,6 +16,13 @@ export class ProcessorHistory {
   #characters = 0
   #lastUserContent: string | null | undefined
 
+  clear(): void {
+    this.#scope = undefined
+    this.#turns.clear()
+    this.#characters = 0
+    this.#lastUserContent = undefined
+  }
+
   toModelMessages(messages: Message[], scope: string, requireOpaqueState = false): ModelMessage[] {
     if (scope !== this.#scope) {
       this.#turns.clear()

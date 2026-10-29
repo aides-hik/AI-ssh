@@ -94,7 +94,6 @@ watch(() => props.stage, () => {
       </header>
       <p :id="descriptionId" class="oc-deployment-approval-description">
         {{ isDocument ? (zh ? '请检查目标服务器和文档修改内容，确认后保存。' : 'Review the target servers and document changes before saving.') : (zh ? '请检查本阶段的目标和命令，确认后开始执行。' : 'Review this stage’s hosts and commands before running it.') }}
-        <span v-if="!isDocument">{{ zh ? '脚本使用 set -e，命令失败时停止当前脚本。' : 'Scripts use set -e and stop on a command failure.' }}</span>
       </p>
       <div class="oc-deployment-approval-strategy"><i class="bi bi-diagram-3" aria-hidden="true"></i>{{ strategyLabel }}</div>
       <p v-if="!isDocument" class="oc-deployment-approval-timeout"><i class="bi bi-clock" aria-hidden="true"></i>{{ zh ? '每条命令超时' : 'Timeout per command' }} {{ timeoutLabel }}{{ zh ? '（包括验证）' : ' (including verification)' }}</p>

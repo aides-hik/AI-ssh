@@ -21,6 +21,7 @@ const state = ref<UpdateClientState>({
 
 let initialized = false
 let installPromptShownForVersion = ''
+let requestGeneration = 0
 
 async function initialize() {
   if (!window.electronAPI?.updater) {
@@ -30,13 +31,17 @@ async function initialize() {
   if (!initialized) {
     initialized = true
     window.electronAPI.onUpdaterStateChange((nextState: UpdateClientState) => {
+      requestGeneration++
       state.value = nextState
     })
   }
 
-  state.value = await window.electronAPI.updater.getState()
+  const generation = ++requestGeneration
+  const initial = await window.electronAPI.updater.getState()
+  if (generation !== requestGeneration) return state.value
+  state.value = initial
   if (state.value.enabled) {
-    state.value = await window.electronAPI.updater.startBackgroundCheck()
+    await startBackgroundCheck()
   }
   return state.value
 }
@@ -46,7 +51,17 @@ async function startBackgroundCheck() {
     return state.value
   }
 
-  state.value = await window.electronAPI.updater.startBackgroundCheck()
+  const generation = ++requestGeneration
+  const result = await window.electronAPI.updater.startBackgroundCheck()
+  if (generation === requestGeneration) state.value = result
+  return state.value
+}
+
+async function cancelBackgroundCheck() {
+  if (!window.electronAPI?.updater?.cancelBackgroundCheck) return state.value
+  const generation = ++requestGeneration
+  const result = await window.electronAPI.updater.cancelBackgroundCheck()
+  if (generation === requestGeneration && result) state.value = result
   return state.value
 }
 
@@ -76,6 +91,7 @@ export function useUpdateClient() {
     state: readonly(state),
     initialize,
     startBackgroundCheck,
+    cancelBackgroundCheck,
     installDownloadedUpdate,
     shouldShowInstallPrompt
   }

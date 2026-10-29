@@ -6,6 +6,7 @@ import { createMarkdownRenderCache } from '@/utils/markdown-render-cache'
 import { renderChatMarkdown } from '@/utils/chat-markdown'
 
 import { settingsService } from '@/services/settings.service'
+import { ChatHistoryStore, type HistorySettings } from '@/services/chat-history'
 import { sshService, type SSHConnection } from '@/services/ssh.service'
 import { docStorageService } from '@/services/doc-storage.service'
 import { Message as V2Message, createAssistantMessage, type ToolPart, type TextPart } from '@/services/messages/message'
@@ -45,6 +46,7 @@ const props = defineProps<{
   currentModel: AIModel | null
   connectionId?: string
   sessionId?: string
+  historyId?: string
   serverEnvDocId?: string
   showServerEnvButton?: boolean
 }>()
@@ -186,6 +188,42 @@ const activeAssistantId = ref<string | null>(null)
 const isStopping = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
 const messages = ref<V2Message[]>([])
+let historySettings: HistorySettings = {}
+let loadedHistoryId = ''
+let historyLoading: Promise<void> | undefined
+async function loadConversationHistory() {
+  const connectionId = props.connectionId
+  const historyId = props.historyId
+  const pending = (historyLoading || Promise.resolve()).catch(() => {}).then(async () => {
+    const settings = await settingsService.getSettings()
+    historySettings = settings.aiAssistant || {}
+    const connection = historyId ? null : (await sshService.getConnections()).find(item => item.id === connectionId)
+    if (connectionId !== props.connectionId || historyId !== props.historyId) return
+    const config = connection?.config
+    const id = historyId || config?.id || (config ? JSON.stringify([config.host, config.port, config.username]) : '')
+    const store = new ChatHistoryStore(localStorage)
+    store.applySettings(historySettings)
+    if (id !== loadedHistoryId) {
+      // A runtime reconnect of the same saved connection keeps this conversation.
+      messages.value = store.load(id, historySettings)
+      processorHistory.clear()
+      loadedHistoryId = id
+    }
+  })
+  historyLoading = pending
+  return pending.finally(() => { if (historyLoading === pending) historyLoading = undefined })
+}
+async function saveConversationHistory() {
+  const id = loadedHistoryId
+  const conversation = messages.value
+  try {
+    // Read the authoritative setting at save time. A closing tab must not
+    // recreate records after another view has just disabled history.
+    const settings = await settingsService.getSettings()
+    new ChatHistoryStore(localStorage).save(id, conversation, settings.aiAssistant || {})
+  }
+  catch (cause) { console.warn('[AIChat] 保存本地历史失败:', cause) }
+}
 const processorHistory = new ProcessorHistory()
 const error = ref<any>(null)
 const abortController = ref<AbortController | null>(null)
@@ -511,6 +549,8 @@ onMounted(() => {
   if (messagesContainer.value) viewportObserver.observe(messagesContainer.value)
 
   document.addEventListener('pointerdown', handlePointerDownOutsideMenu)
+  void loadConversationHistory().catch(cause => console.warn('[AIChat] 读取本地历史失败:', cause))
+  window.addEventListener('settings-updated', reloadHistorySettings)
   void refreshSessionContext()
 })
 
@@ -524,6 +564,20 @@ onUnmounted(() => {
   abortController.value?.abort()
   clearTimeout(executionLogTimer)
   document.removeEventListener('pointerdown', handlePointerDownOutsideMenu)
+  window.removeEventListener('settings-updated', reloadHistorySettings)
+  saveConversationHistory()
+})
+
+async function reloadHistorySettings() {
+  try {
+    await loadConversationHistory()
+    saveConversationHistory()
+  } catch (cause) { console.warn('[AIChat] 更新历史设置失败:', cause) }
+}
+watch(() => props.historyId, () => {
+  abortController.value?.abort()
+  saveConversationHistory()
+  if (!isGenerating.value) void loadConversationHistory()
 })
 
 watch(
@@ -531,6 +585,7 @@ watch(
   () => {
     cachedConnection.value = null
     cachedServerEnvDoc.value = null
+    if (!isGenerating.value) void loadConversationHistory()
     void refreshSessionContext(true)
   }
 )
@@ -699,8 +754,10 @@ async function sendMessageWithTools(content: string) {
   executionLogBuffer.reset(requestTargets.map(target => target.id))
   executionLogs.value = []
   let openedExecutionDetails = false
+  let requestAutoApproveReadOnly = true
   const requestTools = createMultiHostTools(requestRun, {
     approveDeployment: (stage, signal) => requestDeploymentApproval(stage, signal, requestRun.targets),
+    approveReadOnly: (stage, signal) => requestAutoApproveReadOnly ? Promise.resolve(true) : requestDeploymentApproval(stage, signal, requestRun.targets),
     onOutput: event => {
       if (requestSignal.aborted || multiHostRun !== requestRun) return
       queueExecutionLog(event.targetId, event.stream, event.data, event.truncated)
@@ -741,6 +798,8 @@ async function sendMessageWithTools(content: string) {
 
     {
       const settings = await settingsService.getSettings()
+      requestAutoApproveReadOnly = settings.aiAssistant?.autoApproveReadOnly !== false
+      await loadConversationHistory()
       const providerConfig = (settings?.aiProviders || []).find(
         (p: any) => p.id === requestProvider.id
       )
@@ -980,6 +1039,13 @@ async function sendMessageWithTools(content: string) {
             }
 
             case 'done':
+              if (event.finish === 'step-limit') {
+                if (currentMsg) currentMsg.info.finish = 'step-limit'
+                messages.value = [...messages.value]
+                setStatus('error', '达到执行上限，任务尚未完成；已保留当前进度，可发送新消息继续。')
+                updateStatus()
+                break
+              }
               if (currentMsg) {
                 if (event.finish === 'stop') {
                   markLastAssistantTextBlockAsSummary(currentMsg)
@@ -1100,6 +1166,7 @@ async function sendMessageWithTools(content: string) {
       messages.value = [...messages.value]
     }
     isGenerating.value = false
+    if (props.historyId && loadedHistoryId !== props.historyId) void loadConversationHistory()
     isStopping.value = false
     stopDurationTimer()
     abortController.value = null
@@ -1112,6 +1179,7 @@ async function sendMessageWithTools(content: string) {
       logPerformanceSummary('aborted')
       performanceLogged = true
     }
+    await saveConversationHistory()
   }
 }
 
@@ -1218,13 +1286,15 @@ function logPerformanceSummary(result: 'success' | 'error' | 'aborted') {
 }
 
 async function refreshSessionContext(force = false, connectionId = props.connectionId) {
+  const settings = await settingsService.getSettings()
+  const allowAutomaticRead = settings.aiAssistant?.autoApproveReadOnly !== false
   if (!connectionId) {
     cachedConnection.value = null
     cachedServerEnvDoc.value = null
     return { connection: null, doc: null }
   }
 
-  if (!force && cachedConnection.value?.id === connectionId && cachedServerEnvDoc.value !== null) {
+  if (allowAutomaticRead && !force && cachedConnection.value?.id === connectionId && cachedServerEnvDoc.value !== null) {
     sessionContextStats.value = {
       connectionSource: 'cache',
       envDocSource: 'cache',
@@ -1241,7 +1311,7 @@ async function refreshSessionContext(force = false, connectionId = props.connect
         console.warn('[AIChat] 获取 SSH 连接信息失败:', error)
         return [] as SSHConnection[]
       }),
-      connectionId
+      allowAutomaticRead && connectionId
         ? docStorageService.readServerEnvDoc(connectionId).catch(error => {
             console.warn('[AIChat] 读取服务器环境文档失败:', error)
             return null
@@ -1511,6 +1581,7 @@ function openModelSettings() {
 
 function messageStatus(msg: DisplayMessage): { label: string; kind: string } | null {
   if (msg.role !== 'assistant') return null
+  if (msg.finish === 'step-limit') return { label: ui.value.failed, kind: 'error' }
   if (msg.id === activeAssistantId.value) {
     if (isGenerating.value) return { label: isStopping.value ? ui.value.stopping : ui.value.thinking, kind: 'info' }
     if (currentStage.value === 'error') return { label: ui.value.failed, kind: 'error' }

@@ -37,31 +37,16 @@ describe('autoMigrateIfEnabled', () => {
     }))
   })
 
-  it('uses prisma db push when no migrations exist', async () => {
+  it('refuses unversioned automatic schema pushes when migrations are missing', async () => {
     existsSyncMock.mockReturnValue(false)
 
     const { autoMigrateIfEnabled } = await import('./prisma-migrate.js')
-    await autoMigrateIfEnabled(true)
-
-    expect(spawnMock).toHaveBeenCalledWith(
-      process.execPath,
-      [
-        expect.stringMatching(/prisma[\\/]build[\\/]index\.js$/),
-        'db',
-        'push',
-        '--schema',
-        expect.stringMatching(/schema-postgresql\.prisma$/)
-      ],
-      expect.objectContaining({
-        cwd: expect.stringMatching(/packages[\\/]database$/),
-        shell: false
-      })
-    )
-    expect(loggerWarn).toHaveBeenCalled()
+    await expect(autoMigrateIfEnabled(true)).rejects.toThrow('refusing automatic db push')
+    expect(spawnMock).not.toHaveBeenCalled()
   })
 
   it('uses prisma migrate deploy when migrations exist', async () => {
-    existsSyncMock.mockImplementation(path => String(path).endsWith('migrations'))
+    existsSyncMock.mockImplementation(path => /migrations$|migration\.sql$/.test(String(path)))
     readdirSyncMock.mockReturnValue(['20260410_init'])
 
     const { autoMigrateIfEnabled } = await import('./prisma-migrate.js')
@@ -81,5 +66,19 @@ describe('autoMigrateIfEnabled', () => {
         shell: false
       })
     )
+  })
+
+  it('does not mistake the migration lock file for an executable migration', async () => {
+    existsSyncMock.mockImplementation(path => String(path).endsWith('migrations'))
+    readdirSyncMock.mockReturnValue(['migration_lock.toml'])
+    const { autoMigrateIfEnabled } = await import('./prisma-migrate.js')
+    await expect(autoMigrateIfEnabled(true)).rejects.toThrow('refusing automatic db push')
+    expect(spawnMock).not.toHaveBeenCalled()
+  })
+
+  it('leaves schema unchanged when automatic migration is disabled', async () => {
+    const { autoMigrateIfEnabled } = await import('./prisma-migrate.js')
+    await autoMigrateIfEnabled(false)
+    expect(spawnMock).not.toHaveBeenCalled()
   })
 })

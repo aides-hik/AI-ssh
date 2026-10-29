@@ -1,12 +1,12 @@
 import { app, BrowserWindow, shell, ipcMain, dialog, globalShortcut, session } from 'electron'
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { chmod } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import { join, normalize } from 'path'
 import { windowEvents } from '../shared/events'
 import { StorageManager } from '@ai-ssh/database'
 import { initializeStorageManager } from './storage'
 import { migrateStoredCredentials } from '../services/credential-storage'
-import { UpdateService, buildManifestUrls } from '../services/update-service'
+import { UpdateService, buildManifestUrls, createNodeUpdateFileStore } from '../services/update-service'
 import { getApiOriginByMode } from '../../src/config/api-environment'
 
 // ✅ 静态导入所有 IPC 处理器（Electron 打包兼容）
@@ -430,30 +430,18 @@ app.whenReady().then(() => {
     manifestUrls: getManifestUrls(process.platform, process.arch),
     fetch: globalThis.fetch,
     getUserDataPath: () => join(app.getPath('userData'), 'updates'),
-    fileStore: {
-      mkdir: async dirPath => {
-        await mkdir(dirPath, { recursive: true })
-      },
-      exists: async filePath => {
-        try {
-          await access(filePath)
-          return true
-        } catch {
-          return false
-        }
-      },
-      readFile: async filePath => readFile(filePath),
-      writeFile: async (filePath, data) => {
-        await writeFile(filePath, data)
-      }
-    },
+    fileStore: createNodeUpdateFileStore(),
     openPath: async filePath => shell.openPath(filePath),
     launchInstaller: async filePath => {
-      const child = spawn(filePath, [], {
-        detached: true,
-        stdio: 'ignore'
+      if (process.platform === 'linux' && filePath.toLowerCase().endsWith('.appimage')) await chmod(filePath, 0o700)
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn(filePath, [], { detached: true, stdio: 'ignore', windowsHide: true })
+        child.once('error', reject)
+        child.once('spawn', () => {
+          child.unref()
+          resolve()
+        })
       })
-      child.unref()
       setTimeout(() => app.quit(), 500)
     },
     emitState: state => {
@@ -510,6 +498,8 @@ ipcMain.handle('updater:start-background-check', async () => {
 
   return updateService.startBackgroundCheck()
 })
+
+ipcMain.handle('updater:cancel-background-check', () => updateService?.cancelBackgroundCheck())
 
 ipcMain.handle('updater:install-downloaded-update', async () => {
   if (!updateService) {

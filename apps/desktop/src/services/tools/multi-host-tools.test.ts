@@ -42,6 +42,7 @@ async function fixture(context: TestContext, approveDeployment?: (stage: FrozenD
   targets?: HostTarget[]
   onOutput?: MultiHostToolOptions['onOutput']
   onPhase?: MultiHostToolOptions['onPhase']
+  approveReadOnly?: MultiHostToolOptions['approveReadOnly']
 } = {}) {
   const calls: Invocation[] = []
   const targets = settings.targets ?? selected
@@ -82,7 +83,7 @@ async function fixture(context: TestContext, approveDeployment?: (stage: FrozenD
   const run = new MultiHostRun(targets, new AbortController().signal)
   context.after(() => run.finish())
   const module = await loadTools()
-  const tools = module.createMultiHostTools(run, { approveDeployment, onOutput: settings.onOutput, onPhase: settings.onPhase })
+  const tools = module.createMultiHostTools(run, { approveDeployment, approveReadOnly: settings.approveReadOnly, onOutput: settings.onOutput, onPhase: settings.onPhase })
   const invoke = async (name: string, input: Record<string, unknown>) => {
     const tool: ToolInfo | undefined = tools.find(candidate => candidate.id === name)
     assert.ok(tool, `Unknown fixture tool: ${name}`)
@@ -96,6 +97,27 @@ async function fixture(context: TestContext, approveDeployment?: (stage: FrozenD
     emitOutput: (event: SSHExecuteOutputEvent) => { for (const listener of outputListeners) listener(event) },
     outputListeners }
 }
+
+test('read approval reviews immutable exact scripts and rejection prevents every dedicated read', async context => {
+  const reviewed: FrozenDeploymentStage[] = []
+  const { invoke, calls } = await fixture(context, undefined, { approveReadOnly: async stage => { reviewed.push(stage); return false } })
+  for (const [name, input] of [
+    ['inspect_server', { checks: ['cpu'] }], ['read_file', { path: '/etc/hostname' }],
+    ['list_files', { path: '/etc' }], ['read_server_env_doc', {}]
+  ] as const) await assert.rejects(invoke(name, { targetId: 'runtime-a', ...input }), /未批准只读检查/)
+  assert.equal(calls.length, 0)
+  assert.equal(reviewed.length, 4)
+  assert.equal(Object.isFrozen(reviewed[0].steps[0]), true)
+  assert.equal(reviewed[0].steps[0].targetId, 'runtime-a')
+})
+
+test('concurrent read approvals queue and approved content is the exact executed script', async context => {
+  const reviewed: FrozenDeploymentStage[] = []
+  const { invoke, calls } = await fixture(context, undefined, { approveReadOnly: async stage => { reviewed.push(stage); return true } })
+  await Promise.all(['runtime-a', 'runtime-b'].map(targetId => invoke('read_file', { targetId, path: '/etc/hostname' })))
+  assert.equal(calls.length, 2)
+  for (const call of calls) assert.equal(call.command, reviewed.find(stage => stage.steps[0].targetId === call.id)?.steps[0].command)
+})
 
 test('all remote tools reject targets outside the selected live connection IDs', async context => {
   const { tools, invoke, calls, queries } = await fixture(context)

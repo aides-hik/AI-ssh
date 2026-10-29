@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { logger } from '../utils/safe-logger.js'
 import { userService, UserResponse } from '../services/user.service.js'
 import { successResponseSchema } from '../schemas/common.schema.js'
+import { accessClaims, authSessionService, isAuthToken } from '../services/auth-session.service.js'
 
 interface LoginBody {
   email: string
@@ -81,15 +82,10 @@ export async function authRoutes(fastify: FastifyInstance) {
       // 更新最后登录时间
       await userService.updateLastLogin(user.id)
 
-      // 生成JWT令牌
+      // A persistent session lets logout revoke both access and refresh tokens.
+      const session = await authSessionService.create(user.id)
       const accessToken = fastify.jwt.sign(
-        {
-          userId: user.id,
-          uuid: user.uuid,
-          username: user.username,
-          email: user.email,
-          role: user.role
-        },
+        accessClaims(user, session.id),
         {
           expiresIn: rememberMe ? '7d' : '1d'
         }
@@ -98,7 +94,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       const refreshToken = fastify.jwt.sign(
         {
           userId: user.id,
-          uuid: user.uuid,
+          sessionId: session.id,
           type: 'refresh'
         },
         {
@@ -269,9 +265,9 @@ export async function authRoutes(fastify: FastifyInstance) {
       const { refreshToken } = request.body
 
       // 验证刷新令牌
-      const decoded = fastify.jwt.verify(refreshToken) as any
+      const decoded = fastify.jwt.verify(refreshToken)
 
-      if (decoded.type !== 'refresh') {
+      if (!isAuthToken(decoded, 'refresh')) {
         return reply.status(401).send({
           success: false,
           message: '无效的刷新令牌',
@@ -279,13 +275,14 @@ export async function authRoutes(fastify: FastifyInstance) {
         })
       }
 
-      // 生成新的访问令牌
+      const user = await authSessionService.getActiveUser(decoded.sessionId, decoded.userId)
+      if (!user) {
+        return reply.status(401).send({ success: false, message: '登录已失效，请重新登录', code: 'INVALID_REFRESH_TOKEN' })
+      }
+
+      // Reload account state instead of copying absent or stale claims from refresh tokens.
       const accessToken = fastify.jwt.sign(
-        {
-          userId: decoded.userId,
-          username: decoded.username,
-          role: decoded.role
-        },
+        accessClaims(user, decoded.sessionId),
         {
           expiresIn: '1d'
         }
@@ -319,7 +316,8 @@ export async function authRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate]
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      // 这里可以将令牌加入黑名单
+      const user = request.user as { userId: string; sessionId: string }
+      await authSessionService.revoke(user.sessionId, user.userId)
 
       return reply.send({
         success: true,

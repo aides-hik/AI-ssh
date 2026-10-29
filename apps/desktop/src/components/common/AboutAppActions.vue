@@ -10,8 +10,10 @@ const installing = ref(false)
 const actionError = ref('')
 const linkError = ref('')
 const hasUpdater = Boolean(window.electronAPI?.updater)
+let checkGeneration = 0
 const busyStatuses = new Set(['checking', 'update-available', 'probing-sources', 'downloading', 'installing'])
 const busy = computed(() => checking.value || installing.value || busyStatuses.has(updater.state.value.status))
+const cancellable = computed(() => checking.value || ['checking', 'update-available', 'probing-sources', 'downloading'].includes(updater.state.value.status))
 const statusText = computed(() => {
   if (actionError.value) return actionError.value
   if (!hasUpdater) return '请在桌面应用中检查更新。'
@@ -43,12 +45,23 @@ async function checkUpdates() {
   if (!hasUpdater || !updater.state.value.enabled || busy.value) return
   actionError.value = ''
   checking.value = true
+  const generation = ++checkGeneration
   try {
     await updater.startBackgroundCheck()
   } catch (error) {
-    actionError.value = `检查更新失败：${error instanceof Error ? error.message : String(error)}。请重试。`
+    if (generation === checkGeneration) actionError.value = `检查更新失败：${error instanceof Error ? error.message : String(error)}。请重试。`
   } finally {
-    checking.value = false
+    if (generation === checkGeneration) checking.value = false
+  }
+}
+async function cancelUpdateCheck() {
+  ++checkGeneration
+  checking.value = false
+  actionError.value = ''
+  try {
+    await updater.cancelBackgroundCheck()
+  } catch (error) {
+    actionError.value = `无法取消更新：${error instanceof Error ? error.message : String(error)}`
   }
 }
 async function installUpdate() {
@@ -89,6 +102,7 @@ async function openProject(event: MouseEvent) {
           <i class="bi bi-arrow-repeat" :class="{ 'is-checking': checking || updater.state.value.status === 'checking' }" aria-hidden="true"></i>
           {{ buttonLabel }}
         </button>
+        <button v-if="cancellable" type="button" class="about-check-update" @click="cancelUpdateCheck">取消更新</button>
         <button v-if="updater.state.value.status === 'downloaded'" type="button" class="about-install-update" :disabled="busy" @click="installUpdate">
           <i class="bi bi-download" aria-hidden="true"></i>安装更新
         </button>

@@ -227,7 +227,7 @@ export class SSHTreeService {
     const existing = await storageManager.findMany('SSHConnection', { where: { userId } })
     const prepared = prepareConnectionImport(
       envelope,
-      existing.map((connection: any) => connection.host)
+      existing
     )
 
     for (const connection of prepared.connections) {

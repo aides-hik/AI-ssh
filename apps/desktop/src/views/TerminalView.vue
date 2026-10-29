@@ -177,6 +177,7 @@
           :current-model="currentModel"
           :connection-id="currentConnectionId"
           :session-id="terminalSessionId"
+          :history-id="nodeId"
           :server-env-doc-id="serverEnvDocId"
           :show-server-env-button="!!serverEnvDocId && connectionStatus === 'connected'"
           @open-server-env-doc="showServerEnvDocEditor = true"

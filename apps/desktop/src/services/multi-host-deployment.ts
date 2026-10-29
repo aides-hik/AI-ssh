@@ -207,7 +207,7 @@ export async function executeDeploymentStage(
               outcome.commandResult = normalizeSSHCommandResult(
                 await options.execute(step.targetId, step.command, commandSignal, context)
               )
-              commandSignal.throwIfAborted()
+              if (!(frozen.operation === 'environment-document' && outcome.commandResult.committed)) commandSignal.throwIfAborted()
               assertCommandSuccess(outcome.commandResult, frozen.kind === 'verify')
               if (step.verifyCommand) {
                 const verificationContext = { ...context, phase: 'verifying' as const }
@@ -227,7 +227,7 @@ export async function executeDeploymentStage(
               halt = true
               throw error
             }
-          })
+          }, { committed: () => frozen.operation === 'environment-document' && outcome.status === 'completed' && outcome.commandResult?.committed === true })
         } catch (error) {
           halt = true
           outcome.status = commandSignal?.aborted || options.signal.aborted || run.isStopped(step.targetId)

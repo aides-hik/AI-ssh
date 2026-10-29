@@ -378,7 +378,7 @@ async function loadExecutions() {
   const names = new Set(['execute', 'cancelExecute', 'createCommandAbortError', 'cancelConnectionExecutions', 'disconnect'])
   const methods = declaration.members.filter(member => ts.isMethodDeclaration(member) && member.name && names.has(member.name.getText(parsed)))
   assert.equal(methods.length, names.size)
-  const javascript = ts.transpileModule(`class Executions { connections = new Map(); pendingExecs = new Map(); closeFileListShell() {} cancelConnectionTransfers() {} ${methods.map(item => item.getText(parsed)).join('\n')} }`, {
+  const javascript = ts.transpileModule(`class Executions { connections = new Map(); pendingExecs = new Map(); closeFileListShell() {} cancelConnectionTransfers() {} cancelConnectionEnvDocs() {} ${methods.map(item => item.getText(parsed)).join('\n')} }`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
   }).outputText
   const timers: Array<() => void> = []
@@ -600,7 +600,10 @@ test('execute IPC streams only to the invoking renderer and tolerates renderer d
 })
 
 test('remote env doc resolves HOME and uses temp-file rename through dedicated IPC', async () => {
-  const source = await readFile(sshHandlersPath, 'utf8')
+  const source = (await Promise.all([
+    readFile(sshHandlersPath, 'utf8'),
+    readFile(join(currentDir, '../services/remote-env-document.ts'), 'utf8')
+  ])).join('\n')
 
   assert.match(source, /printf '%s' "\$HOME"/)
   assert.match(source, /\$\{fullPath\}\.tmp-/)
@@ -623,7 +626,7 @@ test('current directory lookup uses a shell channel before falling back to silen
   const source = await readFile(sshHandlersPath, 'utf8')
 
   assert.match(source, /currentDirectoryProbe\?: \{/)
-  assert.match(source, /if \(connection\.currentDirectoryProbe\) \{/)
+  assert.match(source, /if \(source === 'stdout' && connection\.currentDirectoryProbe\) \{/)
   assert.match(source, /async getCurrentDirectory\(/)
   assert.match(source, /__OC_CWD_BEGIN__/)
   assert.match(source, /__OC_CWD_END__/)

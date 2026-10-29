@@ -29,8 +29,10 @@ const getBackupFilename = (docId: string, reason: 'replace-document' | 'exact-re
 const createServerEnvBackup = async (
   docId: string,
   currentContent: string,
-  reason: 'replace-document' | 'exact-replace'
+  reason: 'replace-document' | 'exact-replace',
+  signal: AbortSignal
 ) => {
+  signal.throwIfAborted()
   if (!currentContent.trim()) {
     return
   }
@@ -48,6 +50,7 @@ const createServerEnvBackup = async (
   ].join('\n')
 
   await docStorageService.saveDoc(DocCategory.SSH_NOTES, backupFilename, backupBody)
+  signal.throwIfAborted()
 }
 
 const buildExactReplacement = (currentContent: string, nextContent: string) => {
@@ -209,7 +212,8 @@ export const ReadServerEnvDocTool = Tool.define('read_server_env_doc', async () 
         serverEnvDocId: ctx.extra?.serverEnvDocId
       })
 
-      const doc = await docStorageService.readServerEnvDoc(docId)
+      const doc = await docStorageService.readServerEnvDoc(docId, ctx.abort)
+      ctx.abort.throwIfAborted()
 
       return {
         title: 'Server Environment Document',
@@ -260,7 +264,9 @@ export const UpdateServerEnvDocTool = Tool.define('update_server_env_doc', async
       const oldString = typeof params.old_string === 'string' ? params.old_string : ''
       const newString = typeof params.new_string === 'string' ? params.new_string : ''
       const forceReplace = params.force_replace === true
-      const existingDoc = await docStorageService.readServerEnvDoc(docId)
+      ctx.abort.throwIfAborted()
+      const existingDoc = await docStorageService.readServerEnvDoc(docId, ctx.abort)
+      ctx.abort.throwIfAborted()
       const existingContent = existingDoc?.content || ''
 
       console.info('[SSHTools] 更新服务器环境文档', {
@@ -276,9 +282,9 @@ export const UpdateServerEnvDocTool = Tool.define('update_server_env_doc', async
       })
 
       if (oldString) {
-        await createServerEnvBackup(docId, existingContent, 'exact-replace')
+        await createServerEnvBackup(docId, existingContent, 'exact-replace', ctx.abort)
 
-        await docStorageService.editServerEnvDoc(docId, oldString, newString)
+        await docStorageService.editServerEnvDoc(docId, oldString, newString, ctx.abort)
       } else if (content) {
         if (existingContent && !forceReplace) {
           if (!looksLikeFullServerEnvDoc(content)) {
@@ -296,29 +302,30 @@ export const UpdateServerEnvDocTool = Tool.define('update_server_env_doc', async
             }
           }
 
-          await createServerEnvBackup(docId, existingContent, 'exact-replace')
+          await createServerEnvBackup(docId, existingContent, 'exact-replace', ctx.abort)
           await docStorageService.editServerEnvDoc(
             docId,
             exactReplacement.oldString,
-            exactReplacement.newString
+            exactReplacement.newString,
+            ctx.abort
           )
 
           return {
             title: 'Server Environment Document Updated',
-            metadata: {},
+            metadata: { committed: true },
             output: '已根据整篇内容自动收敛为精确替换并更新文档内容'
           }
         }
 
-        await createServerEnvBackup(docId, existingContent, 'replace-document')
-        await docStorageService.saveServerEnvDoc(docId, content)
+        await createServerEnvBackup(docId, existingContent, 'replace-document', ctx.abort)
+        await docStorageService.saveServerEnvDoc(docId, content, ctx.abort)
       } else {
         throw new Error('content or old_string is required')
       }
 
       return {
         title: 'Server Environment Document Updated',
-        metadata: {},
+        metadata: { committed: true },
         output: '已更新文档内容'
       }
     }

@@ -9,9 +9,10 @@ import { getSSHTreeService } from '../services/ssh-tree.service'
 import { Events, emit } from '../../src/services/event-bus'
 import { SSHExecOutput } from '../services/ssh-exec-output'
 import { SSHExecLiveOutput } from '../services/ssh-exec-live-output'
+import { SSHPTYOutput } from '../services/ssh-pty-output'
+import { remoteEnvDocument } from '../services/remote-env-document'
 import { sshExecutionTimeout, type SSHExecutionOptions, type SSHExecuteOutputEvent } from '../../src/services/ssh/ssh-execution'
 import type { SSHCommandResult } from '../../src/services/ssh/ssh-command-result'
-
 interface SSHConnection {
   id: string
   name: string
@@ -59,6 +60,11 @@ interface PendingExec {
 interface PendingTransfer {
   connectionId: string
   cancel: () => void
+}
+
+interface PendingEnvDoc {
+  connectionId: string
+  cancel: () => boolean
 }
 
 function normalizeCredential(value: unknown): string | undefined {
@@ -112,6 +118,7 @@ class SSHManager {
   private connections: Map<string, SSHConnection> = new Map()
   private pendingExecs: Map<string, PendingExec> = new Map()
   private pendingTransfers: Map<string, PendingTransfer> = new Map()
+  private pendingEnvDocs: Map<string, PendingEnvDoc> = new Map()
   private fileListShellChannels: Map<string, any> = new Map()
 
   async connect(
@@ -150,11 +157,16 @@ class SSHManager {
 
             this.connections.set(id, connection)
 
-            // 监听 shell 输出
-            stream.on('data', (data: Buffer) => {
-              const output = data.toString()
-
-              if (connection.currentDirectoryProbe) {
+            const emitOutput = (output: string) => {
+              if (!connection.isInitialOutputClaimed) {
+                connection.initialOutputBuffer = connection.initialOutputBuffer || []
+                connection.initialOutputBuffer.push(output)
+              } else {
+                windowEvents.sendToRenderer(`ssh:output:${id}`, output)
+              }
+            }
+            const decodedOutput = new SSHPTYOutput((source, output) => {
+              if (source === 'stdout' && connection.currentDirectoryProbe) {
                 connection.currentDirectoryProbe.buffer += output.replace(/\r/g, '')
 
                 const beginMarker = `__OC_CWD_BEGIN__${connection.currentDirectoryProbe.requestId}\n`
@@ -186,21 +198,17 @@ class SSHManager {
                 }
               }
 
-              // 如果初始输出还未被获取，缓存它
-              if (!connection.isInitialOutputClaimed) {
-                connection.initialOutputBuffer = connection.initialOutputBuffer || []
-                connection.initialOutputBuffer.push(output)
-              } else {
-                // 正常发送输出
-                windowEvents.sendToRenderer(`ssh:output:${id}`, output)
-              }
+              emitOutput(output)
             })
-
-            stream.stderr.on('data', (data: Buffer) => {
-              windowEvents.sendToRenderer(`ssh:output:${id}`, data.toString())
-            })
+            stream.on('data', (data: Buffer) => decodedOutput.write('stdout', data))
+            stream.stderr.on('data', (data: Buffer) => decodedOutput.write('stderr', data))
+            stream.on('end', () => decodedOutput.end('stdout'))
+            stream.stderr.on('end', () => decodedOutput.end('stderr'))
+            stream.stderr.on('close', () => decodedOutput.end('stderr'))
 
             stream.on('close', () => {
+              decodedOutput.end('stdout')
+              decodedOutput.end('stderr')
               connection.isConnected = false
               connection.shell = undefined
               this.cancelConnectionExecutions(id)
@@ -245,6 +253,7 @@ class SSHManager {
 
         this.closeFileListShell(id)
         this.cancelConnectionTransfers(id)
+        this.cancelConnectionEnvDocs(id)
         this.cancelConnectionExecutions(id)
 
         // 通知前端连接状态变化
@@ -293,6 +302,7 @@ class SSHManager {
 
     this.closeFileListShell(id)
     this.cancelConnectionTransfers(id)
+    this.cancelConnectionEnvDocs(id)
 
     // 关闭 SSH 客户端
     if (connection.client) {
@@ -1311,8 +1321,8 @@ class SSHManager {
     }
   }
 
-  private async getRemoteHome(id: string): Promise<string> {
-    const result = await this.executeSilent(id, `printf '%s' "$HOME"`)
+  private async getRemoteHome(id: string, requestId: string): Promise<string> {
+    const result = await this.execute(id, `printf '%s' "$HOME"`, requestId, { timeoutMs: 10000 })
     const home = result.output?.trim()
     if (!result.success || !home || !home.startsWith('/')) {
       throw new Error(result.error || 'Unable to resolve remote HOME')
@@ -1320,52 +1330,57 @@ class SSHManager {
     return home
   }
 
-  async readEnvDoc(id: string): Promise<{ content: string; fullPath: string } | null> {
-    const home = await this.getRemoteHome(id)
-    const fullPath = `${home.replace(/\/$/, '')}/env.md`
-    const sftp = await this.getSFTP(id)
-
-    return await new Promise((resolve, reject) => {
-      sftp.readFile(fullPath, (error, content) => {
-        if ((error as any)?.code === 2 || (error as any)?.code === 'ENOENT') {
-          resolve(null)
-          return
-        }
-        if (error) {
-          reject(error)
-          return
-        }
-        resolve({ content: content.toString('utf8'), fullPath })
-      })
-    })
+  cancelEnvDoc(requestId: string): boolean {
+    return this.pendingEnvDocs.get(requestId)?.cancel() ?? false
   }
 
-  async writeEnvDoc(id: string, content: string): Promise<{ content: string; fullPath: string }> {
-    const home = await this.getRemoteHome(id)
-    const fullPath = `${home.replace(/\/$/, '')}/env.md`
-    const tempPath = `${fullPath}.tmp-${process.pid}-${Date.now()}`
-    const sftp = await this.getSFTP(id)
+  private cancelConnectionEnvDocs(id: string): void {
+    for (const operation of this.pendingEnvDocs.values()) {
+      if (operation.connectionId === id) operation.cancel()
+    }
+  }
 
-    await new Promise<void>((resolve, reject) => {
-      sftp.writeFile(tempPath, content, error => (error ? reject(error) : resolve()))
+  private async accessEnvDoc(id: string, requestId: string, content?: string) {
+    const connection = this.connections.get(id)
+    if (!connection?.client || !connection.isConnected) throw new Error('Connection not found or not connected')
+    if (this.pendingEnvDocs.has(requestId)) throw new Error('Environment document request ID is already active')
+    const controller = new AbortController()
+    const homeRequestId = `${requestId}:home`
+    let committing = false
+    this.pendingEnvDocs.set(requestId, {
+      connectionId: id,
+      cancel: () => {
+        if (committing || controller.signal.aborted) return false
+        const error = new Error('ENV_DOC_CANCELLED: 服务器环境文档更新已取消，原文档保持不变。')
+        error.name = 'AbortError'
+        controller.abort(error)
+        void this.cancelExecute(homeRequestId)
+        return true
+      }
     })
     try {
-      await new Promise<void>((resolve, reject) => {
-        const supportsPosixRename =
-          (sftp as any)._extensions?.['posix-rename@openssh.com'] === '1'
-        const rename = supportsPosixRename
-          ? (sftp as any).ext_openssh_rename.bind(sftp)
-          : sftp.rename.bind(sftp)
-        rename(tempPath, fullPath, (error: Error | undefined) =>
-          error ? reject(error) : resolve()
-        )
+      const home = await this.getRemoteHome(id, homeRequestId)
+      controller.signal.throwIfAborted()
+      return await remoteEnvDocument({
+        client: connection.client, home, content, signal: controller.signal,
+        beginCommit: () => {
+          controller.signal.throwIfAborted()
+          committing = true
+        }
       })
-    } catch (error) {
-      await new Promise<void>(resolve => sftp.unlink(tempPath, () => resolve()))
-      throw error
+    } finally {
+      this.pendingEnvDocs.delete(requestId)
     }
+  }
 
-    return { content, fullPath }
+  async readEnvDoc(id: string, requestId: string = randomUUID()): Promise<{ content: string; fullPath: string } | null> {
+    return this.accessEnvDoc(id, requestId)
+  }
+
+  async writeEnvDoc(id: string, content: string, requestId: string = randomUUID()): Promise<{ content: string; fullPath: string }> {
+    const result = await this.accessEnvDoc(id, requestId, content)
+    if (!result) throw new Error('服务器环境文档未能保存')
+    return result
   }
 
   // 创建目录
@@ -1589,12 +1604,16 @@ ipcMain.handle('ssh:get-tree', async (_, userId: string) => {
   }
 })
 
-ipcMain.handle('ssh:read-env-doc', async (_, id: string) => {
-  return await sshManager.readEnvDoc(id)
+ipcMain.handle('ssh:read-env-doc', async (_, id: string, requestId?: string) => {
+  return await sshManager.readEnvDoc(id, requestId)
 })
 
-ipcMain.handle('ssh:write-env-doc', async (_, id: string, content: string) => {
-  return await sshManager.writeEnvDoc(id, content)
+ipcMain.handle('ssh:write-env-doc', async (_, id: string, content: string, requestId?: string) => {
+  return await sshManager.writeEnvDoc(id, content, requestId)
+})
+
+ipcMain.handle('ssh:cancel-env-doc', (_, requestId: string) => {
+  return sshManager.cancelEnvDoc(requestId)
 })
 
 ipcMain.handle('ssh:export-connections', async (_, userId: string) => {

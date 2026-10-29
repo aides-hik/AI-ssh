@@ -63,7 +63,7 @@ export class MultiHostRun {
     this.publish()
   }
 
-  async execute<T>(id: string, action: (signal: AbortSignal, target: Readonly<HostTarget>) => Promise<T>): Promise<T> {
+  async execute<T>(id: string, action: (signal: AbortSignal, target: Readonly<HostTarget>) => Promise<T>, options?: { committed?: (result: T) => boolean }): Promise<T> {
     const target = this.target(id)
     const state = this.states.get(id)
     const controller = this.controllers.get(id)
@@ -78,7 +78,8 @@ export class MultiHostRun {
     this.publish()
     try {
       const result = await action(controller.signal, target)
-      assertActive()
+      // A document commit already in progress cannot be undone by Stop.
+      if (!options?.committed?.(result)) assertActive()
       state.completed++
       state.status = state.failed ? 'error' : 'complete'
       this.publish()

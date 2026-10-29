@@ -17,6 +17,7 @@ const api = {
   updater: {
     getState: () => ipcRenderer.invoke('updater:get-state'),
     startBackgroundCheck: () => ipcRenderer.invoke('updater:start-background-check'),
+    cancelBackgroundCheck: () => ipcRenderer.invoke('updater:cancel-background-check'),
     installDownloadedUpdate: () => ipcRenderer.invoke('updater:install-downloaded-update')
   },
 
@@ -83,9 +84,10 @@ const api = {
       return () => ipcRenderer.removeListener('ssh:execute-output', listener)
     },
     cancelExecute: (requestId: string) => ipcRenderer.invoke('ssh:cancel-execute', requestId),
-    readEnvDoc: (id: string) => ipcRenderer.invoke('ssh:read-env-doc', id),
-    writeEnvDoc: (id: string, content: string) =>
-      ipcRenderer.invoke('ssh:write-env-doc', id, content),
+    readEnvDoc: (id: string, requestId?: string) => ipcRenderer.invoke('ssh:read-env-doc', id, requestId),
+    writeEnvDoc: (id: string, content: string, requestId?: string) =>
+      ipcRenderer.invoke('ssh:write-env-doc', id, content, requestId),
+    cancelEnvDoc: (requestId: string) => ipcRenderer.invoke('ssh:cancel-env-doc', requestId),
     executeSilent: (id: string, command: string) =>
       ipcRenderer.invoke('ssh:execute-silent', id, command), // 静默执行（不在终端显示）
     getCurrentDirectory: (id: string) => ipcRenderer.invoke('ssh:get-current-directory', id),
@@ -339,8 +341,9 @@ interface ElectronAPI {
     execute: (id: string, command: string, requestId?: string, options?: SSHExecutionOptions) => Promise<any>
     onExecuteOutput: (callback: (event: SSHExecuteOutputEvent) => void) => () => void
     cancelExecute: (requestId: string) => Promise<any>
-    readEnvDoc: (id: string) => Promise<{ content: string; fullPath: string } | null>
-    writeEnvDoc: (id: string, content: string) => Promise<{ content: string; fullPath: string }>
+    readEnvDoc: (id: string, requestId?: string) => Promise<{ content: string; fullPath: string } | null>
+    writeEnvDoc: (id: string, content: string, requestId?: string) => Promise<{ content: string; fullPath: string }>
+    cancelEnvDoc: (requestId: string) => Promise<boolean>
     write: (id: string, data: string) => Promise<void> // 直接写入终端输入
     getInitialOutput: (id: string) => Promise<string>
     getConnections: () => Promise<any>

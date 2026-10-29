@@ -8,6 +8,7 @@ export interface SSHCommandResult {
   durationMs?: number
   truncated?: boolean
   signal?: string
+  committed?: boolean
 }
 
 /** Accept legacy IPC responses while keeping exit status separate from diagnostics. */
@@ -37,6 +38,7 @@ export function normalizeSSHCommandResult(value: unknown): SSHCommandResult {
   return {
     success,
     output,
+    ...(success && result.committed === true ? { committed: true } : {}),
     ...(error ? { error } : {}),
     ...(stdout !== undefined ? { stdout } : {}),
     ...(stderr !== undefined ? { stderr } : {}),

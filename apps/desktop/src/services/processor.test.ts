@@ -23,6 +23,24 @@ const asResponse = (events: unknown[]) => new Response(events.map(event => `data
 const call = (id = 'call_fixture', name = 'read_file') => ({ index: 0, id, type: 'function', function: { name, arguments: '{"path":"fixture"}' } })
 const complete = () => asResponse([{ choices: [{ delta: { content: 'done' }, finish_reason: 'stop' }] }])
 
+test('tool round budget reports unfinished work and retains completed tool output', async context => {
+  let rounds = 0
+  let executions = 0
+  const finishes: string[] = []
+  context.mock.method(globalThis, 'fetch', async () => asResponse([{ choices: [{ delta: { tool_calls: [call(`call_${++rounds}`)] }, finish_reason: 'tool_calls' }] }]))
+  const result = await new SessionProcessor({
+    provider: provider(), model: model('fixture'), messages: [{ role: 'user', content: 'inspect' }], tools: [tool('read_file')], maxSteps: 2,
+    onToolExecute: async () => ({ output: `observation ${++executions}` }),
+    onEvent: event => { if (event.type === 'done') finishes.push(event.finish) }
+  }).process()
+  assert.equal(rounds, 2)
+  assert.equal(executions, 2)
+  assert.equal(result.finish, 'step-limit')
+  assert.equal(finishes.at(-1), 'step-limit')
+  assert.equal(finishes.includes('stop'), false)
+  assert.equal(result.messages?.at(-1)?.content, 'observation 2')
+})
+
 test('all tool rounds keep the model, provider and reasoning selected when the turn began', async context => {
   const requests: Array<{ url: unknown; body: Record<string, unknown> }> = []
   context.mock.method(globalThis, 'fetch', async (url: unknown, init: RequestInit) => {
