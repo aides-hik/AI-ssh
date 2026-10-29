@@ -6,6 +6,8 @@
 
 产品中文名为「棱镜」，英文名为 **Prism**。应用内会根据所选语言显示对应名称；仓库地址与内部 workspace 包名保持现有命名。
 
+**[产品官网](https://aides-hik.github.io/AI-ssh/)** · [下载安装](https://github.com/aides-hik/AI-ssh/releases/latest) · [问题反馈](https://github.com/aides-hik/AI-ssh/issues)
+
 一个把 SSH 终端、远程文件管理和 AI 助手放在同一窗口中的桌面应用，基于 Electron、Vue 3 和 TypeScript 开发。采用液态玻璃界面，支持单台服务器操作、多台服务器巡检，以及分阶段的 Docker / Docker Compose 部署。
 
 **桌面端可独立运行，无需注册账号，也无需部署后端。** 添加自己的 SSH 服务器即可使用终端和文件管理；需要 AI 时，再配置自己的模型服务或本地 Ollama。
