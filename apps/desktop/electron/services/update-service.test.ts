@@ -128,7 +128,150 @@ test('cache validation streams real files and skips downloading a valid package'
   const state = await service.startBackgroundCheck()
   assert.equal(state.status, 'downloaded')
   assert.equal(state.downloadedFilePath, target)
+  assert.equal(state.downloadedBytes, payload.length)
+  assert.equal(state.totalBytes, payload.length)
+  assert.equal(state.bytesPerSecond, 0)
   assert.equal(networkCalls, 1)
+})
+
+test('download telemetry samples real written bytes, throttles chunk bursts and reports zero during stalls and verification', async context => {
+  context.mock.timers.enable({ apis: ['setInterval'] })
+  let now = 1000
+  context.mock.method(performance, 'now', () => now)
+  const first = Buffer.alloc(32 * 1024, 'a')
+  const second = Buffer.alloc(16 * 1024, 'b')
+  const data = Buffer.concat([first, second])
+  let body!: ReadableStreamDefaultController<Uint8Array>
+  const { service, target, states } = await fixture(context, {
+    fetch: async (input, init) => {
+      if (String(input).includes('manifest.invalid')) return Response.json(manifest(data))
+      if (init?.method === 'HEAD') return new Response(null)
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            body = controller
+            for (let offset = 0; offset < first.length; offset += 1024)
+              controller.enqueue(first.subarray(offset, offset + 1024))
+          }
+        })
+      )
+    }
+  })
+  const pending = service.startBackgroundCheck()
+  context.after(() => service.cancelBackgroundCheck())
+  async function waitForWrittenBytes(bytes: number) {
+    await waitFor(async () => {
+      try {
+        const temporary = (await readdir(path.dirname(target))).find(file => file.endsWith('.part'))
+        return !!temporary && (await stat(path.join(path.dirname(target), temporary))).size === bytes
+      } catch {
+        return false
+      }
+    })
+    // The write callback must settle before sampling the bytes committed to disk.
+    await new Promise(resolve => setImmediate(resolve))
+  }
+  function sample() {
+    now += 250
+    context.mock.timers.tick(250)
+  }
+  await waitForWrittenBytes(first.length)
+  assert.equal(states.filter(state => state.status === 'downloading').length, 1)
+  assert.equal(service.getState().downloadedBytes, 0)
+  sample()
+  assert.equal(service.getState().downloadedBytes, first.length)
+  assert.equal(service.getState().totalBytes, data.length)
+  assert.equal(service.getState().bytesPerSecond, first.length * 4)
+  assert.equal(service.getState().progress, 67)
+  sample()
+  assert.equal(service.getState().bytesPerSecond, 0)
+  const idleEvents = states.length
+  sample()
+  assert.equal(states.length, idleEvents)
+  for (let offset = 0; offset < second.length; offset += 512)
+    body.enqueue(second.subarray(offset, offset + 512))
+  await waitForWrittenBytes(data.length)
+  assert.equal(states.length, idleEvents)
+  sample()
+  assert.equal(service.getState().downloadedBytes, data.length)
+  assert.equal(service.getState().bytesPerSecond, second.length * 4)
+  assert.equal(service.getState().progress, 99)
+  body.close()
+  const completed = await pending
+  const verification = states.find(state => state.statusText?.includes('正在校验安装包'))
+  assert.equal(verification?.status, 'downloading')
+  assert.equal(verification?.downloadedBytes, data.length)
+  assert.equal(verification?.bytesPerSecond, 0)
+  assert.equal(completed.status, 'downloaded')
+  assert.equal(completed.progress, 100)
+  assert.equal(completed.downloadedBytes, data.length)
+  assert.equal(completed.totalBytes, data.length)
+  assert.equal(completed.bytesPerSecond, 0)
+  const completedEvents = states.length
+  sample()
+  assert.equal(states.length, completedEvents)
+  assert.deepEqual(await readFile(target), data)
+})
+
+test('cancelling or failing an active download clears telemetry and its timer before a fresh retry', async context => {
+  context.mock.timers.enable({ apis: ['setInterval'] })
+  let now = 1000
+  context.mock.method(performance, 'now', () => now)
+  for (const ending of ['cancel', 'failure'] as const) {
+    let body!: ReadableStreamDefaultController<Uint8Array>
+    let attempts = 0
+    const { service, target, states } = await fixture(context, {
+      fetch: async (input, init) => {
+        if (String(input).includes('manifest.invalid')) return Response.json(manifest())
+        if (init?.method === 'HEAD') return new Response(null)
+        if (++attempts > 1) return new Response(payload)
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              body = controller
+              controller.enqueue(payload.subarray(0, 10))
+            }
+          })
+        )
+      }
+    })
+    const pending = service.startBackgroundCheck()
+    await waitFor(async () => {
+      try {
+        const temporary = (await readdir(path.dirname(target))).find(file => file.endsWith('.part'))
+        return !!temporary && (await stat(path.join(path.dirname(target), temporary))).size === 10
+      } catch {
+        return false
+      }
+    })
+    await new Promise(resolve => setImmediate(resolve))
+    now += 250
+    context.mock.timers.tick(250)
+    assert.equal(service.getState().downloadedBytes, 10)
+    assert.equal(service.getState().bytesPerSecond, 40)
+    if (ending === 'cancel') service.cancelBackgroundCheck()
+    else body.error(new Error('network interrupted'))
+    const stopped = await pending
+    assert.equal(stopped.status, ending === 'cancel' ? 'idle' : 'error')
+    assert.equal(stopped.downloadedBytes, undefined)
+    assert.equal(stopped.totalBytes, undefined)
+    assert.equal(stopped.bytesPerSecond, undefined)
+    const stoppedEvents = states.length
+    now += 1000
+    context.mock.timers.tick(1000)
+    assert.equal(states.length, stoppedEvents)
+    assert.equal((await service.startBackgroundCheck()).status, 'downloaded')
+    const retry = states.slice(stoppedEvents)
+    const checking = retry.find(state => state.status === 'checking')
+    assert.equal(checking?.downloadedBytes, undefined)
+    assert.equal(checking?.totalBytes, undefined)
+    assert.equal(checking?.bytesPerSecond, undefined)
+    const started = retry.find(state => state.status === 'downloading')
+    assert.equal(started?.downloadedBytes, 0)
+    assert.equal(started?.totalBytes, payload.length)
+    assert.equal(started?.bytesPerSecond, 0)
+    assert.deepEqual(await readFile(target), payload)
+  }
 })
 
 test('download writes chunks to a real exclusive temporary file and commits only after size and hash verification', async context => {
@@ -188,6 +331,9 @@ test('a hash mismatch leaves an existing package intact and removes the temporar
   const state = await service.startBackgroundCheck()
   assert.equal(state.status, 'error')
   assert.match(state.error || '', /hash mismatch/)
+  assert.equal(state.downloadedBytes, undefined)
+  assert.equal(state.totalBytes, undefined)
+  assert.equal(state.bytesPerSecond, undefined)
   assert.equal((await readFile(target)).toString(), 'old cache')
   assert.deepEqual(await readdir(path.dirname(target)), ['setup.exe'])
 })
@@ -356,8 +502,9 @@ test('cancelled stale checks cannot overwrite a retry after their ignored fetch 
 test('cancelling a stalled download settles immediately, clears partial files and allows retry', async context => {
   const downloading = deferred<void>()
   let attempts = 0
-  const { service, target } = await fixture(context, {
+  const { service, target, states } = await fixture(context, {
     emitState: state => {
+      states.push(state)
       if (state.status === 'downloading') downloading.resolve()
     },
     fetch: async (input, init) => {
@@ -370,9 +517,28 @@ test('cancelling a stalled download settles immediately, clears partial files an
   const pending = service.startBackgroundCheck()
   await downloading.promise
   await new Promise(resolve => setImmediate(resolve))
-  assert.equal(service.cancelBackgroundCheck().status, 'idle')
+  const cancelled = service.cancelBackgroundCheck()
+  assert.equal(cancelled.status, 'idle')
+  assert.equal(cancelled.downloadedBytes, undefined)
+  assert.equal(cancelled.totalBytes, undefined)
+  assert.equal(cancelled.bytesPerSecond, undefined)
   await pending
-  assert.equal((await service.startBackgroundCheck()).status, 'downloaded')
+  const completed = await service.startBackgroundCheck()
+  assert.equal(completed.status, 'downloaded')
+  assert.equal(completed.downloadedBytes, payload.length)
+  assert.equal(completed.bytesPerSecond, 0)
+  const attemptsStarted = states.filter(state => state.status === 'downloading' && state.progress === 0)
+  assert.equal(attemptsStarted.length, 2)
+  for (const started of attemptsStarted) {
+    assert.equal(started.downloadedBytes, 0)
+    assert.equal(started.totalBytes, payload.length)
+    assert.equal(started.bytesPerSecond, 0)
+  }
+  for (const checking of states.filter(state => state.status === 'checking')) {
+    assert.equal(checking.downloadedBytes, undefined)
+    assert.equal(checking.totalBytes, undefined)
+    assert.equal(checking.bytesPerSecond, undefined)
+  }
   assert.deepEqual(await readFile(target), payload)
   await waitFor(async () =>
     (await readdir(path.dirname(target))).every(file => !file.endsWith('.part'))
@@ -395,16 +561,37 @@ test('installer launch and openPath errors restore downloaded state and permit i
       enabled: true,
       status: 'downloaded',
       currentVersion: '1.9.7',
-      downloadedFilePath: file
+      downloadedFilePath: file,
+      downloadedBytes: payload.length,
+      totalBytes: payload.length
     })
     await assert.rejects(service.installDownloadedUpdate())
     assert.equal(service.getState().status, 'downloaded')
     assert(service.getState().error)
     assert.equal(service.getState().downloadedFilePath, file)
+    assert.equal(service.getState().totalBytes, payload.length)
     await service.installDownloadedUpdate()
-    assert.equal(service.getState().status, 'installing')
+    assert.equal(service.getState().status, platform === 'darwin' ? 'downloaded' : 'installing')
     assert.equal(service.getState().error, undefined)
     assert.equal(attempts, 2)
+  }
+})
+
+test('opening a DMG or DEB leaves controls usable while the system completes installation', async context => {
+  for (const [platform, file] of [['darwin', 'update.dmg'], ['linux', 'update.deb']] as const) {
+    let opens = 0
+    const { service, states } = await fixture(context, { platform, openPath: async () => { opens++; return '' },
+      launchInstaller: async () => assert.fail('A system package must use the system handler') })
+    service.setStateForTest({ enabled: true, currentVersion: '1.9.7', status: 'downloaded',
+      downloadedFilePath: file, downloadedBytes: payload.length, totalBytes: payload.length, progress: 100 })
+    await service.installDownloadedUpdate()
+    assert.equal(service.getState().status, 'downloaded')
+    assert.equal(service.getState().totalBytes, payload.length)
+    assert.match(service.getState().statusText || '', /安装包已打开/)
+    await service.installDownloadedUpdate()
+    assert.equal(opens, 2)
+    assert.equal((await service.startBackgroundCheck()).status, 'downloaded')
+    assert(states.some(state => state.status === 'checking'))
   }
 })
 
@@ -429,4 +616,32 @@ test('a submitted atomic commit finishes before cancellation or another check ca
   commit.resolve()
   assert.equal((await pending).status, 'downloaded')
   assert.deepEqual(await readFile(target), payload)
+})
+
+test('only a ready package can launch and concurrent installation callers observe the same failure', async context => {
+  const launch = deferred<void>()
+  let attempts = 0
+  let fail = true
+  const { service } = await fixture(context, { launchInstaller: async () => {
+    attempts++
+    await launch.promise
+    if (fail) throw new Error('installer unavailable')
+  } })
+  for (const status of ['idle', 'checking', 'downloading', 'error'] as const) {
+    service.setStateForTest({ enabled: true, currentVersion: '1.9.7', status, downloadedFilePath: 'stale.exe' })
+    await assert.rejects(service.installDownloadedUpdate(), /No downloaded update/)
+  }
+  assert.equal(attempts, 0)
+  service.setStateForTest({ enabled: true, currentVersion: '1.9.7', status: 'downloaded', downloadedFilePath: 'ready.exe' })
+  const first = service.installDownloadedUpdate()
+  const second = service.installDownloadedUpdate()
+  assert.equal(attempts, 1)
+  launch.resolve()
+  await Promise.all([assert.rejects(first, /installer unavailable/), assert.rejects(second, /installer unavailable/)])
+  assert.equal(service.getState().status, 'downloaded')
+  fail = false
+  await service.installDownloadedUpdate()
+  assert.equal(attempts, 2)
+  assert.equal(service.getState().status, 'installing')
+  await assert.rejects(service.installDownloadedUpdate(), /No downloaded update/)
 })

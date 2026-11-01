@@ -33,17 +33,17 @@ test('file manager synchronizes route connection and path atomically before load
   assert.match(source, /const hasInitializedRouteState = ref\(false\)/)
   assert.match(source, /const syncRouteState = \(\) => \{/)
   assert.match(source, /const nextConnectionId = actualConnectionId\.value/)
-  assert.match(source, /const nextPath = route\.query\.path as string \| undefined/)
+  assert.match(source, /const nextPath = routeSnapshot\.value\.path as string \| undefined/)
   assert.match(source, /const decodedPath = nextPath \? decodeURIComponent\(nextPath\) : '\/'/)
   assert.match(source, /currentConnectionId\.value = nextConnectionId/)
   assert.match(source, /currentPath\.value = decodedPath/)
   assert.match(
     source,
-    /if \(!hasInitializedRouteState\.value\) \{[\s\S]*hasInitializedRouteState\.value = true[\s\S]*loadFiles\(\)/
+    /if \(!hasInitializedRouteState\.value \|\| pathChanged\) \{[\s\S]*hasInitializedRouteState\.value = true[\s\S]*loadFiles\(\)/
   )
   assert.match(
     source,
-    /\(\) => \[actualConnectionId\.value, route\.query\.path as string \| undefined\]/
+    /\(\) => \[route\.path, route\.query\.connectionId, route\.query\.path, route\.query\.nodeId\]/
   )
   assert.doesNotMatch(source, /syncRouteStateAndLoad/)
 })
@@ -56,7 +56,7 @@ test('file manager writes the active directory back to route query so tab switch
   assert.match(source, /router\.replace\(\{/)
   assert.match(
     source,
-    /query: \{[\s\S]*\.\.\.route\.query,[\s\S]*path: encodeURIComponent\(currentPath\.value\)/
+    /query: \{[\s\S]*\.\.\.routeSnapshot\.value,[\s\S]*path: encodeURIComponent\(currentPath\.value\)/
   )
   assert.match(source, /syncCurrentPathToRoute\(\)/)
 })
@@ -97,8 +97,8 @@ test('file manager uses a cache-first file list strategy with background refresh
 test('file manager invalidates cached directory listings after mutations', async () => {
   const source = await readFile(fileManagerViewPath, 'utf8')
 
-  assert.match(source, /const invalidateFileListCache = \(remotePath: string\) =>/)
-  assert.match(source, /invalidateFileListCache\(currentPath\.value\)/)
+  assert.match(source, /const invalidateFileListCache = \(connectionId: string, remotePath: string\) =>/)
+  assert.match(source, /invalidateFileListCache\(target\.connectionId, target\.directory\)/)
 })
 
 test('file deletion passes opaque listing identity instead of relying on display text', async () => {
@@ -126,7 +126,7 @@ test('file manager treats the current remote directory as already existing durin
 
   assert.match(
     source,
-    /const remoteDirCache = new Set<string>\(\[normalizeRemotePath\(currentPath\.value\)\]\)/
+    /const remoteDirCache = new Set<string>\(\[normalizeRemotePath\(target\.directory\)\]\)/
   )
 })
 

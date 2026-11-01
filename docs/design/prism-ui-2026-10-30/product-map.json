@@ -1,0 +1,380 @@
+{
+  "schemaVersion": 1,
+  "product": "棱镜 Prism",
+  "checkedAt": "2026-10-30",
+  "timezone": "Asia/Shanghai",
+  "figma": {
+    "targetFileKey": "cQBEyN3jr4pIe0RMSOZE4H",
+    "targetFileUrl": "https://www.figma.com/design/cQBEyN3jr4pIe0RMSOZE4H",
+    "blockedByStarterQuota": true,
+    "designWrittenToFigma": false,
+    "artifactStatus": "本地设计交付；目标 Figma 文件已创建，但设计写入被 Starter 工具额度阻止。"
+  },
+  "contentRules": {
+    "sampleDataOnly": true,
+    "sampleDataLabel": "设计预览 · 示例数据",
+    "sampleHosts": [
+      { "id": "web-01", "name": "web-01", "host": "web-01.example.test", "role": "应用节点" },
+      { "id": "web-02", "name": "web-02", "host": "web-02.example.test", "role": "应用节点" },
+      { "id": "db-01", "name": "db-01", "host": "db-01.example.test", "role": "数据节点" }
+    ],
+    "mustNotImply": [
+      "设计示例中的巡检数字来自真实服务器或真实模型实测",
+      "专用巡检或读取工具在任何设置下都必然自动执行",
+      "普通模型对话连接测试已验证工具调用能力",
+      "点击停止等于已经撤销全部远端副作用",
+      "自动回滚、自动删除数据或无人确认部署已实现",
+      "免费使用授权、MIT 或确定的开源许可证已经建立",
+      "本地桌面 SSH、SFTP 或自配模型需要 Prism 账号或服务端",
+      "本地对话历史支持跨设备同步或服务端漫游",
+      "Figma 目标文件中已经存在本交付的完整设计"
+    ],
+    "preferTerms": {
+      "navigation": ["工作台", "终端", "文件", "设置"],
+      "connection": ["新建连接", "保存连接", "连接服务器", "已连接", "已断开"],
+      "execution": ["操作目标", "只读检查", "等待确认", "确认本阶段", "正在停止", "已停止后续执行", "远程状态需核对"],
+      "transfer": ["上传文件", "下载", "传输管理", "确认覆盖", "原文件未被替换", "结果尚未确认"]
+    }
+  },
+  "visualDirection": {
+    "name": "烟晶工作台",
+    "intent": "保留棱镜的透明边缘和折射识别，把终端、目标和任务状态做成清楚的工作表面。",
+    "existingProductFont": "Noto Sans SC",
+    "existingFontSource": "apps/desktop/src/assets/styles/ui-foundation.css",
+    "proposedFonts": { "ui": "Noto Sans SC", "terminal": "Menlo, Consolas, monospace" },
+    "proposedPalette": {
+      "canvas": "#101923",
+      "surface": "#17232F",
+      "surfaceRaised": "#223242",
+      "terminal": "#0D151D",
+      "text": "#EDF3F8",
+      "textSecondary": "#A0AFBF",
+      "action": "#6FA8FF",
+      "success": "#58C9AA",
+      "attention": "#E7B96B",
+      "error": "#EF8A8A"
+    },
+    "layout": {
+      "referenceViewport": { "width": 1440, "height": 960 },
+      "sidebarWidth": 224,
+      "assistantWidth": 396,
+      "uiTextSize": 14,
+      "supportTextSize": 12,
+      "titleTextSize": 22,
+      "terminalTextSize": 13,
+      "terminalLineHeight": 22,
+      "surfaceRadius": 14,
+      "controlRadius": 8,
+      "minimumControlHeight": 36
+    },
+    "principles": [
+      "终端和命令可读性优先，正文表面不承载大幅折射装饰。",
+      "折射光集中在品牌、当前导航与当前目标，其他区域保持安静。",
+      "状态以文字、图标和颜色共同表达。",
+      "主要动作描述实际结果，危险操作明确目标与本次范围。",
+      "任务保留原始服务器及完整路径，视图切换不改变任务含义。"
+    ]
+  },
+  "screens": [
+    {
+      "id": "workspace",
+      "title": "工作台",
+      "priority": "P1",
+      "purpose": "让新用户找到第一台服务器，让回访用户继续已保存的连接。",
+      "layout": [
+        { "region": "left", "content": "搜索、连接树、文件夹、新建连接" },
+        { "region": "main", "content": "最近使用的连接及新建、导入入口" },
+        { "region": "support", "content": "模型配置入口和可选 AI 使用说明" },
+        { "region": "footer", "content": "本地工作空间、连接配置存储提示" }
+      ],
+      "implementedFeatures": [
+        { "id": "direct-create", "label": "直接新建连接，无需先建立文件夹", "source": "apps/desktop/src/views/WelcomeView.vue" },
+        { "id": "import-own-json", "label": "导入 Prism 连接配置 JSON", "source": "apps/desktop/src/views/WelcomeView.vue" },
+        { "id": "configure-model", "label": "直达模型服务设置", "source": "apps/desktop/src/views/WelcomeView.vue" },
+        { "id": "independent-desktop", "label": "SSH、SFTP 和自配模型无需 Prism 账号或项目后端", "source": "README.md" }
+      ],
+      "proposedImprovements": [
+        "将现有入口收拢成一条清晰的首次连接路径。",
+        "最近使用连接继续沿用真实保存记录与时间，不构造持续在线监控或虚构服务器汇总。"
+      ],
+      "copy": {
+        "heading": "继续你的服务器工作",
+        "emptyHeading": "添加第一台服务器",
+        "emptyBody": "填写服务器地址和认证信息，连接后即可使用终端和文件。",
+        "primaryAction": "新建连接",
+        "secondaryAction": "导入配置",
+        "optionalAction": "配置模型服务",
+        "modelHint": "需要 AI 时，再连接自己的模型服务或本地 Ollama。",
+        "footer": "连接配置保存在此设备"
+      },
+      "criticalStates": [
+        { "id": "empty", "priority": "P1", "copy": "还没有保存的连接", "action": "新建连接" },
+        { "id": "loading", "priority": "P1", "copy": "正在读取连接…", "action": null },
+        { "id": "load-error", "priority": "P1", "copy": "连接列表未能加载", "action": "重新加载" },
+        { "id": "import-result", "priority": "P2", "copy": "已导入 2 个连接，跳过 1 个重复项", "sampleData": true, "action": "查看连接" }
+      ]
+    },
+    {
+      "id": "connections",
+      "title": "连接管理与指纹确认",
+      "priority": "P1",
+      "purpose": "在认证和保存前，清楚表达连接对象、认证方式和主机身份。",
+      "layout": [
+        { "region": "main", "content": "连接名称、主机、端口、用户、认证方式和可选分组" },
+        { "region": "authentication", "content": "密码、私钥文件或内容及口令、SSH Agent 分段选择" },
+        { "region": "identity-overlay", "content": "服务器地址、SHA256 指纹、核对说明、默认取消动作" }
+      ],
+      "implementedFeatures": [
+        { "id": "auth-methods", "label": "密码、私钥与 SSH Agent 认证", "source": "apps/desktop/src/components/ssh/SSHConnectionDialog.vue" },
+        { "id": "private-key-file", "label": "私钥文件选择及口令输入，保存失败保留输入", "source": "apps/desktop/src/components/ssh/SSHConnectionDialog.vue" },
+        { "id": "host-identity", "label": "测试与正式连接均在认证前核对 SHA256 指纹", "source": "apps/desktop/electron/services/ssh-host-trust.ts" },
+        { "id": "host-key-change", "label": "密钥变化阻断当前连接，核对并重置信任后重新连接", "source": "apps/desktop/electron/ipc/ssh-handlers.ts" }
+      ],
+      "proposedImprovements": [
+        "把现有表单重排为简洁抽屉，避免初学者同时面对所有认证字段。",
+        "把主机指纹核对保持为独立的高优先级确认层。",
+        "保存并连接可作为后续产品行为增强，不能仅改按钮文字假定现有保存动作会连接。"
+      ],
+      "copy": {
+        "heading": "新建连接",
+        "primaryAction": "保存连接",
+        "testAction": "测试连接",
+        "identityHeading": "确认服务器指纹",
+        "identityBody": "通过服务器控制台或管理员提供的信息核对指纹。确认前不会进行登录认证。",
+        "identityPrimary": "信任并连接",
+        "identityCancel": "取消连接",
+        "changedHeading": "服务器身份已改变",
+        "changedBody": "当前指纹与已保存记录不同，本次连接已阻止。请核对新旧指纹。",
+        "changedAction": "核对新指纹"
+      },
+      "criticalStates": [
+        { "id": "invalid-fields", "priority": "P1", "copy": "请填写服务器地址和用户名", "action": "修正输入" },
+        { "id": "connecting", "priority": "P1", "copy": "正在连接 web-01…", "sampleData": true, "action": null },
+        { "id": "unknown-host", "priority": "P1", "copy": "首次连接此服务器，请核对指纹", "action": "信任并连接", "defaultFocus": "取消连接" },
+        { "id": "host-key-changed", "priority": "P1", "copy": "服务器身份已改变，本次连接已阻止", "action": "核对新指纹", "defaultFocus": "取消连接" },
+        { "id": "authentication-failed", "priority": "P1", "copy": "认证失败，请检查用户名和认证信息", "action": "修改连接" },
+        { "id": "save-failed", "priority": "P1", "copy": "连接未能保存，输入内容已保留", "action": "重新保存" }
+      ]
+    },
+    {
+      "id": "terminal-ai",
+      "title": "终端与 AI 巡检",
+      "priority": "P1",
+      "purpose": "让终端持续可读，让 AI 的操作目标、实际结果和每阶段确认始终清楚。",
+      "layout": [
+        { "region": "main", "content": "多标签终端、主机名称和连接状态" },
+        { "region": "assistant-top", "content": "已选目标名称、模型名称、任务状态" },
+        { "region": "assistant-body", "content": "对话、按主机结果、可展开的执行过程与日志" },
+        { "region": "assistant-bottom", "content": "请求正文、目标选择器、模型与推理选项、发送或停止" },
+        { "region": "approval", "content": "本阶段目标、命令、验证命令、顺序和超时" }
+      ],
+      "implementedFeatures": [
+        { "id": "multi-host-read", "label": "对已连接的选中主机做 CPU、内存、磁盘、服务和端口巡检", "source": "apps/desktop/src/services/tools/multi-host-tools.ts" },
+        { "id": "stage-approval", "label": "命令、部署与环境文档修改逐阶段确认，固定目标与内容", "source": "apps/desktop/src/components/chat/DeploymentApproval.vue" },
+        { "id": "stage-verification", "label": "部署和回滚包含验证命令，滚动执行或最多三台并行", "source": "apps/desktop/src/services/multi-host-deployment.ts" },
+        { "id": "read-approval-setting", "label": "关闭自动批准只读操作后可进入只读确认流程", "source": "apps/desktop/src/services/tools/multi-host-tools.ts" },
+        { "id": "local-history", "label": "按本地连接身份保存和恢复可显示对话，遵守保存开关与保留条数", "source": "apps/desktop/src/services/chat-history.ts" },
+        { "id": "step-limit", "label": "处理器达到工具轮次上限时有 step-limit 明确结束状态", "source": "apps/desktop/src/services/processor.ts" },
+        { "id": "per-host-logs", "label": "按服务器查看实时输出、复制日志和跟随最新", "source": "apps/desktop/src/components/chat/ExecutionLogPanel.vue" }
+      ],
+      "proposedImprovements": [
+        "展开前仍显示实际目标名称，避免只用数量代表操作对象。",
+        "结果区以表格组织服务器、状态、发现，保留失败、停止和未执行的区别。",
+        "输入区域弱化装饰，让正文、操作目标和模型形成清楚层级。",
+        "审批层避免命令内容折叠过深，确认按钮明确仅针对本阶段。"
+      ],
+      "copy": {
+        "heading": "会话助手",
+        "targetsLabel": "操作目标",
+        "exampleTargets": "web-01、web-02、db-01",
+        "placeholder": "描述问题，或粘贴终端输出…",
+        "quickActions": ["检查主机状态", "分析终端报错", "梳理部署步骤"],
+        "approvalHeading": "确认本阶段",
+        "approvalBody": "请检查目标服务器、执行命令和完成后的检查。",
+        "approvalScope": "仅批准本阶段",
+        "approvalCancel": "取消",
+        "approvalPrimary": "确认本阶段",
+        "stopAction": "停止生成",
+        "stoppingCopy": "正在停止，等待已开始的操作返回结果…",
+        "stoppedCopy": "已停止后续执行，远程状态需核对"
+      },
+      "criticalStates": [
+        { "id": "no-model", "priority": "P1", "copy": "先配置模型服务，再开始对话", "action": "配置模型" },
+        { "id": "no-target", "priority": "P1", "copy": "连接服务器后，选择本次操作目标", "action": "选择目标" },
+        { "id": "thinking", "priority": "P2", "copy": "正在分析你的请求", "action": "停止生成" },
+        { "id": "awaiting-approval", "priority": "P1", "copy": "等待确认本阶段的目标和内容", "action": "确认本阶段", "defaultFocus": "取消" },
+        { "id": "running", "priority": "P1", "copy": "web-01 正在执行检查", "sampleData": true, "action": "查看日志" },
+        { "id": "partial-failure", "priority": "P1", "copy": "2 台完成，1 台未完成；各节点结果已保留", "sampleData": true, "action": "查看结果" },
+        { "id": "stopping", "priority": "P1", "copy": "正在停止，等待已开始的操作返回结果…", "action": null },
+        { "id": "stopped-uncertain", "priority": "P1", "copy": "已停止后续执行，远程状态需核对", "action": "查看日志" },
+        { "id": "step-limit", "priority": "P2", "copy": "已达到本次操作轮次上限，请检查已有结果后继续", "action": "查看结果" },
+        { "id": "history-restored", "priority": "P2", "copy": "已恢复此连接的本地对话", "action": null }
+      ]
+    },
+    {
+      "id": "files-transfers",
+      "title": "文件与传输",
+      "priority": "P1",
+      "purpose": "让文件列表与传输任务的原始服务器、路径和结果保持可见。",
+      "layout": [
+        { "region": "header", "content": "服务器名称、连接状态、路径导航" },
+        { "region": "toolbar", "content": "上传、新建文件夹、选中项的批量下载和删除" },
+        { "region": "main", "content": "文件名称、大小、修改时间、权限和操作" },
+        { "region": "transfer-drawer", "content": "任务名称、源服务器、完整路径、进度与最终状态" },
+        { "region": "overwrite-confirmation", "content": "已存在的目标文件、具体路径和确认范围" }
+      ],
+      "implementedFeatures": [
+        { "id": "sftp-list", "label": "SFTP 浏览、上传、下载、创建目录及删除", "source": "apps/desktop/src/views/FileManagerView.vue" },
+        { "id": "frozen-targets", "label": "地址草稿与已显示目录分开，任务固定连接及完整路径", "source": "apps/desktop/src/views/FileManagerView.vue" },
+        { "id": "atomic-transfers", "label": "经临时文件、大小核对和提交，覆盖前确认，中断保留原目标", "source": "apps/desktop/electron/services/atomic-file-transfer.ts" },
+        { "id": "cancel-generation", "label": "取消批次后旧扫描不因新下载而重新入队，提交阶段保留真实结果", "source": "apps/desktop/src/views/FileManagerView.vue" },
+        { "id": "failed-records", "label": "保留失败和取消任务的原因及原目标", "source": "apps/desktop/src/views/FileManagerView.vue" }
+      ],
+      "proposedImprovements": [
+        "用一处常驻传输入口承接上传和下载，而非依赖短暂完成提示。",
+        "失败记录展示原服务器及完整路径，不只展示文件名。",
+        "重试按钮属于后续交互增强；现有结果不确定的操作不能自动重放。"
+      ],
+      "copy": {
+        "heading": "文件",
+        "uploadAction": "上传文件",
+        "downloadAction": "下载",
+        "newFolderAction": "新建文件夹",
+        "transferHeading": "传输管理",
+        "overwriteHeading": "确认覆盖文件",
+        "overwriteBody": "完整传输成功后才会替换原文件。",
+        "overwriteCancel": "取消",
+        "overwritePrimary": "覆盖文件",
+        "failureCopy": "传输未完成，原文件未被替换",
+        "uncertainCopy": "结果尚未确认，请检查目标文件后再操作",
+        "unsupportedReplaceCopy": "此服务器不支持安全覆盖，请更换文件名后上传"
+      },
+      "criticalStates": [
+        { "id": "loading-directory", "priority": "P2", "copy": "正在读取目录…", "action": null },
+        { "id": "empty-directory", "priority": "P2", "copy": "此目录还没有文件", "action": "上传文件" },
+        { "id": "queued", "priority": "P2", "copy": "等待传输", "action": "取消" },
+        { "id": "transferring", "priority": "P1", "copy": "正在传输到 web-01 的 /srv/app/", "sampleData": true, "action": "取消" },
+        { "id": "overwrite", "priority": "P1", "copy": "目标文件已存在，是否覆盖？", "action": "覆盖文件", "defaultFocus": "取消" },
+        { "id": "committing", "priority": "P1", "copy": "正在保存最终文件，请等待结果", "action": null },
+        { "id": "failed", "priority": "P1", "copy": "传输未完成，原文件未被替换", "action": "查看原因" },
+        { "id": "result-unknown", "priority": "P1", "copy": "结果尚未确认，请检查目标文件后再操作", "action": "查看日志" },
+        { "id": "cancelled", "priority": "P1", "copy": "已取消，原目标文件保持不变", "action": null },
+        { "id": "unsupported-local-storage", "priority": "P2", "copy": "目标存储不支持安全保存，请选择其他本地磁盘目录", "action": "选择其他目录" }
+      ]
+    },
+    {
+      "id": "settings",
+      "title": "模型与应用设置",
+      "priority": "P1",
+      "purpose": "清楚配置模型、核对真实能力，管理本地历史、连接安全和应用外观。",
+      "layout": [
+        { "region": "navigation", "content": "模型服务、AI 行为、连接与安全、外观、数据、更新" },
+        { "region": "provider-directory", "content": "搜索、分类筛选、工具调用及视觉与思考筛选、服务商列表" },
+        { "region": "provider-detail", "content": "服务地址、密钥状态、目录资料状态、启用模型" },
+        { "region": "model-detail", "content": "模型声明能力、逐模型参数和普通对话测试结果" },
+        { "region": "behavior", "content": "只读自动批准、保存历史与保留条数、减少动态效果" }
+      ],
+      "implementedFeatures": [
+        { "id": "provider-directory", "label": "服务商目录、搜索、分类和模型能力筛选", "source": "apps/desktop/src/components/settings/SettingsAiProviders.vue" },
+        { "id": "catalog-provenance", "label": "官方资料已核对、动态或需核实的目录状态，资料链接与核对日期", "source": "apps/desktop/src/components/settings/SettingsAiProviders.vue" },
+        { "id": "model-parameters", "label": "逐模型启用、参数、推理选择和测试结果", "source": "apps/desktop/src/components/settings/SettingsAiProviders.vue" },
+        { "id": "byo-model", "label": "OpenAI 兼容服务、Anthropic 原生适配及本地 Ollama 等现有服务协议", "source": "apps/desktop/src/services/ai-api.service.ts" },
+        { "id": "conversation-test", "label": "Reply OK 普通对话探针及 Ollama 服务列表探针", "source": "apps/desktop/src/services/ai-test.service.ts" },
+        { "id": "history-control", "label": "本地对话历史保存开关和保留条数，关闭时清理对应记录", "source": "apps/desktop/src/services/chat-history.ts" },
+        { "id": "read-approval-control", "label": "自动批准只读操作的设置参与实际执行流程", "source": "apps/desktop/src/components/chat/AIChatOpenCodeStyle.vue" },
+        { "id": "updater-control", "label": "检查、下载、取消更新及安装动作", "source": "apps/desktop/src/views/SettingsView.vue" },
+        { "id": "appearance", "label": "主题、字号、语言、壁纸与动画控制", "source": "apps/desktop/src/views/SettingsView.vue" }
+      ],
+      "proposedImprovements": [
+        "将大量服务商的选择与当前服务的配置维持双栏结构，减少一次性字段数量。",
+        "把目录声明的工具能力与实际工具协议验证分开命名；独立工具调用探针仍是建议增强。",
+        "提供数据发送范围的短说明，避免误解外部模型的数据去向。",
+        "连接信任记录的列表管理界面属于新设计建议，不能当作当前已有设置页。"
+      ],
+      "copy": {
+        "heading": "模型服务",
+        "directoryHeading": "服务商",
+        "directorySearch": "搜索服务商或模型",
+        "endpointLabel": "服务地址",
+        "apiKeyLabel": "API Key",
+        "modelListHeading": "已启用模型",
+        "testAction": "测试模型连接",
+        "testSuccess": "对话测试通过",
+        "testScope": "此测试验证普通对话连接，不代表工具调用已通过验证。",
+        "capabilityLabel": "模型声明能力",
+        "catalogStatus": "官方资料已核对",
+        "externalDataNote": "使用外部模型时，相关对话和参与分析的终端输出会发送到所配置的服务。",
+        "historyLabel": "保存本地对话历史",
+        "historyHint": "保存在此设备，关闭后清理已保存的对话。",
+        "readApprovalLabel": "自动批准只读操作",
+        "readApprovalHint": "关闭后，读取服务器内容前需要确认。命令、部署和文档修改仍需确认。",
+        "reducedMotionLabel": "减少动态效果"
+      },
+      "criticalStates": [
+        { "id": "no-provider", "priority": "P1", "copy": "选择一个模型服务开始配置", "action": "选择服务商" },
+        { "id": "missing-key", "priority": "P1", "copy": "请填写此服务的 API Key", "action": "填写密钥" },
+        { "id": "testing", "priority": "P2", "copy": "正在测试模型连接…", "action": null },
+        { "id": "conversation-verified", "priority": "P1", "copy": "对话测试通过", "action": null, "mustNotClaim": "工具调用已验证" },
+        { "id": "auth-error", "priority": "P1", "copy": "认证失败，请检查密钥与模型访问权限", "action": "修改配置" },
+        { "id": "quota-error", "priority": "P1", "copy": "模型服务请求受限，请检查服务额度后重试", "action": "查看服务商资料" },
+        { "id": "save-error", "priority": "P1", "copy": "配置未能保存，请重试", "action": "重新保存" },
+        { "id": "history-disabled", "priority": "P2", "copy": "本地历史保存已关闭", "action": null },
+        { "id": "updating", "priority": "P2", "copy": "正在下载更新", "action": "取消更新" }
+      ]
+    }
+  ],
+  "currentSourceCorrections": [
+    {
+      "id": "conversation-history-exists",
+      "checkedAt": "2026-10-30",
+      "implemented": true,
+      "fact": "当前源码已经加载、保存和按设置保留本地可显示对话；不能继续把保存历史当作完全未实现。",
+      "sources": ["apps/desktop/src/services/chat-history.ts", "apps/desktop/src/components/chat/AIChatOpenCodeStyle.vue"]
+    },
+    {
+      "id": "read-approval-exists",
+      "checkedAt": "2026-10-30",
+      "implemented": true,
+      "fact": "autoApproveReadOnly 已进入真实请求和工具执行路径。",
+      "sources": ["apps/desktop/src/components/chat/AIChatOpenCodeStyle.vue", "apps/desktop/src/services/tools/multi-host-tools.ts"]
+    },
+    {
+      "id": "auth-sessions-exist",
+      "checkedAt": "2026-10-30",
+      "implemented": true,
+      "fact": "可选服务端已经校验 access 与 refresh 用途，使用持久认证会话，刷新时加载当前活跃账号，登出撤销会话。桌面独立功能无需呈现账号门槛。",
+      "sources": ["packages/server/src/services/auth-session.service.ts", "packages/server/src/utils/auth.ts", "packages/server/src/routes/auth.routes.ts"]
+    },
+    {
+      "id": "provider-directory-exists",
+      "checkedAt": "2026-10-30",
+      "implemented": true,
+      "fact": "模型服务配置已经具有目录筛选、目录资料状态、逐模型能力和参数，不应退回为静态长表单。",
+      "sources": ["apps/desktop/src/components/settings/SettingsAiProviders.vue"]
+    },
+    {
+      "id": "updater-cancel-exists",
+      "checkedAt": "2026-10-30",
+      "implemented": true,
+      "fact": "当前设置页已有取消更新动作。",
+      "sources": ["apps/desktop/src/views/SettingsView.vue"]
+    },
+    {
+      "id": "tool-probe-not-verified",
+      "checkedAt": "2026-10-30",
+      "implemented": false,
+      "fact": "现有连接测试使用普通对话或 Ollama 模型列表探针，并未通过独立工具调用探针验证工具能力。",
+      "sources": ["apps/desktop/src/services/ai-test.service.ts"]
+    }
+  ],
+  "motionStateRequirements": [
+    { "state": "navigation", "requirement": "当前选择与目标名称在过渡期间保持稳定。" },
+    { "state": "assistant-toggle", "requirement": "终端尺寸在面板过渡完成后统一更新，避免每帧改变远端 PTY。" },
+    { "state": "awaiting-approval", "requirement": "默认焦点为取消，命令区域不漂移，审批内容不随背景选择变化。" },
+    { "state": "running", "requirement": "没有真实进度时只显示阶段或等待状态，不构造百分比。" },
+    { "state": "stopping", "requirement": "保持正在停止，直到已开始的操作返回真实结果。" },
+    { "state": "failure", "requirement": "错误与原目标持续保留，不用短暂淡出作为唯一反馈。" },
+    { "state": "logs", "requirement": "用户正在阅读旧日志时不强制回到底部，以新增提示承接。" },
+    { "state": "reduced-motion", "requirement": "移除位移、缩放和循环装饰，保留焦点、状态和必要进度信息。" }
+  ]
+}

@@ -53,6 +53,9 @@ export interface UpdateState {
   currentVersion: string
   availableVersion?: string
   progress?: number
+  downloadedBytes?: number
+  totalBytes?: number
+  bytesPerSecond?: number
   statusText?: string
   downloadedFilePath?: string
   selectedSourceId?: string
@@ -229,6 +232,7 @@ export function buildManifestUrls({
 export class UpdateService {
   private state: UpdateState
   private active: UpdateOperation | null = null
+  private installation: Promise<void> | null = null
   private readonly files: UpdateFileStore
   private readonly timeouts: UpdateTimeouts
 
@@ -266,7 +270,7 @@ export class UpdateService {
   }
 
   startBackgroundCheck(): Promise<UpdateState> {
-    if (!this.deps.manifestUrls.length || this.state.status === 'installing')
+    if (!this.deps.manifestUrls.length || this.state.status === 'installing' || this.installation)
       return Promise.resolve(this.getState())
     if (this.active) return this.active.promise
     const operation: UpdateOperation = {
@@ -298,17 +302,30 @@ export class UpdateService {
   }
 
   async installDownloadedUpdate() {
+    if (this.installation) return this.installation
     const filePath = this.state.downloadedFilePath
-    if (!filePath) throw new Error('No downloaded update available')
-    if (this.state.status === 'installing') return
+    if (this.state.status !== 'downloaded' || !filePath || this.active) {
+      throw new Error('No downloaded update available')
+    }
     const direct =
       this.deps.platform === 'win32' ||
       (this.deps.platform === 'linux' && filePath.toLowerCase().endsWith('.appimage'))
+    const ready = this.getState()
     this.updateState({
       status: 'installing',
       statusText: direct ? '正在启动安装程序' : '正在打开安装包',
       error: undefined
     })
+    const pending = this.launchDownloadedUpdate(filePath, direct, ready)
+    this.installation = pending
+    try {
+      await pending
+    } finally {
+      if (this.installation === pending) this.installation = null
+    }
+  }
+
+  private async launchDownloadedUpdate(filePath: string, direct: boolean, ready: UpdateState) {
     try {
       if (direct) {
         this.log('info', 'Launching cached installer directly', {
@@ -323,10 +340,14 @@ export class UpdateService {
         })
         const error = await this.deps.openPath(filePath)
         if (error) throw new Error(error)
+        // DMG/DEB packages are completed by the system UI; this app stays open.
+        this.updateState({ ...ready, status: 'downloaded',
+          statusText: '安装包已打开，请按系统提示完成安装', error: undefined })
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       this.updateState({
+        ...ready,
         status: 'downloaded',
         statusText: '安装程序启动失败，可重试',
         error: message
@@ -347,6 +368,13 @@ export class UpdateService {
 
   private updateState(patch: Partial<UpdateState>) {
     this.state = { ...this.state, ...patch }
+    if (this.state.status !== 'downloading' && this.state.status !== 'downloaded') {
+      this.state.downloadedBytes = undefined
+      this.state.totalBytes = undefined
+      this.state.bytesPerSecond = undefined
+    } else if (this.state.status === 'downloaded') {
+      this.state.bytesPerSecond = 0
+    }
     this.deps.emitState(this.getState())
   }
 
@@ -374,6 +402,7 @@ export class UpdateService {
         statusText: '正在检查更新',
         error: undefined,
         progress: undefined,
+        availableVersion: undefined,
         downloadedFilePath: undefined,
         selectedSourceId: undefined,
         lastCheckedAt: new Date().toISOString()
@@ -420,6 +449,9 @@ export class UpdateService {
           status: 'downloading',
           selectedSourceId: source.sourceId,
           progress: 0,
+          downloadedBytes: 0,
+          totalBytes: manifest.artifact.size,
+          bytesPerSecond: 0,
           statusText: `正在后台下载更新（${source.sourceId}）`
         })
         await this.downloadArtifact(source.url, target, manifest.artifact, operation)
@@ -429,6 +461,9 @@ export class UpdateService {
         availableVersion: version,
         downloadedFilePath: target,
         progress: 100,
+        downloadedBytes: manifest.artifact.size,
+        totalBytes: manifest.artifact.size,
+        bytesPerSecond: 0,
         statusText: `新版本 ${version} 已准备完成，可直接安装`
       })
     } catch (error) {
@@ -611,7 +646,31 @@ export class UpdateService {
             void writeFinished.catch(error => transfer.abort(error))
             const hash = createHash('sha512')
             let received = 0
+            let downloadedBytes = 0
+            let sampledBytes = 0
+            let sampledAt = performance.now()
+            // Publish a bounded stream of byte samples, including zero when the transfer stalls.
+            const progressTimer = setInterval(() => {
+              if (this.active !== operation || transferSignal.aborted) return
+              const now = performance.now()
+              const bytesPerSecond = Math.round(
+                ((downloadedBytes - sampledBytes) * 1000) / Math.max(1, now - sampledAt)
+              )
+              sampledAt = now
+              sampledBytes = downloadedBytes
+              if (
+                this.state.downloadedBytes === downloadedBytes &&
+                this.state.bytesPerSecond === bytesPerSecond
+              )
+                return
+              this.updateOperation(operation, {
+                progress: Math.min(99, Math.round((downloadedBytes / artifact.size) * 100)),
+                downloadedBytes,
+                bytesPerSecond
+              })
+            }, 250)
             const cancel = () => {
+              clearInterval(progressTimer)
               writer.destroy(abortReason(transferSignal))
               void reader.cancel(abortReason(transferSignal)).catch(() => {})
             }
@@ -642,10 +701,15 @@ export class UpdateService {
                       writeSignal
                     )
                 )
-                this.updateOperation(operation, {
-                  progress: Math.min(99, Math.round((received / artifact.size) * 100))
-                })
+                downloadedBytes = received
               }
+              clearInterval(progressTimer)
+              this.updateOperation(operation, {
+                progress: Math.min(99, Math.round((downloadedBytes / artifact.size) * 100)),
+                downloadedBytes,
+                bytesPerSecond: 0,
+                statusText: '更新下载完成，正在校验安装包'
+              })
               if (received !== artifact.size) throw new Error('Downloaded artifact size mismatch')
               if (hash.digest('base64') !== artifact.sha512)
                 throw new Error('Downloaded artifact hash mismatch')
@@ -655,6 +719,7 @@ export class UpdateService {
               this.assertCurrent(operation)
               verified = true
             } finally {
+              clearInterval(progressTimer)
               signal.removeEventListener('abort', parentCancelled)
               transferSignal.removeEventListener('abort', cancel)
               writer.destroy()

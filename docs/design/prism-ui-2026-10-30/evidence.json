@@ -1,0 +1,299 @@
+{
+  "date": "2026-10-30",
+  "width": 1440,
+  "height": 900,
+  "screens": [
+    {
+      "route": "workspace",
+      "screenshot": "previews/workspace.png",
+      "svg": "figma-import/workspace.svg",
+      "textNodes": 79,
+      "shapeNodes": 66,
+      "vectorIcons": 41,
+      "rasterAssets": 0,
+      "clips": 7,
+      "gradients": 0,
+      "domElements": 204
+    },
+    {
+      "route": "connections",
+      "screenshot": "previews/connections.png",
+      "svg": "figma-import/connections.svg",
+      "textNodes": 88,
+      "shapeNodes": 82,
+      "vectorIcons": 36,
+      "rasterAssets": 0,
+      "clips": 12,
+      "gradients": 0,
+      "domElements": 198
+    },
+    {
+      "route": "terminal",
+      "screenshot": "previews/terminal.png",
+      "svg": "figma-import/terminal.svg",
+      "textNodes": 105,
+      "shapeNodes": 72,
+      "vectorIcons": 36,
+      "rasterAssets": 0,
+      "clips": 6,
+      "gradients": 0,
+      "domElements": 193
+    },
+    {
+      "route": "files",
+      "screenshot": "previews/files.png",
+      "svg": "figma-import/files.svg",
+      "textNodes": 93,
+      "shapeNodes": 96,
+      "vectorIcons": 47,
+      "rasterAssets": 0,
+      "clips": 8,
+      "gradients": 0,
+      "domElements": 250
+    },
+    {
+      "route": "settings",
+      "screenshot": "previews/settings.png",
+      "svg": "figma-import/settings.svg",
+      "textNodes": 62,
+      "shapeNodes": 52,
+      "vectorIcons": 34,
+      "rasterAssets": 0,
+      "clips": 7,
+      "gradients": 0,
+      "domElements": 153
+    },
+    {
+      "route": "motion",
+      "screenshot": "previews/motion.png",
+      "svg": "figma-import/motion.svg",
+      "textNodes": 68,
+      "shapeNodes": 43,
+      "vectorIcons": 28,
+      "rasterAssets": 0,
+      "clips": 6,
+      "gradients": 0,
+      "domElements": 138
+    }
+  ],
+  "states": [
+    {
+      "state": "workspace-empty",
+      "screenshot": "previews/states/workspace-empty.png",
+      "svg": "figma-import/states/workspace-empty.svg",
+      "textNodes": 56,
+      "shapeNodes": 50,
+      "vectorIcons": 34,
+      "rasterAssets": 0,
+      "clips": 7,
+      "gradients": 0,
+      "domElements": 144
+    },
+    {
+      "state": "terminal-approval",
+      "screenshot": "previews/states/terminal-approval.png",
+      "svg": "figma-import/states/terminal-approval.svg",
+      "textNodes": 117,
+      "shapeNodes": 90,
+      "vectorIcons": 39,
+      "rasterAssets": 0,
+      "clips": 7,
+      "gradients": 0,
+      "domElements": 220
+    },
+    {
+      "state": "terminal-disconnected",
+      "screenshot": "previews/states/terminal-disconnected.png",
+      "svg": "figma-import/states/terminal-disconnected.svg",
+      "textNodes": 106,
+      "shapeNodes": 73,
+      "vectorIcons": 37,
+      "rasterAssets": 0,
+      "clips": 6,
+      "gradients": 0,
+      "domElements": 194
+    },
+    {
+      "state": "connections-key-change",
+      "screenshot": "previews/states/connections-key-change.png",
+      "svg": "figma-import/states/connections-key-change.svg",
+      "textNodes": 99,
+      "shapeNodes": 99,
+      "vectorIcons": 39,
+      "rasterAssets": 0,
+      "clips": 13,
+      "gradients": 0,
+      "domElements": 224
+    },
+    {
+      "state": "files-committing",
+      "screenshot": "previews/states/files-committing.png",
+      "svg": "figma-import/states/files-committing.svg",
+      "textNodes": 93,
+      "shapeNodes": 96,
+      "vectorIcons": 47,
+      "rasterAssets": 0,
+      "clips": 8,
+      "gradients": 0,
+      "domElements": 250
+    }
+  ],
+  "interaction": {
+    "routes": [
+      "workspace",
+      "connections",
+      "terminal",
+      "files",
+      "settings",
+      "motion"
+    ],
+    "checks": [
+      {
+        "name": "assistant-toggle",
+        "passed": true,
+        "assertion": "Opens and closes; layout, aria-expanded, aria-hidden and inert agree."
+      },
+      {
+        "name": "target-selection",
+        "passed": true,
+        "assertion": "web-02 checkbox changes target set, count and visible chips immediately."
+      },
+      {
+        "name": "approval-keyboard",
+        "passed": true,
+        "assertion": "Cancel receives default focus, Tab remains in dialog, Escape closes and restores focus."
+      },
+      {
+        "name": "files-failure-visible",
+        "passed": true,
+        "assertion": "Last failed transfer bottom is inside the visible file panel.",
+        "rowBottom": 936.984375,
+        "panelBottom": 946
+      },
+      {
+        "name": "transfer-states",
+        "passed": true,
+        "assertion": "Running can cancel; progress keeps the same DOM node and uses transform interpolation; 99.9% commit disables cancellation before done/100%."
+      },
+      {
+        "name": "provider-selection",
+        "passed": true,
+        "assertion": "Provider dialog changes the selected service and displayed configuration without any network call."
+      },
+      {
+        "name": "host-and-task-binding",
+        "passed": true,
+        "assertion": "web-02 updates terminal prompt/header; upload confirms web-02; changing current host keeps upload and history targets fixed.",
+        "historyPaths": [
+          "本机 → web-02:/srv/prism/releases/",
+          "web-01:/srv/prism/ → 本机/Downloads/",
+          "web-02:/srv/prism/logs/ → 本机/Downloads/"
+        ]
+      },
+      {
+        "name": "disconnect-target",
+        "passed": true,
+        "assertion": "Lost host is removed from targets and disabled in picker; the demonstration can be reset."
+      },
+      {
+        "name": "reduced-motion",
+        "passed": true,
+        "assertion": "Manual control works, drawer has transform:none, active animation keyframes have no spatial properties, state sequence completes."
+      }
+    ],
+    "reducedMotion": {
+      "systemPreference": false,
+      "hasDocumentControl": true,
+      "drawerTransform": "none",
+      "transitionProperty": "opacity",
+      "activeSpatialKeyframes": 0,
+      "completed": true
+    },
+    "scope": "Isolated simulated-data HTML prototype; no native desktop, SSH or model-provider calls."
+  },
+  "motion": {
+    "frames": [
+      {
+        "file": "previews/motion-frames/frame-01.png",
+        "elapsedMs": 1,
+        "phase": "等待选择",
+        "drawerOpen": false,
+        "drawerTransform": "matrix(1, 0, 0, 1, 250, 0)",
+        "confirmationVisible": false,
+        "status": "playing",
+        "reduced": false
+      },
+      {
+        "file": "previews/motion-frames/frame-02.png",
+        "elapsedMs": 461,
+        "phase": "选择操作目标",
+        "drawerOpen": true,
+        "drawerTransform": "matrix(1, 0, 0, 1, 0, 0)",
+        "confirmationVisible": false,
+        "status": "playing",
+        "reduced": false
+      },
+      {
+        "file": "previews/motion-frames/frame-03.png",
+        "elapsedMs": 1053,
+        "phase": "2 台服务器已选中",
+        "drawerOpen": true,
+        "drawerTransform": "matrix(1, 0, 0, 1, 0, 0)",
+        "confirmationVisible": false,
+        "status": "playing",
+        "reduced": false
+      },
+      {
+        "file": "previews/motion-frames/frame-04.png",
+        "elapsedMs": 1862,
+        "phase": "2 台服务器已选中",
+        "drawerOpen": true,
+        "drawerTransform": "matrix(1, 0, 0, 1, 0, 0)",
+        "confirmationVisible": true,
+        "status": "playing",
+        "reduced": false
+      },
+      {
+        "file": "previews/motion-frames/frame-05.png",
+        "elapsedMs": 2806,
+        "phase": "正在读取磁盘信息",
+        "drawerOpen": true,
+        "drawerTransform": "matrix(1, 0, 0, 1, 0, 0)",
+        "confirmationVisible": false,
+        "status": "playing",
+        "reduced": false
+      },
+      {
+        "file": "previews/motion-frames/frame-06.png",
+        "elapsedMs": 3555,
+        "phase": "巡检完成",
+        "drawerOpen": true,
+        "drawerTransform": "matrix(1, 0, 0, 1, 0, 0)",
+        "confirmationVisible": false,
+        "status": "done",
+        "reduced": false
+      }
+    ],
+    "crop": {
+      "width": 852,
+      "height": 425
+    },
+    "gif": "previews/motion-keyframes.gif",
+    "note": "Six timed keyframes from the working simulated-data motion prototype; GIF is a keyframe review, not a real SSH recording."
+  },
+  "sourceSha256": {
+    "index.html": "e846052167a3639f6851b0cf63dbd6d8867c986edc9453bc3cd640496201092a",
+    "style.css": "430c751eabab0ded989730f4b06c451613cb33c159ddb76f7ae3fb4131c4039a",
+    "prototype.js": "9ba79897a34a04bde981da04d897afed7a3c3f6df26576cbfc68dffe2706b8fb",
+    "motion-spec.json": "306ff81a1743cb2ea798d3275a7fd928a99f43fb53158c747c0f36fad458bc60"
+  },
+  "networkHostsBlocked": [],
+  "note": "Design prototype uses simulated hosts and outputs. SVG is editable text, vector shapes and icons; no whole-UI raster or foreignObject. Native desktop/real SSH are outside this design check.",
+  "svgEffects": "Native SVG preserves measured layout, editable text, fills, borders, clipping and vector icons. CSS shadows and backdrop blur are simplified; PNG is the visual reference.",
+  "runtime": {
+    "browser": "Chrome/156.0.8078.48",
+    "node": "24.21.0",
+    "engine": "Isolated headless Chrome / CDP"
+  },
+  "screenshotMode": "Hidden/isolated browser; no system clipboard or real credentials accessed."
+}

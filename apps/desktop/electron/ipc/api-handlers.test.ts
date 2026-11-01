@@ -27,5 +27,5 @@ test('electron api handlers centralize request logging for all HTTP calls', asyn
   assert.match(source, /async function fetchJson</)
   assert.match(source, /fetchJson<ApiResponse>\('auth\.login', 'POST', url/)
   assert.match(source, /authorizationPreview/)
-  assert.match(source, /apiBaseUrl: API_BASE_URL/)
+  assert.match(source, /apiBaseUrl: summarizeApiUrl\(API_BASE_URL\)/)
 })

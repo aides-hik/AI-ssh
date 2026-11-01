@@ -1,0 +1,67 @@
+{
+  "product": "Prism",
+  "date": "2026-10-30",
+  "principle": "Motion explains feedback, orientation, target scope and real execution state.",
+  "curves": {
+    "enter": [0.22, 1, 0.36, 1],
+    "move": [0.25, 1, 0.5, 1],
+    "exit": [0.4, 0, 0.6, 1],
+    "linear": [0, 0, 1, 1]
+  },
+  "interactions": [
+    {
+      "id": "panel",
+      "trigger": "User expands or collapses the connection sidebar or AI assistant",
+      "enterMs": 220,
+      "exitMs": 160,
+      "curve": "enter",
+      "properties": {"translationXPx": [12, 0], "opacity": [0, 1]},
+      "notes": "Use -12px for the left sidebar. Keep content visible during reveal, retarget on interruption and fit the terminal once after the container settles."
+    },
+    {
+      "id": "targets",
+      "trigger": "User selects or deselects an operation host",
+      "durationMs": 120,
+      "indicatorMs": 180,
+      "curve": "move",
+      "properties": {"selectionColor": true, "indicatorThicknessPx": 2},
+      "notes": "Checkbox and target count update immediately. Do not scale the host row or delay the usable state."
+    },
+    {
+      "id": "approval",
+      "trigger": "A host fingerprint or exact operation requires the user's approval",
+      "enterMs": 180,
+      "exitMs": 120,
+      "curve": "enter",
+      "properties": {"translationYPx": [8, 0], "opacity": [0, 1]},
+      "notes": "The overlay shares the surface timing. Default to cancel; keep targets, commands and fingerprints still and selectable. Never shake key-change warnings."
+    },
+    {
+      "id": "transfer",
+      "trigger": "A real byte-progress sample or final commit result arrives",
+      "durationMs": 150,
+      "iconSwapMs": 100,
+      "curve": "linear",
+      "properties": {"progressSampleInterpolation": true, "preCommitMaximumPercent": 99.9},
+      "notes": "Never fabricate progress. Show saving separately; cancellation during commit waits for the actual result. Retain errors and their original targets."
+    },
+    {
+      "id": "disconnect",
+      "trigger": "Connection loss or a stop request changes task state",
+      "durationMs": 120,
+      "curve": "enter",
+      "properties": {"opacity": [0, 1]},
+      "notes": "State text and host availability update immediately. Show stopping until the real result, and do not automatically reconnect or replay writes."
+    },
+    {
+      "id": "reduced-motion",
+      "trigger": "System prefers-reduced-motion or the app animation setting",
+      "durationMs": 70,
+      "curve": "linear",
+      "properties": {"opacity": true, "color": true, "translation": false, "scale": false, "spring": false, "blur": false},
+      "notes": "Preserve immediate status feedback, focus and every task action. No decorative animation loops."
+    }
+  ],
+  "excluded": ["terminal typewriter", "animated log line entrances", "per-page staggers", "decorative infinite glow", "full-page tab slides"],
+  "prototypeData": "Simulated servers, messages, progress and operation results; not evidence of a live SSH or model run."
+}

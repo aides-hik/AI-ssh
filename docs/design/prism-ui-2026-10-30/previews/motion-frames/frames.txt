@@ -1,0 +1,13 @@
+file 'frame-01.png'
+duration 0.460
+file 'frame-02.png'
+duration 0.592
+file 'frame-03.png'
+duration 0.809
+file 'frame-04.png'
+duration 0.944
+file 'frame-05.png'
+duration 0.749
+file 'frame-06.png'
+duration 0.900
+file 'frame-06.png'

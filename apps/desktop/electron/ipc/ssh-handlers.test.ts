@@ -15,6 +15,7 @@ import { Client, Server, utils } from 'ssh2'
 import { SSHExecOutput } from '../services/ssh-exec-output'
 import { SSHExecLiveOutput } from '../services/ssh-exec-live-output'
 import { sshExecutionTimeout, type SSHExecuteOutputEvent } from '../../src/services/ssh/ssh-execution'
+import { normalizeSSHHost } from '../services/ssh-host-trust'
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const sshHandlersPath = join(currentDir, 'ssh-handlers.ts')
@@ -29,8 +30,8 @@ async function loadAuthentication(home: string, environment: Record<string, stri
   const javascript = ts.transpileModule(declarations.map(item => item.getText(parsed)).join('\n'), {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
   }).outputText
-  return new Function('fs', 'path', 'homedir', 'process', javascript + '\nreturn createSSHConnectConfig')(
-    fs, path, () => home, { env: environment, platform }
+  return new Function('fs', 'path', 'homedir', 'process', 'normalizeSSHHost', javascript + '\nreturn createSSHConnectConfig')(
+    fs, path, () => home, { env: environment, platform }, normalizeSSHHost
   )
 }
 
@@ -57,6 +58,44 @@ test('SSH authentication preserves pasted key contents and obeys the selected me
   const result = await configure({ authType: 'PASSWORD', password: 12345, privateKey: 'stale-missing-file' })
   assert.equal(result.password, '12345')
   assert.equal(result.privateKey, undefined)
+})
+
+test('SSH authentication canonicalizes the exact host and port that trust verification probes', async () => {
+  const configure = await loadAuthentication(tmpdir())
+  for (const [host, expected] of [[' Example.TEST. ', 'example.test'], ['[0:0:0:0:0:0:0:1]', '::1']]) {
+    const result = await configure({ host, port: '2200', username: 'fixture' })
+    assert.equal(result.host, expected)
+    assert.equal(result.port, 2200)
+  }
+  await assert.rejects(configure({ host: 'bad\0host' }), /地址无效/)
+})
+
+test('creating a remote directory is idempotent only when an existing directory is verified', async () => {
+  const source = await readFile(sshHandlersPath, 'utf8')
+  const parsed = ts.createSourceFile('ssh-handlers.ts', source, ts.ScriptTarget.Latest, true)
+  const manager = parsed.statements.find(statement => ts.isClassDeclaration(statement) && statement.name?.text === 'SSHManager')
+  assert.ok(manager && ts.isClassDeclaration(manager))
+  const method = manager.members.find(member => ts.isMethodDeclaration(member) && member.name?.getText(parsed) === 'createDirectory')
+  assert.ok(method)
+  const javascript = ts.transpileModule(`class Directories { async getSFTP() { return sftp } ${method.getText(parsed)} }`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
+  }).outputText
+  for (const outcome of ['created', 'existing-directory', 'existing-file', 'permission-denied', 'stat-failed']) {
+    const failure = Object.assign(new Error(outcome), { code: outcome === 'permission-denied' ? 3 : 4 })
+    let statCalls = 0
+    const sftp = {
+      mkdir: (_path: string, callback: (error?: Error) => void) => callback(outcome === 'created' ? undefined : failure),
+      stat: (_path: string, callback: (error: Error | null, value?: { isDirectory: () => boolean }) => void) => {
+        statCalls++
+        if (outcome === 'stat-failed') callback(new Error('permission denied while checking'))
+        else callback(null, { isDirectory: () => outcome === 'existing-directory' })
+      }
+    }
+    const directories = new Function('sftp', javascript + '\nreturn new Directories()')(sftp)
+    if (outcome === 'created' || outcome === 'existing-directory') await directories.createDirectory('fixture', '/upload/path')
+    else await assert.rejects(directories.createDirectory('fixture', '/upload/path'), error => error === failure)
+    assert.equal(statCalls, outcome === 'created' || outcome === 'permission-denied' ? 0 : 1)
+  }
 })
 
 test('SSH Agent uses an explicit socket or the Windows OpenSSH named pipe without a password fallback', async () => {
@@ -146,7 +185,9 @@ test('a passphrase-protected key at a Chinese path authenticates with a real loo
   assert.equal(authenticated, 1, 'A wrong passphrase must not create a second authenticated session')
 })
 
-async function loadTransfers() {
+async function loadTransfers(transfer: (options: { signal: AbortSignal; beginCommit: () => void }) => Promise<void> = options => new Promise<void>((_resolve, reject) => {
+  options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true })
+})) {
   const source = await readFile(sshHandlersPath, 'utf8')
   const parsed = ts.createSourceFile('ssh-handlers.ts', source, ts.ScriptTarget.Latest, true)
   const declaration = parsed.statements.find(statement => ts.isClassDeclaration(statement) && statement.name?.text === 'SSHManager')
@@ -157,8 +198,9 @@ async function loadTransfers() {
   const javascript = ts.transpileModule(`class Transfers { connections = new Map(); pendingTransfers = new Map(); ${methods.map(item => item.getText(parsed)).join('\n')} }`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
   }).outputText
-  return new Function('fs', 'path', 'windowEvents', 'randomUUID', javascript + '\nreturn new Transfers()')(
-    fs, path, { sendToRenderer() {} }, () => 'generated-transfer-id'
+  return new Function('fs', 'path', 'windowEvents', 'randomUUID', 'atomicFileTransfer', 'dialog', javascript + '\nreturn new Transfers()')(
+    fs, path, { sendToRenderer() {} }, () => 'generated-transfer-id', transfer,
+    { showMessageBox: async () => ({ response: 0 }) }
   )
 }
 
@@ -189,12 +231,34 @@ test('cancelling one active upload preserves another transfer and disconnect cle
   const second = manager.uploadFile('connection', 'local-b', 'remote-b', 'second')
   const rejections = [assert.rejects(first, { name: 'AbortError' }), assert.rejects(second, { name: 'AbortError' })]
   assert.equal(manager.cancelTransfer('first'), true)
+  await Promise.resolve()
+  await Promise.resolve()
   assert.equal(channels[0].closed, true)
   assert.equal(channels[1].closed, false)
   assert.equal(manager.pendingTransfers.size, 1)
   manager.cancelConnectionTransfers('connection')
   await Promise.all(rejections)
   assert.equal(channels[1].closed, true)
+  assert.equal(manager.pendingTransfers.size, 0)
+})
+
+test('a transfer that has entered its final commit cannot be reported as cancelled', async () => {
+  let complete: (() => void) | undefined
+  const manager = await loadTransfers((options: { signal: AbortSignal; beginCommit: () => void }) => {
+    options.beginCommit()
+    return new Promise<void>(resolve => { complete = resolve })
+  })
+  let closed = 0
+  manager.connections.set('connection', { isConnected: true, client: { sftp(callback: any) {
+    callback(null, { end() { closed++ }, on() {}, once() {} })
+  } } })
+  const pending = manager.uploadFile('connection', 'local', 'remote', 'committing')
+  assert.equal(manager.cancelTransfer('committing'), false)
+  assert.equal(manager.pendingTransfers.size, 1)
+  assert(complete)
+  complete()
+  await pending
+  assert.equal(closed, 1)
   assert.equal(manager.pendingTransfers.size, 0)
 })
 

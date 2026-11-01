@@ -61,6 +61,7 @@
               @delete="handleNodeDelete"
               @connect="handleNodeConnect"
               @drag-node="handleDragNode"
+              @drag-end="handleDragEnd"
               @drop-node="handleDropNode"
               @create-folder="handleCreateSubFolder"
               @create-connection="handleCreateSubConnection"
@@ -157,6 +158,8 @@
 import { computed, ref, onMounted, onUnmounted, watch, nextTick, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import SSHTreeNode, { type SSHTreeNodeData } from '../ssh/SSHTreeNode.vue'
+import type { SSHDragNode } from '@/utils/ssh-tree-drag'
+import { findNode } from '@/utils/tree-utils'
 import SSHConnectionDialog from '../ssh/SSHConnectionDialog.vue'
 import { sshService } from '../../services/ssh.service'
 import { settingsService } from '../../services/settings.service'
@@ -210,7 +213,7 @@ const sshError = ref<string | null>(null)
 let connectingTimer: number | null = null
 
 // 拖拽的节点
-const dragNode = ref<SSHTreeNodeData | null>(null)
+const dragNode = ref<SSHDragNode | null>(null)
 
 // 连接对话框
 const showConnectionDialog = ref(false)
@@ -508,24 +511,32 @@ const handleNodeConnect = async (node: SSHTreeNodeData) => {
 }
 
 // 拖拽节点
-const handleDragNode = (node: SSHTreeNodeData) => {
+const handleDragNode = (node: SSHDragNode) => {
   dragNode.value = node
 }
 
+const handleDragEnd = () => {
+  dragNode.value = null
+}
+
 // 放置节点
-const handleDropNode = async (data: { dragNode: SSHTreeNodeData; dropNode: SSHTreeNodeData }) => {
-  const { dragNode, dropNode } = data
+const handleDropNode = async (data: { dragNode: SSHDragNode; dropNode: SSHTreeNodeData }) => {
+  const source = findNode(data.dragNode.id, sshTreeData.value)
+  const dropNode = findNode(data.dropNode.id, sshTreeData.value)
+  if (!source || !dropNode || source.type !== data.dragNode.type || dropNode.type !== 'folder') return
+  if (dragNode.value?.id !== source.id || dragNode.value.type !== source.type) return
+  dragNode.value = null
 
   // 防止拖到自己或自己的子节点
-  if (dragNode.id === dropNode.id) {
+  if (source.id === dropNode.id || findNode(dropNode.id, source.children)) {
     return
   }
 
   try {
     // ✅ 直接使用 sshService
     await sshService.moveNode({
-      nodeId: dragNode.id,
-      nodeType: dragNode.type,
+      nodeId: source.id,
+      nodeType: source.type,
       targetFolderId: dropNode.type === 'folder' ? dropNode.id : dropNode.folderId,
       order: 0
     })

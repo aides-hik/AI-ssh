@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prism · 设计交付说明</title>
+<style>
+@font-face{font-family:Noto;src:url(assets/NotoSansSC.ttf)}
+*{box-sizing:border-box}body{margin:0;background:#101923;color:#edf3f8;font:14px/1.9 Noto,"Microsoft YaHei",sans-serif}main{max-width:1050px;margin:auto;padding:56px 32px}h1{font-size:32px;letter-spacing:-1px;line-height:1.4}h2{font-size:19px;margin:36px 0 14px}p{color:#a0afbf}a{color:#8db9ff}strong{color:#edf3f8}nav{display:flex;gap:12px;flex-wrap:wrap;margin:24px 0}nav a{border:1px solid #2e3d4c;border-radius:8px;padding:8px 16px;text-decoration:none;background:#1e2c3a}.notice{border-left:3px solid #e7b96b;background:#1e2c3a;padding:16px 22px;border-radius:4px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px}.screen{padding:12px;border:1px solid #2e3d4c;border-radius:10px;background:#17232f}.screen img{display:block;width:100%;border-radius:6px}.screen a{display:block;margin-top:8px;text-decoration:none}li{margin:8px 0}code{color:#c6dcff}small{color:#75889b}.spec{display:flex;gap:18px;flex-wrap:wrap}footer{border-top:1px solid #2e3d4c;margin-top:40px;padding-top:20px}
+</style>
+<main>
+  <small>PRISM / DESIGN EXPLORATION / 2026.10.30</small>
+  <h1>烟晶工作台</h1>
+  <p>以终端为主要画布，让操作目标、助手结论和确认内容保持清楚。动效用于解释状态变化，支持减少动态效果。</p>
+  <nav><a href="index.html#terminal">打开交互原型</a><a href="index.html#motion">体验动效</a><a href="prism-figma-import.zip" download>下载完整交付包</a></nav>
+  <div class="notice"><strong>Figma 写入尚未完成。</strong><p>已创建 <a href="https://www.figma.com/design/cQBEyN3jr4pIe0RMSOZE4H">Prism 设计文件</a>，但 Starter 账户的 MCP 工具调用额度已用尽，设计层、组件和动效均未写入；该文件目前为空。本包提供本地交互原型、静态 SVG、预览和工程参数。</p></div>
+  <h2>六个主页面</h2>
+  <div class="grid">
+    <div class="screen"><img src="previews/workspace.png" alt="工作台预览"><a href="figma-import/workspace.svg">01 工作台 · SVG</a></div>
+    <div class="screen"><img src="previews/connections.png" alt="连接管理预览"><a href="figma-import/connections.svg">02 连接管理 · SVG</a></div>
+    <div class="screen"><img src="previews/terminal.png" alt="终端和会话助手预览"><a href="figma-import/terminal.svg">03 终端与助手 · SVG</a></div>
+    <div class="screen"><img src="previews/files.png" alt="文件和传输任务预览"><a href="figma-import/files.svg">04 文件与传输 · SVG</a></div>
+    <div class="screen"><img src="previews/settings.png" alt="模型服务设置预览"><a href="figma-import/settings.svg">05 设置 · SVG</a></div>
+    <div class="screen"><img src="previews/motion.png" alt="动效设计说明预览"><a href="figma-import/motion.svg">06 动效说明 · SVG</a></div>
+  </div>
+  <h2>五个关键状态</h2>
+  <ul>
+    <li><a href="figma-import/states/workspace-empty.svg">首次使用</a>：先连接服务器，需要 AI 时再配置模型。</li>
+    <li><a href="figma-import/states/terminal-approval.svg">命令确认</a>：固定目标与命令，默认聚焦取消。</li>
+    <li><a href="figma-import/states/terminal-disconnected.svg">连接中断</a>：保留提示，从可执行目标中移除断开的主机。</li>
+    <li><a href="figma-import/states/connections-key-change.svg">服务器身份变化</a>：展示新旧指纹，要求核对。</li>
+    <li><a href="figma-import/states/files-committing.svg">文件安全提交</a>：提交完成前停在 99.9%，不可取消。</li>
+  </ul>
+  <h2>查看动画</h2>
+  <p>在交互原型中体验助手开合、目标选择、确认框和文件传输；“动效”页可播放一次完整流程。<a href="previews/motion-keyframes.gif">关键帧 GIF</a>仅展示流程关键状态，不能用来衡量连续动画的流畅度。精确时长、曲线与减少动态规则见 <a href="motion-spec.json">motion-spec.json</a>。</p>
+  <h2>导入 Figma</h2>
+  <ol>
+    <li>解压交付包，在 Figma 设计文件中导入 <code>figma-import/</code> 的六张 SVG，关键状态位于 <code>states/</code>。每张参考画布为 1440 × 900。</li>
+    <li>SVG 源文件保留独立文字、形状、剪裁和矢量图标，没有整页截图嵌入。导入后的文字与字体表现需在 Figma 内复核；包内提供 Noto Sans SC 字体与许可。</li>
+    <li>SVG 是静态稿，不携带 Figma 自动布局、组件变体或交互动效。后续须参照参数重建这些结构。阴影与背景模糊经过简化，PNG 是视觉对照。</li>
+  </ol>
+  <h2>交付范围与验证</h2>
+  <p>本次交付是独立设计探索，尚未替换 Vue / Electron 客户端。工作台的全局最近会话入口属于新增设计建议。全部服务器、回复、进度和结果都是演示数据，不连接真实服务器或模型，不保存真实凭据。</p>
+  <p>已用隔离的 Chrome 验证九项交互，包括键盘焦点、目标变化、进度插值、提交阶段、失败记录、服务切换和减少动态；这些检查不等于原生客户端或真实 SSH 验收。</p>
+  <div class="spec"><a href="design-tokens.json">颜色、尺寸与组件状态</a><a href="product-map.json">产品与源码映射</a><a href="evidence.json">捕获与验证记录</a><a href="asset-provenance.json">字体与图标来源</a></div>
+  <footer><small>离线使用：打开 index.html。通过本机预览服务访问时，地址为 http://127.0.0.1:4180/。所有相对资源均包含在交付包中。</small></footer>
+</main>
+</html>

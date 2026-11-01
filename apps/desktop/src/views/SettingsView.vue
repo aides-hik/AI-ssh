@@ -153,30 +153,33 @@
           <div class="setting-row">
             <div class="setting-left">
               <label class="setting-label">更新状态</label>
-              <p class="setting-hint">显示检查、测速、后台下载和安装准备状态。</p>
+              <p class="setting-hint">显示下载进度、已下载大小、实时速度和安装准备状态。</p>
             </div>
             <div class="setting-right">
-              <div class="setting-info">
+              <div class="setting-info" role="status" aria-live="polite" aria-atomic="true">
                 {{ updaterStatusText }}
                 <span v-if="updaterState.selectedSourceId">
                   （源：{{ updaterState.selectedSourceId }}）
                 </span>
               </div>
-              <div v-if="updaterState.status === 'downloading'" class="setting-info">
-                下载进度：{{ updaterState.progress || 0 }}%
-              </div>
+              <UpdateDownloadProgress :state="updaterState" />
+              <div v-if="updaterActionError" class="setting-info update-action-error" role="alert">{{ updaterActionError }}</div>
               <div v-if="updaterState.availableVersion" class="setting-info">
                 最新版本：{{ updaterState.availableVersion }}
               </div>
               <div v-if="updaterState.enabled" class="setting-action">
-                <button type="button" class="btn-sync prism-button" @click="refreshUpdateState">
+                <button type="button" class="btn-sync prism-button" :disabled="updaterBusy" @click="refreshUpdateState">
                   <i class="bi bi-arrow-repeat"></i>
                   重新检查更新
+                </button>
+                <button v-if="updaterCancellable" type="button" class="btn-sync prism-button" :disabled="updaterCancelling" @click="cancelUpdateCheck">
+                  {{ updaterCancelling ? '正在取消…' : '取消更新' }}
                 </button>
                 <button
                   v-if="updaterState.status === 'downloaded'"
                   type="button"
                   class="btn-update prism-button prism-button--primary"
+                  :disabled="updaterBusy"
                   @click="installDownloadedUpdate"
                 >
                   <i class="bi bi-download"></i>
@@ -746,6 +749,7 @@ import SettingsAppearance from '@/components/settings/SettingsAppearance.vue'
 import SettingsAiProviders from '@/components/settings/SettingsAiProviders.vue'
 import AiProvidersIcon from '@/components/common/AiProvidersIcon.vue'
 import AboutAppActions from '@/components/common/AboutAppActions.vue'
+import UpdateDownloadProgress from '@/components/common/UpdateDownloadProgress.vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 import { useInlineValidation } from '@/composables/useInlineValidation'
 
@@ -794,10 +798,21 @@ const releaseSectionScroll = () => {
 }
 const updater = useUpdateClient()
 const currentAppVersion = ref(APP_VERSION)
-const updaterState = ref<any>({ enabled: false, status: 'idle' })
-let disposeUpdaterListener: (() => void) | null = null
+const updaterState = updater.state
+const updaterActionError = ref('')
+const updaterActionPending = ref(false)
+const updaterCancelling = ref(false)
+let updaterActionGeneration = 0
+const updaterBusy = computed(() => updaterActionPending.value || updaterCancelling.value ||
+  ['checking', 'update-available', 'probing-sources', 'downloading', 'installing'].includes(updaterState.value.status))
+const updaterCancellable = computed(() =>
+  ['checking', 'update-available', 'probing-sources', 'downloading'].includes(updaterState.value.status))
+watch([() => updaterState.value.status, () => updaterState.value.availableVersion], () => {
+  updaterActionError.value = ''
+}, { flush: 'sync' })
 
 const updaterStatusText = computed(() => {
+  if (updaterCancelling.value) return '正在取消更新…'
   if (!updaterState.value.enabled) return '未配置更新源'
   const statusMap: Record<string, string> = {
     idle: '尚未开始检查',
@@ -815,19 +830,45 @@ const updaterStatusText = computed(() => {
 })
 
 const refreshUpdateState = async () => {
-  if (!window.electronAPI?.updater) {
-    return
+  if (!window.electronAPI?.updater || !updaterState.value.enabled || updaterBusy.value) return
+  const generation = ++updaterActionGeneration
+  updaterActionError.value = ''
+  updaterActionPending.value = true
+  try {
+    await updater.startBackgroundCheck()
+  } catch (error) {
+    if (generation === updaterActionGeneration) updaterActionError.value = `检查更新失败：${error instanceof Error ? error.message : String(error)}。请重试。`
+  } finally {
+    if (generation === updaterActionGeneration) updaterActionPending.value = false
   }
+}
 
-  updaterState.value = await window.electronAPI.updater.startBackgroundCheck()
+const cancelUpdateCheck = async () => {
+  if (updaterCancelling.value || !updaterCancellable.value) return
+  const generation = ++updaterActionGeneration
+  updaterActionPending.value = false
+  updaterCancelling.value = true
+  updaterActionError.value = ''
+  try {
+    await updater.cancelBackgroundCheck()
+  } catch (error) {
+    if (generation === updaterActionGeneration) updaterActionError.value = `无法取消更新：${error instanceof Error ? error.message : String(error)}`
+  } finally {
+    if (generation === updaterActionGeneration) updaterCancelling.value = false
+  }
 }
 
 const installDownloadedUpdate = async () => {
-  if (!window.electronAPI?.updater) {
-    return
+  if (!window.electronAPI?.updater || updaterBusy.value || updaterState.value.status !== 'downloaded') return
+  updaterActionError.value = ''
+  updaterActionPending.value = true
+  try {
+    await updater.installDownloadedUpdate()
+  } catch (error) {
+    updaterActionError.value = `无法安装更新：${error instanceof Error ? error.message : String(error)}。请重试。`
+  } finally {
+    updaterActionPending.value = false
   }
-
-  await window.electronAPI.updater.installDownloadedUpdate()
 }
 
 // 基础设置
@@ -1596,20 +1637,27 @@ watch(
   { deep: true }
 )
 
+const handleSettingsThemeChange = (event: Event) => {
+  const customEvent = event as CustomEvent
+  selectedThemeMode.value = customEvent.detail.mode ?? customEvent.detail.theme
+}
+const handleNavigateToSettings = (event: Event) => {
+  const { section: navSection } = (event as CustomEvent).detail || {}
+  if (navSection) activeSection.value = navSection
+}
+
 onMounted(async () => {
   if (window.electronAPI?.getVersion) {
-    try {
-      currentAppVersion.value = await window.electronAPI.getVersion()
-    } catch {
+    void window.electronAPI.getVersion().then(version => {
+      currentAppVersion.value = version
+    }).catch(() => {
       // Keep the packaged version fallback if IPC is temporarily unavailable.
-    }
-  }
-  updaterState.value = await updater.initialize()
-  if (window.electronAPI?.onUpdaterStateChange) {
-    disposeUpdaterListener = window.electronAPI.onUpdaterStateChange(state => {
-      updaterState.value = state
     })
   }
+  // The shared client receives progress immediately, even while initialization is pending.
+  void updater.initialize().catch(error => {
+    updaterActionError.value = `无法读取更新状态：${error instanceof Error ? error.message : String(error)}`
+  })
 
   storageMode.value = 'local'
 
@@ -1620,11 +1668,8 @@ onMounted(async () => {
   }
 
   // 监听主题变化
-  const handleThemeChange = (event: Event) => {
-    const customEvent = event as CustomEvent
-    selectedThemeMode.value = customEvent.detail.mode ?? customEvent.detail.theme
-  }
-  window.addEventListener('theme-changed', handleThemeChange)
+  window.addEventListener('theme-changed', handleSettingsThemeChange)
+  window.addEventListener('navigate-to-settings', handleNavigateToSettings)
 
   const handleProviderRefresh = async () => {
     await loadSettings()
@@ -1648,31 +1693,22 @@ onMounted(async () => {
   // 初次加载时处理 query 参数
   await handleQueryParams()
 
-  // 监听自定义导航事件（从 AppTitleBar 触发）
-  const handleNavigateToSettings = (event: Event) => {
-    const customEvent = event as CustomEvent
-    const { section: navSection } = customEvent.detail || {}
-
-    if (navSection) {
-      activeSection.value = navSection
-    }
-  }
-
-  window.addEventListener('navigate-to-settings', handleNavigateToSettings)
-
   // 加载完整设置
   await loadSettings()
 })
 
 onBeforeUnmount(() => {
+  ++updaterActionGeneration
+  window.removeEventListener('theme-changed', handleSettingsThemeChange)
+  window.removeEventListener('navigate-to-settings', handleNavigateToSettings)
   clearTimeout(sectionScrollTimer)
   clearTimeout(settingsNoticeTimer)
-  disposeUpdaterListener?.()
   unregisterManagedProviderRefresh?.()
 })
 </script>
 
 <style scoped>
+.prism-settings-section .update-action-error { color: var(--vscode-error, #d45b5b); }
 .app-logo {
   display: flex;
   justify-content: center;

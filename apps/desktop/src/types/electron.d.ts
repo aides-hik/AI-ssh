@@ -1,5 +1,6 @@
 // Electron API 类型定义
 import type { SSHExecutionOptions, SSHExecuteOutputEvent } from '../services/ssh/ssh-execution'
+import type { UpdateClientState } from '../services/update-client'
 interface ElectronAPI {
   // 应用控制
   minimizeWindow: () => Promise<any>
@@ -12,9 +13,9 @@ interface ElectronAPI {
   getVersion: () => Promise<string>
   getPath: (name: string) => Promise<string>
   updater: {
-    getState: () => Promise<any>
-    startBackgroundCheck: () => Promise<any>
-    cancelBackgroundCheck: () => Promise<any>
+    getState: () => Promise<UpdateClientState>
+    startBackgroundCheck: () => Promise<UpdateClientState>
+    cancelBackgroundCheck: () => Promise<UpdateClientState | undefined>
     installDownloadedUpdate: () => Promise<boolean>
   }
 
@@ -153,7 +154,7 @@ interface ElectronAPI {
   onTerminalOutput: (callback: (output: string) => void) => () => void
   onNotification: (callback: (notification: any) => void) => () => void
   onStatusUpdate: (callback: (status: any) => void) => () => void
-  onUpdaterStateChange: (callback: (state: any) => void) => () => void
+  onUpdaterStateChange: (callback: (state: UpdateClientState) => void) => () => void
   onMenuAction: (action: string, callback: (...args: any[]) => void) => () => void
 
   // 设置相关 - 统一接口，StorageManager 自动处理模式

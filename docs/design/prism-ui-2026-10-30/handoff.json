@@ -1,0 +1,36 @@
+{
+  "product": "棱镜 Prism",
+  "date": "2026-10-30",
+  "designDirection": "烟晶工作台",
+  "entryPoint": "index.html",
+  "handoff": "handoff.html",
+  "screens": 6,
+  "additionalStates": 5,
+  "figma": {
+    "url": "https://www.figma.com/design/cQBEyN3jr4pIe0RMSOZE4H",
+    "fileCreated": true,
+    "designWritten": false,
+    "animationsWritten": false,
+    "reason": "Starter MCP tool call quota reached"
+  },
+  "designSource": {
+    "svgFolder": "figma-import/",
+    "nativeSvgTextAndVectors": true,
+    "wholeScreenRasterEmbedding": false,
+    "figmaNativeComponentsCreated": false,
+    "figmaAutoLayoutCreated": false,
+    "figmaImportVerified": false,
+    "effectsNote": "Static SVG simplifies shadows and backdrop blur. PNG is the visual reference; HTML provides the actual motion."
+  },
+  "scope": {
+    "simulatedDataOnly": true,
+    "realSshCalls": false,
+    "realModelCalls": false,
+    "productionUiReplaced": false
+  },
+  "verification": "evidence.json",
+  "tokens": "design-tokens.json",
+  "motion": "motion-spec.json",
+  "productMapping": "product-map.json",
+  "assetLicenses": "asset-provenance.json"
+}

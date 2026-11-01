@@ -1,0 +1,17 @@
+{
+  "font": {
+    "name": "Noto Sans SC",
+    "source": "https://github.com/google/fonts/tree/main/ofl/notosanssc",
+    "file": "assets/NotoSansSC.ttf",
+    "license": "assets/NotoSansSC-OFL.txt"
+  },
+  "icons": {
+    "name": "Bootstrap Icons",
+    "version": "1.13.2",
+    "source": "apps/desktop/node_modules/bootstrap-icons/icons",
+    "localBundle": "assets/icons.js",
+    "license": "assets/Bootstrap-Icons-LICENSE.txt"
+  },
+  "prismMark": "Simple vector design exploration authored in prototype.js; not a claim that a new official logo has been adopted.",
+  "mockData": "Documentation-only example IP ranges and simulated outputs. No customer, production or private server data."
+}

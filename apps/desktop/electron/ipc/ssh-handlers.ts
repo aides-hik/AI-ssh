@@ -1,4 +1,4 @@
-import { dialog, ipcMain } from 'electron'
+import { app, dialog, ipcMain } from 'electron'
 import { Client, SFTPWrapper, type ConnectConfig } from 'ssh2'
 import fs from 'fs/promises'
 import path from 'path'
@@ -11,8 +11,44 @@ import { SSHExecOutput } from '../services/ssh-exec-output'
 import { SSHExecLiveOutput } from '../services/ssh-exec-live-output'
 import { SSHPTYOutput } from '../services/ssh-pty-output'
 import { remoteEnvDocument } from '../services/remote-env-document'
+import { atomicFileTransfer } from '../services/atomic-file-transfer'
 import { sshExecutionTimeout, type SSHExecutionOptions, type SSHExecuteOutputEvent } from '../../src/services/ssh/ssh-execution'
 import type { SSHCommandResult } from '../../src/services/ssh/ssh-command-result'
+import { SSHHostTrust, normalizeSSHHost, type SSHHostTrustQuestion } from '../services/ssh-host-trust'
+
+async function confirmSSHHostIdentity(question: SSHHostTrustQuestion): Promise<boolean> {
+  const endpoint = `${question.host.includes(':') ? `[${question.host}]` : question.host}:${question.port}`
+  const changing = question.kind !== 'unknown'
+  const replacing = question.kind === 'replace'
+  const result = await dialog.showMessageBox({
+    type: changing ? 'warning' : 'question',
+    title: replacing ? '重置 SSH 服务器信任' : changing ? 'SSH 服务器身份已改变' : '确认 SSH 服务器指纹',
+    message: replacing
+      ? '仅在已通过其他可信渠道核对新指纹后，重置这台服务器的信任。'
+      : changing ? '服务器公钥与已保存记录不一致，本次连接已阻止。' : '首次连接此 SSH 服务器，是否信任其身份？',
+    detail: [
+      `服务器：${endpoint}`,
+      `公钥类型：${question.keyType}`,
+      ...(question.previousFingerprint ? [`已保存指纹：${question.previousFingerprint}`] : []),
+      `当前指纹：${question.fingerprint}`,
+      '',
+      replacing ? '重置后本次连接仍会停止，请再次连接。'
+        : changing ? '服务器重装或网络冒充都可能导致密钥变化。请联系服务器管理员核对，勿仅因连接失败而重置信任。'
+          : '请通过服务器控制台或管理员提供的可信渠道核对指纹。未确认前不会发送登录密码或进行私钥认证。'
+    ].join('\n'),
+    buttons: replacing ? ['保留原信任', '已核对，重置信任'] : changing ? ['取消连接', '核对新指纹…'] : ['取消连接', '信任并连接'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true
+  })
+  return result.response === 1
+}
+
+const sshHostTrust = new SSHHostTrust({
+  filePath: () => path.join(app.getPath('userData'), 'ssh-known-hosts.json'),
+  ask: confirmSSHHostIdentity
+})
+
 interface SSHConnection {
   id: string
   name: string
@@ -59,7 +95,7 @@ interface PendingExec {
 
 interface PendingTransfer {
   connectionId: string
-  cancel: () => void
+  cancel: () => boolean
 }
 
 interface PendingEnvDoc {
@@ -73,9 +109,10 @@ function normalizeCredential(value: unknown): string | undefined {
 }
 
 async function createSSHConnectConfig(config: Partial<SSHConnection>): Promise<ConnectConfig> {
+  const endpoint = config.host === undefined ? { host: config.host, port: config.port }
+    : normalizeSSHHost(config.host, config.port)
   const connectConfig: ConnectConfig = {
-    host: config.host,
-    port: config.port,
+    ...endpoint,
     username: config.username,
     readyTimeout: (config.timeout ?? 10) * 1000
   }
@@ -126,10 +163,23 @@ class SSHManager {
   ): Promise<string> {
     const id = randomUUID()
     const connectConfig = await createSSHConnectConfig(config)
+    connectConfig.hostVerifier = await sshHostTrust.prepare(connectConfig)
     const client = new Client()
 
     return new Promise((resolve, reject) => {
+      let settled = false
+      const fail = (error: Error) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        client.destroy()
+        reject(error)
+      }
+      // ssh2's readyTimeout ends at authentication, before the shell request.
+      const timeout = setTimeout(() => fail(new Error('SSH 连接或终端初始化超时，请检查服务器后重试。')),
+        connectConfig.readyTimeout || 10000)
       client.on('ready', () => {
+        if (settled) return
         // 创建 shell 会话，设置终端类型和尺寸
         client.shell(
           {
@@ -138,14 +188,16 @@ class SSHManager {
             rows: 30 // 默认行数
           },
           (err, stream) => {
+            if (settled) { stream?.close(); return }
             if (err) {
-              client.end()
-              reject(err)
+              fail(err)
               return
             }
 
             const connection: SSHConnection = {
               ...config,
+              host: connectConfig.host || config.host,
+              port: connectConfig.port || 22,
               id,
               client,
               shell: stream,
@@ -222,7 +274,10 @@ class SSHManager {
             windowEvents.sendToRenderer('ssh:connection-status-changed', {
               id,
               status: 'connected',
-              config
+              config: {
+                name: connection.name, host: connection.host, port: connection.port,
+                username: connection.username, authType: connection.authType
+              }
             })
 
             // 发布事件总线事件
@@ -234,6 +289,8 @@ class SSHManager {
               authType: config.authType
             })
 
+            settled = true
+            clearTimeout(timeout)
             resolve(id)
           }
         )
@@ -241,10 +298,11 @@ class SSHManager {
 
       client.on('error', error => {
         console.error('SSH connection error:', error)
-        reject(error)
+        fail(error)
       })
 
       client.on('close', () => {
+        fail(new Error('SSH 连接在终端准备完成前已关闭。'))
         const connection = this.connections.get(id)
         if (connection) {
           connection.isConnected = false
@@ -263,7 +321,8 @@ class SSHManager {
         })
       })
 
-      client.connect(connectConfig)
+      try { client.connect(connectConfig) }
+      catch (error) { fail(error instanceof Error ? error : new Error('SSH 连接配置无效。')) }
     })
   }
 
@@ -1095,30 +1154,33 @@ class SSHManager {
     config: Omit<SSHConnection, 'id' | 'client' | 'isConnected' | 'lastUsed'>
   ): Promise<{ success: boolean; message: string }> {
     const connectConfig = await createSSHConnectConfig(config)
+    connectConfig.hostVerifier = await sshHostTrust.prepare(connectConfig)
     const client = new Client()
 
     return new Promise(resolve => {
+      let settled = false
+      const finish = (result: { success: boolean; message: string }) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        client.destroy()
+        resolve(result)
+      }
       const timeout = setTimeout(() => {
-        client.end()
-        resolve({
+        finish({
           success: false,
-          message: '连接超时（10秒）'
+          message: '连接超时，请检查网络和防火墙设置'
         })
-      }, 10000) // 10秒超时
+      }, connectConfig.readyTimeout || 10000)
 
       client.on('ready', () => {
-        clearTimeout(timeout)
-        client.end()
-        resolve({
+        finish({
           success: true,
           message: '连接成功'
         })
       })
 
       client.on('error', (err: any) => {
-        clearTimeout(timeout)
-        client.end()
-
         let message = '连接失败'
         if (err.code === 'ENOTFOUND') {
           message = '主机地址无法解析'
@@ -1132,18 +1194,18 @@ class SSHManager {
           message = err.message
         }
 
-        resolve({
+        finish({
           success: false,
           message
         })
       })
 
+      client.on('close', () => finish({ success: false, message: 'SSH 连接在身份验证完成前已关闭。' }))
+
       try {
         client.connect(connectConfig)
       } catch (error) {
-        clearTimeout(timeout)
-        client.end()
-        resolve({ success: false, message: error instanceof Error ? error.message : '身份验证配置无效' })
+        finish({ success: false, message: error instanceof Error ? error.message : '身份验证配置无效' })
       }
     })
   }
@@ -1215,8 +1277,7 @@ class SSHManager {
   cancelTransfer(requestId: string): boolean {
     const transfer = this.pendingTransfers.get(requestId)
     if (!transfer) return false
-    transfer.cancel()
-    return true
+    return transfer.cancel()
   }
 
   private async transferFile(
@@ -1232,11 +1293,13 @@ class SSHManager {
     }
     if (this.pendingTransfers.has(requestId)) throw new Error('Transfer request ID is already active')
 
-    // Each transfer owns its SFTP channel, so cancelling it cannot interrupt another file.
+    // Each transfer owns its channel and immutable source/destination paths.
     let sftp: SFTPWrapper | undefined
     let settled = false
+    let transferring = false
+    let committing = false
     let lastReportedProgress = -1
-    let totalSize = 0
+    const controller = new AbortController()
     return new Promise<void>((resolve, reject) => {
       const finish = (error?: Error | null) => {
         if (settled) return
@@ -1249,15 +1312,19 @@ class SSHManager {
       this.pendingTransfers.set(requestId, {
         connectionId: id,
         cancel: () => {
-          const error = new Error('File transfer aborted')
+          if (committing || settled) return false
+          const error = new Error('TRANSFER_CANCELLED: 文件传输已取消，原目标文件保持不变。')
           error.name = 'AbortError'
-          finish(error)
+          controller.abort(error)
+          // The copy owns cleanup once started. Before readiness reject now;
+          // the eventual SFTP callback still closes its dedicated channel.
+          if (!transferring) finish(error)
+          return true
         }
       })
       const reportProgress = (transferred: number, total: number) => {
         if (settled) return
-        totalSize = total
-        const progress = total === 0 ? 100 : Math.round(transferred / total * 1000) / 10
+        const progress = total === 0 ? (committing ? 100 : 0) : Math.min(committing ? 100 : 99.9, Math.round(transferred / total * 1000) / 10)
         if (progress === lastReportedProgress) return
         lastReportedProgress = progress
         windowEvents.sendToRenderer(`ssh:${direction}-progress`, {
@@ -1265,25 +1332,44 @@ class SSHManager {
         })
       }
       const start = async () => {
-        if (direction === 'download') await fs.mkdir(path.dirname(localPath), { recursive: true })
         if (settled) return
         connection.client!.sftp((error, channel) => {
           if (error) return finish(error)
           sftp = channel
           if (settled) { channel.end(); return }
-          channel.on('error', finish)
-          channel.once('close', () => {
-            if (!settled) finish(new Error('SFTP channel closed before transfer completed'))
-          })
-          const complete = (error?: Error | null) => {
-            if (!error && !settled) reportProgress(totalSize, totalSize)
-            finish(error)
+          const interrupted = (failure: Error) => {
+            if (settled) return
+            if (!committing) controller.abort(failure)
+            // While committing the operation result may be unknown. The
+            // service reports that state instead of pretending it cancelled.
           }
-          const options = { step: (transferred: number, _chunk: number, total: number) => reportProgress(transferred, total) }
-          try {
-            if (direction === 'upload') channel.fastPut(localPath, remotePath, options, complete)
-            else channel.fastGet(remotePath, localPath, options, complete)
-          } catch (error: any) { finish(error) }
+          channel.on('error', interrupted)
+          channel.once('close', () => {
+            interrupted(new Error('SFTP 通道在文件传输完成前关闭，请检查连接后重试。'))
+          })
+          transferring = true
+          void atomicFileTransfer({
+            sftp: channel, direction, localPath, remotePath, signal: controller.signal,
+            onProgress: reportProgress,
+            beginCommit: () => {
+              controller.signal.throwIfAborted()
+              committing = true
+            },
+            approveOverwrite: async target => {
+              controller.signal.throwIfAborted()
+              const response = await dialog.showMessageBox({
+                type: 'warning', title: '确认覆盖文件',
+                message: '目标文件已存在，是否覆盖？',
+                detail: `${direction === 'upload' ? `服务器：${connection.name} (${connection.username}@${connection.host}:${connection.port})\n远端路径` : '本地文件'}：${target}\n完整传输成功后才会替换原文件。`,
+                buttons: ['取消', '覆盖文件'], defaultId: 0, cancelId: 0, noLink: true,
+                signal: controller.signal
+              })
+              controller.signal.throwIfAborted()
+              return response.response === 1
+            }
+          }).then(() => finish(), error => finish(
+            controller.signal.aborted && error?.name === 'AbortError' ? controller.signal.reason : error
+          ))
         })
       }
       void start().catch(finish)
@@ -1390,7 +1476,14 @@ class SSHManager {
     return new Promise((resolve, reject) => {
       sftp.mkdir(remotePath, err => {
         if (err) {
-          reject(err)
+          // SFTP v3 commonly uses generic FAILURE (4) for an existing path.
+          // Explicit permission/connection errors must not become success.
+          const code = (err as Error & { code?: string | number }).code
+          if (![4, 11, 'EEXIST'].includes(code ?? '')) { reject(err); return }
+          sftp.stat(remotePath, (statError, attributes) => {
+            if (!statError && attributes.isDirectory()) resolve()
+            else reject(err)
+          })
           return
         }
         resolve()

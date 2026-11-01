@@ -1,21 +1,24 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useUpdateClient } from '@/services/update-client'
+import UpdateDownloadProgress from './UpdateDownloadProgress.vue'
 
 withDefaults(defineProps<{ centered?: boolean }>(), { centered: false })
 const projectUrl = 'https://github.com/aides-hik/AI-ssh'
 const updater = useUpdateClient()
 const checking = ref(false)
 const installing = ref(false)
+const cancelling = ref(false)
 const actionError = ref('')
 const linkError = ref('')
 const hasUpdater = Boolean(window.electronAPI?.updater)
 let checkGeneration = 0
 const busyStatuses = new Set(['checking', 'update-available', 'probing-sources', 'downloading', 'installing'])
-const busy = computed(() => checking.value || installing.value || busyStatuses.has(updater.state.value.status))
+const busy = computed(() => checking.value || installing.value || cancelling.value || busyStatuses.has(updater.state.value.status))
 const cancellable = computed(() => checking.value || ['checking', 'update-available', 'probing-sources', 'downloading'].includes(updater.state.value.status))
 const statusText = computed(() => {
   if (actionError.value) return actionError.value
+  if (cancelling.value) return '正在取消更新…'
   if (!hasUpdater) return '请在桌面应用中检查更新。'
   const state = updater.state.value
   if (!state.enabled) return state.statusText || '当前安装未配置更新源。'
@@ -26,7 +29,7 @@ const statusText = computed(() => {
     'up-to-date': '当前已是最新版本。',
     'update-available': '已发现新版本，准备下载。',
     'probing-sources': '正在选择下载源…',
-    downloading: `正在后台下载更新 ${Math.round(state.progress || 0)}%`,
+    downloading: '正在下载更新…',
     downloaded: '更新已下载，可以安装。',
     installing: '正在启动安装程序…',
     error: state.error || '检查更新失败，请重试。'
@@ -34,11 +37,14 @@ const statusText = computed(() => {
   return state.statusText || labels[state.status] || '暂时无法读取更新状态。'
 })
 const isError = computed(() => Boolean(actionError.value) || updater.state.value.status === 'error')
+watch([() => updater.state.value.status, () => updater.state.value.availableVersion], () => {
+  actionError.value = ''
+}, { flush: 'sync' })
 const buttonLabel = computed(() => {
-  if (checking.value || updater.state.value.status === 'checking') return '正在检查…'
+  if (installing.value || updater.state.value.status === 'installing') return '正在安装…'
   if (updater.state.value.status === 'downloading') return '正在下载…'
   if (updater.state.value.status === 'probing-sources') return '正在选择下载源…'
-  if (installing.value || updater.state.value.status === 'installing') return '正在安装…'
+  if (checking.value || updater.state.value.status === 'checking') return '正在检查…'
   return '检查更新'
 })
 async function checkUpdates() {
@@ -55,13 +61,17 @@ async function checkUpdates() {
   }
 }
 async function cancelUpdateCheck() {
-  ++checkGeneration
+  if (cancelling.value || !cancellable.value) return
+  const generation = ++checkGeneration
   checking.value = false
+  cancelling.value = true
   actionError.value = ''
   try {
     await updater.cancelBackgroundCheck()
   } catch (error) {
-    actionError.value = `无法取消更新：${error instanceof Error ? error.message : String(error)}`
+    if (generation === checkGeneration) actionError.value = `无法取消更新：${error instanceof Error ? error.message : String(error)}`
+  } finally {
+    if (generation === checkGeneration) cancelling.value = false
   }
 }
 async function installUpdate() {
@@ -99,16 +109,17 @@ async function openProject(event: MouseEvent) {
       </a>
       <div class="about-update-controls">
         <button type="button" class="about-check-update" :disabled="!hasUpdater || !updater.state.value.enabled || busy" :aria-busy="busy" @click="checkUpdates">
-          <i class="bi bi-arrow-repeat" :class="{ 'is-checking': checking || updater.state.value.status === 'checking' }" aria-hidden="true"></i>
+          <i class="bi bi-arrow-repeat" :class="{ 'is-checking': updater.state.value.status === 'checking' }" aria-hidden="true"></i>
           {{ buttonLabel }}
         </button>
-        <button v-if="cancellable" type="button" class="about-check-update" @click="cancelUpdateCheck">取消更新</button>
+        <button v-if="cancellable" type="button" class="about-check-update" :disabled="cancelling" @click="cancelUpdateCheck">{{ cancelling ? '正在取消…' : '取消更新' }}</button>
         <button v-if="updater.state.value.status === 'downloaded'" type="button" class="about-install-update" :disabled="busy" @click="installUpdate">
           <i class="bi bi-download" aria-hidden="true"></i>安装更新
         </button>
       </div>
     </div>
     <p class="about-update-feedback" :class="{ 'is-error': isError }" role="status" aria-live="polite" aria-atomic="true">{{ statusText }}</p>
+    <UpdateDownloadProgress :state="updater.state.value" />
     <p v-if="linkError" class="about-link-error" role="alert">{{ linkError }}</p>
   </div>
 </template>

@@ -2,6 +2,8 @@
 
 > AI SSH Assistant 项目的 CSDN 技术博客存档
 
+本目录保留历史文章与选题，包含旧名称、旧版本和未完成的占位内容。当前产品名称为棱镜（Prism），新的介绍文案与发布安排见[推广与试用资料](../promotion/README.md)。复用历史文章前，请按当前 README 核对功能、截图及操作步骤；历史计划中的目标和状态不作为当前推广数据。
+
 ## 📂 目录结构
 
 ```
@@ -17,7 +19,7 @@ csdn-blog/
 ### 版本发布（releases/）
 
 #### v1.4.0 - 快捷命令管理系统
-**文件**: [v1.4.0-shortcut-commands.md](./releases/v1.4.0-shortcut-commands.md)  
+**文件**: `releases/v1.4.0-shortcut-commands.md`（历史清单中的条目，当前仓库未收录正文）  
 **发布日期**: 2025-11-05  
 **标签**: `SSH`, `终端`, `Vue3`, `Electron`, `TypeScript`, `快捷命令`
 
@@ -151,7 +153,7 @@ docs/csdn-blog/tutorials/{教程主题}.md
 
 ### 项目文档
 - [项目主页](../../README.md)
-- [版本发布](../releases/README.md)
+- [版本发布记录](../../CHANGELOG.md)
 - [开发指南](../README.md)
 
 ### 外部链接

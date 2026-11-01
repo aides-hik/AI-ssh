@@ -24,9 +24,9 @@ if (!process.versions.electron) {
 }
 
 async function run() {
-  const { app, BrowserWindow, globalShortcut, session: electronSession } = require('electron')
-  const { Server, utils: { sftp: { OPEN_MODE, STATUS_CODE } } } = require('ssh2')
-  const { generateKeyPairSync, randomBytes } = require('node:crypto')
+  const { app, BrowserWindow, dialog, globalShortcut, session: electronSession } = require('electron')
+  const { Server, utils: { parseKey, sftp: { OPEN_MODE, STATUS_CODE } } } = require('ssh2')
+  const { createHash, generateKeyPairSync, randomBytes } = require('node:crypto')
   const root = path.resolve(__dirname, '../../..')
   const outputRoot = path.join(root, 'tmp/windows-validation')
   const resultPath = path.join(outputRoot, 'ssh-smoke-latest.json')
@@ -45,6 +45,8 @@ async function run() {
     privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
     publicKeyEncoding: { type: 'pkcs1', format: 'pem' }
   }).privateKey
+  const fixtureFingerprint = `SHA256:${createHash('sha256').update(parseKey(key).getPublicSSH()).digest('base64').replace(/=+$/, '')}`
+  let hostIdentityPrompts = 0
   const password = randomBytes(24).toString('hex')
   const clients = new Set()
   const protocol = { authenticated: 0, pty: 0, resize: 0, exec: 0, cancelled: 0, sftp: {} }
@@ -255,7 +257,7 @@ async function run() {
       server.close(() => { clearTimeout(closeTimeout); resolve(true) })
     })
     success = success && fixturePortClosed
-    const result = { success, ...details, protocol, timeline, readyToShowDelayMs, fixturePort: port, fixturePortClosed, remoteHosts: [...remoteHosts], versions: { electron: process.versions.electron, node: process.versions.node }, runRoot, resultPath }
+    const result = { success, ...details, protocol, timeline, hostIdentityPrompts, readyToShowDelayMs, fixturePort: port, fixturePortClosed, remoteHosts: [...remoteHosts], versions: { electron: process.versions.electron, node: process.versions.node }, runRoot, resultPath }
     fs.writeFileSync(resultPath, JSON.stringify(result, null, 2))
     console.log(`WINDOWS_SSH_SMOKE_${success ? 'PASS' : 'FAIL'} ${JSON.stringify(result)}`)
     app.exit(success ? 0 : 1)
@@ -265,6 +267,17 @@ async function run() {
   process.env.NODE_ENV = 'production'
   app.setPath('userData', profile)
   app.setPath('sessionData', profile)
+  const originalMessageBox = dialog.showMessageBox.bind(dialog)
+  dialog.showMessageBox = async (...args) => {
+    const options = args.at(-1)
+    if (options?.title !== '确认 SSH 服务器指纹') return originalMessageBox(...args)
+    if (!options.detail.includes(fixtureFingerprint) || !options.detail.includes(`127.0.0.1:${port}`) ||
+        options.defaultId !== 0 || options.cancelId !== 0) {
+      throw new Error('SSH host identity dialog did not show the exact fixture fingerprint or default to cancel')
+    }
+    hostIdentityPrompts++
+    return { response: 1, checkboxChecked: false }
+  }
   BrowserWindow.prototype.show = function () {}
   BrowserWindow.prototype.showInactive = function () {}
   BrowserWindow.prototype.focus = function () {}
@@ -294,6 +307,11 @@ async function run() {
         const result = await contents.executeJavaScript(`(${probe.toString()})(${JSON.stringify({ port, password, uploadPath, downloadPath, payload })})`)
         if (result.failure) throw new Error(result.failure)
         if (fs.readFileSync(downloadPath, 'utf8') !== payload) throw new Error('Downloaded bytes differ from upload fixture')
+        const trustedHosts = JSON.parse(fs.readFileSync(path.join(profile, 'ssh-known-hosts.json'), 'utf8'))
+        if (hostIdentityPrompts !== 1 || trustedHosts.hosts.length !== 1 ||
+            trustedHosts.hosts[0].fingerprint !== fixtureFingerprint || trustedHosts.hosts[0].port !== port) {
+          throw new Error('SSH host trust was not confirmed once and persisted across test/connect')
+        }
         if (!protocol.sftp.READDIR || !protocol.sftp.WRITE || !protocol.sftp.READ || !protocol.sftp.RENAME || !protocol.resize || !protocol.cancelled) throw new Error('Expected SSH/SFTP protocol operations were not observed')
         if (remoteHosts.size) throw new Error('Renderer attempted an external request')
         await finish(true, result)
@@ -319,11 +337,19 @@ async function probe(input) {
   }
   try {
     await until(() => document.querySelector('.welcome-page'))
+    const statuses = []
+    let credentialExposed = false
+    cleanup.push(api.onConnectionStatusChange(status => {
+      if (status.config && ['password', 'privateKey', 'passphrase'].some(field => field in status.config)) credentialExposed = true
+      statuses.push({ id: status.id, status: status.status })
+    }))
     const config = { name: 'Local protocol fixture', host: '127.0.0.1', port: input.port, username: 'smoke', password: input.password, keepAlive: false, timeout: 5 }
     check((await api.ssh.testConnection(config)).success, 'Password handshake failed')
     const connected = await api.ssh.connect(config)
     check(connected.status === 'connected', connected.message)
     id = connected.id
+    await until(() => statuses.some(status => status.id === id && status.status === 'connected'))
+    check(!credentialExposed, 'SSH status events exposed authentication credentials')
     stage = 'pty-output'
     cleanup.push(api.on(`ssh:output:${id}`, text => { terminal += text }))
     terminal += await api.ssh.getInitialOutput(id)
@@ -363,6 +389,7 @@ async function probe(input) {
     const directory = '/home/smoke/文件目录'
     const remotePath = `${directory}/测试文件.txt`
     check((await api.ssh.createDirectory(id, directory)).success, 'SFTP mkdir failed')
+    check((await api.ssh.createDirectory(id, directory)).success, 'Existing SFTP directory was not verified idempotently')
     check((await api.ssh.uploadFile(id, input.uploadPath, remotePath)).success, 'SFTP upload failed')
     const listed = await api.ssh.listFiles(id, directory)
     check(listed.success && listed.files.some(file => file.name === '测试文件.txt'), 'SFTP directory listing failed')
@@ -381,7 +408,8 @@ async function probe(input) {
     await api.ssh.disconnect(id)
     check(!(await api.ssh.getConnections()).some(connection => connection.id === id), 'SSH disconnect did not clear session')
     id = undefined
-    return { passwordAuthentication: true, ptyChinese: true, resize: true, execChinese: true, stderr: true,
+    return { passwordAuthentication: true, credentialFreeStatusEvents: true, idempotentDirectoryCreation: true,
+      ptyChinese: true, resize: true, execChinese: true, stderr: true,
       liveOutputOrder: true, rawExecOutput: true, stderrWarningSuccess: true,
       cancellation: true, sftpDirectoryListing: true, uploadDownloadBytes: new TextEncoder().encode(input.payload).byteLength, atomicRename: true, remoteDelete: true, disconnected: true }
   } catch (error) {

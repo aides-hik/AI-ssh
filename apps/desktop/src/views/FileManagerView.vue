@@ -17,7 +17,7 @@
     <!-- 工具栏 -->
     <div class="toolbar">
       <div class="toolbar-left">
-        <button class="toolbar-btn" @click="goBack" :disabled="currentPath === '/'">
+        <button class="toolbar-btn" @click="goBack" :disabled="displayedPath === '/'">
           <i class="bi bi-arrow-left"></i>
           返回
         </button>
@@ -65,7 +65,7 @@
     <div class="path-bar">
       <i class="bi bi-folder"></i>
       <input
-        v-model="currentPath"
+        v-model="pathInput"
         class="path-input"
         @keydown.enter="navigateToPath"
         placeholder="输入路径..."
@@ -185,7 +185,7 @@
       <div class="status-right">
         <!-- 上传进度显示 -->
         <div
-          v-if="hasActiveUploads"
+          v-if="uploadTasks.length > 0"
           class="upload-progress-indicator"
           @click="showUploadManager = true"
           data-prism-tooltip="点击查看上传详情"
@@ -203,7 +203,7 @@
                 >{{ currentUploadingTask.progress }}%</span
               >
               <span v-else-if="hasActiveUploads" class="upload-status">上传中...</span>
-              <span v-else class="upload-status">等待中</span>
+              <span v-else class="upload-status">已结束</span>
             </div>
             <div class="progress-bar">
               <div
@@ -216,7 +216,7 @@
 
         <!-- 下载进度显示 -->
         <div
-          v-if="hasActiveDownloads"
+          v-if="downloadTasks.length > 0"
           class="download-progress-indicator"
           @click="showDownloadManager = true"
           data-prism-tooltip="点击查看下载详情"
@@ -232,7 +232,7 @@
               <span v-if="currentDownloadingTask" class="current-file">{{
                 currentDownloadingTask.name
               }}</span>
-              <span v-else class="download-status">{{ currentTaskProgress }}%</span>
+              <span v-else class="download-status">{{ hasActiveDownloads ? '等待中' : '已结束' }}</span>
             </div>
             <div class="progress-bar">
               <div class="progress-fill" :style="{ width: currentTaskProgress + '%' }"></div>
@@ -317,6 +317,7 @@
               </div>
               <div class="task-info">
                 <div class="task-name">{{ task.name }}</div>
+                <div class="task-path">{{ task.remotePath }}</div>
                 <div class="task-details">
                   <span class="task-size">{{ formatFileSize(task.size) }}</span>
                   <span v-if="task.status === 'downloading'" class="task-progress">
@@ -400,6 +401,7 @@
               </div>
               <div class="task-info">
                 <div class="task-name">{{ task.name }}</div>
+                <div class="task-path">{{ task.remotePath }}</div>
                 <div class="task-details">
                   <span class="task-size">{{ formatFileSize(task.size) }}</span>
                   <span v-if="task.status === 'uploading'" class="task-progress">
@@ -475,9 +477,10 @@ interface FileItem {
 
 interface DownloadTask {
   id: string
+  readonly connectionId: string
   name: string
-  remotePath: string
-  localPath: string
+  readonly remotePath: string
+  readonly localPath: string
   status: 'pending' | 'downloading' | 'completed' | 'error' | 'cancelled'
   progress: number
   size: number
@@ -487,9 +490,10 @@ interface DownloadTask {
 
 interface UploadTask {
   id: string
+  readonly connectionId: string
   name: string
-  localPath: string
-  remotePath: string
+  readonly localPath: string
+  readonly remotePath: string
   status: 'pending' | 'uploading' | 'completed' | 'error' | 'cancelled'
   progress: number
   size: number
@@ -505,6 +509,7 @@ interface FileListCacheEntry {
 const DRAG_DOWNLOAD_MIME = 'application/x-ai-ssh-remote-files'
 
 interface DragDownloadPayloadItem {
+  connectionId: string
   name: string
   type: 'file' | 'directory'
   remotePath: string
@@ -520,6 +525,11 @@ interface DroppedFileInfo {
 interface DroppedFilesPayload {
   files: DroppedFileInfo[]
   directories: Set<string>
+}
+
+interface DirectoryTarget {
+  readonly connectionId: string
+  readonly directory: string
 }
 
 type FileSystemEntry = FileSystemFileEntry | FileSystemDirectoryEntry
@@ -551,6 +561,15 @@ interface FileSystemDirectoryReader {
 // 路由
 const route = useRoute()
 const router = useRouter()
+// Each cached view belongs to one SSH session. A different tab must never
+// replace its identity while its queued operations are still running.
+const ownerConnectionId = route.query.connectionId as string | undefined
+const ownerNodeId = route.query.nodeId as string | undefined
+const routeSnapshot = ref({ ...route.query })
+const isOwnRoute = () => route.path === '/file-manager' &&
+  (ownerConnectionId
+    ? route.query.connectionId === ownerConnectionId
+    : !route.query.connectionId && route.query.nodeId === ownerNodeId)
 
 // SSH 树数据
 const sshTree = ref<any[]>([])
@@ -566,23 +585,23 @@ const loadSSHTree = async () => {
 
 // 从 URL 参数获取连接信息
 const actualConnectionId = computed(() => {
-  return route.query.connectionId as string
+  return routeSnapshot.value.connectionId as string
 })
 
 const actualConnectionName = computed(() => {
-  return decodeURIComponent((route.query.name as string) || '文件管理器')
+  return decodeURIComponent((routeSnapshot.value.name as string) || '文件管理器')
 })
 
 const actualHost = computed(() => {
-  return decodeURIComponent((route.query.host as string) || '')
+  return decodeURIComponent((routeSnapshot.value.host as string) || '')
 })
 
 const actualPort = computed(() => {
-  return (route.query.port as string) || '22'
+  return (routeSnapshot.value.port as string) || '22'
 })
 
 const nodeId = computed(() => {
-  return route.query.nodeId as string
+  return routeSnapshot.value.nodeId as string
 })
 
 // 从 SSH 树获取节点配置
@@ -606,7 +625,9 @@ const getNodeConfig = () => {
 
 // 状态
 const currentPath = ref('/')
+const pathInput = ref('/')
 const displayedPath = ref('/')
+const displayedConnectionId = ref('')
 const files = ref<FileItem[]>([])
 const fileListCache = new Map<string, FileListCacheEntry>()
 const selectedFiles = ref<FileItem[]>([])
@@ -623,15 +644,27 @@ const showDownloadManager = ref(false)
 // 上传管理
 const uploadTasks = ref<UploadTask[]>([])
 const showUploadManager = ref(false)
+const nativeTransferRequests = new Set<string>()
 const createdDirectories = new Set<string>() // 缓存已创建的目录，避免重复创建
 const directoryCreationPromises = new Map<string, Promise<void>>() // 目录创建Promise队列，确保串行
 let autoCleanupTimer: NodeJS.Timeout | null = null // 自动清理定时器
 let isDownloadCancelled = false // 全局取消标志，用于停止文件夹扫描和新任务创建
+let downloadGeneration = 0 // Cancelling a batch permanently invalidates its pending scans and dialogs.
+let uploadGeneration = 0
 
 // 新建文件夹对话框
 const showCreateFolderDialog = ref(false)
 const newFolderName = ref('')
 const folderNameInput = ref<HTMLInputElement | null>(null)
+const createFolderTarget = ref<DirectoryTarget | null>(null)
+
+const captureDirectoryTarget = (): DirectoryTarget | null => {
+  if (!displayedConnectionId.value) return null
+  return Object.freeze({
+    connectionId: displayedConnectionId.value,
+    directory: displayedPath.value
+  })
+}
 
 // 计算属性
 const isAllSelected = computed(() => {
@@ -711,15 +744,19 @@ const applyCachedFilesIfAvailable = (connectionId: string, remotePath: string) =
 
   files.value = cached.files
   displayedPath.value = remotePath
+  displayedConnectionId.value = connectionId
   return true
 }
 
-const invalidateFileListCache = (remotePath: string) => {
-  if (!currentConnectionId.value) {
-    return
-  }
+const invalidateFileListCache = (connectionId: string, remotePath: string) => {
+  fileListCache.delete(getFileListCacheKey(connectionId, remotePath))
+}
 
-  fileListCache.delete(getFileListCacheKey(currentConnectionId.value, remotePath))
+const refreshMutatedDirectory = async (target: DirectoryTarget) => {
+  invalidateFileListCache(target.connectionId, target.directory)
+  if (currentConnectionId.value === target.connectionId && currentPath.value === target.directory) {
+    await loadFiles()
+  }
 }
 
 // 建立连接
@@ -778,6 +815,7 @@ const loadFiles = async () => {
     if (result.success) {
       files.value = result.files
       displayedPath.value = requestPath
+      displayedConnectionId.value = connectionId
       fileListCache.set(cacheKey, { files: result.files, cachedAt: Date.now() })
     } else {
       console.warn(`[FileManager] [${requestId}] 列表加载失败`, {
@@ -788,6 +826,7 @@ const loadFiles = async () => {
       $alert(`加载文件列表失败: ${result.error}`)
     }
   } catch (error: any) {
+    if (latestFileListRequestId !== requestSequence || currentConnectionId.value !== connectionId) return
     const duration = Math.round(performance.now() - startTime)
     console.warn(`[FileManager] [${requestId}] 列表加载异常`, {
       path: currentPath.value,
@@ -799,10 +838,12 @@ const loadFiles = async () => {
 }
 
 const syncCurrentPathToRoute = () => {
+  if (!isOwnRoute()) return
+  routeSnapshot.value = { ...routeSnapshot.value, path: encodeURIComponent(currentPath.value) }
   router.replace({
-    path: route.path,
+    path: '/file-manager',
     query: {
-      ...route.query,
+      ...routeSnapshot.value,
       path: encodeURIComponent(currentPath.value)
     }
   })
@@ -834,6 +875,7 @@ const navigateToDirectory = (dirName: string) => {
   } else {
     currentPath.value = `${basePath}/${dirName}`
   }
+  pathInput.value = currentPath.value
 
   syncCurrentPathToRoute()
   selectedFiles.value = []
@@ -841,6 +883,8 @@ const navigateToDirectory = (dirName: string) => {
 }
 
 const navigateToPath = () => {
+  currentPath.value = normalizeRemotePath(pathInput.value.trim())
+  pathInput.value = currentPath.value
   syncCurrentPathToRoute()
   selectedFiles.value = []
   loadFiles()
@@ -852,6 +896,7 @@ const goBack = () => {
   const parts = displayedPath.value.split('/').filter(p => p)
   parts.pop()
   currentPath.value = parts.length > 0 ? '/' + parts.join('/') : '/'
+  pathInput.value = currentPath.value
 
   syncCurrentPathToRoute()
   selectedFiles.value = []
@@ -861,6 +906,7 @@ const goBack = () => {
 const goHome = () => {
 
   currentPath.value = '/'
+  pathInput.value = currentPath.value
 
   syncCurrentPathToRoute()
   selectedFiles.value = []
@@ -869,7 +915,10 @@ const goHome = () => {
 
 const refreshFiles = () => {
   selectedFiles.value = []
-  invalidateFileListCache(currentPath.value)
+  currentPath.value = displayedPath.value
+  pathInput.value = currentPath.value
+  syncCurrentPathToRoute()
+  invalidateFileListCache(currentConnectionId.value, currentPath.value)
   loadFiles()
 }
 
@@ -903,7 +952,7 @@ const clearSelection = () => {
 
 const normalizeRemotePath = (value: string) => {
   if (!value) return '/'
-  let normalized = value.replace(/\\/g, '/').replace(/\/+/g, '/')
+  let normalized = value.replace(/\/+/g, '/')
   if (!normalized.startsWith('/')) {
     normalized = `/${normalized}`
   }
@@ -914,7 +963,10 @@ const normalizeRemotePath = (value: string) => {
 }
 
 const joinRemotePath = (base: string, relative: string) => {
-  const sanitizedRelative = (relative || '').replace(/\\/g, '/').replace(/^\/+/, '')
+  const sanitizedRelative = (relative || '').replace(/^\/+/, '')
+  if (sanitizedRelative.includes('\0') || sanitizedRelative.split('/').some(segment => segment === '.' || segment === '..')) {
+    throw new Error('上传相对路径无效，未访问远程目标。')
+  }
   if (!sanitizedRelative) {
     return normalizeRemotePath(base || '/')
   }
@@ -932,40 +984,71 @@ const getRemoteDirname = (remotePath: string) => {
   return normalized.substring(0, lastSlash) || '/'
 }
 
-const ensureRemoteDirectoryExists = async (remoteDir: string, cache: Set<string>) => {
-  if (!currentConnectionId.value || !window.electronAPI) return
+const getLocalDirname = (localPath: string) => {
+  const windows = /^[a-z]:[\\/]/i.test(localPath) || localPath.startsWith('\\\\')
+  const last = windows ? Math.max(localPath.lastIndexOf('/'), localPath.lastIndexOf('\\')) : localPath.lastIndexOf('/')
+  if (last < 0) return ''
+  if (last === 0 || (windows && last === 2 && /^[a-z]:/i.test(localPath))) return localPath.slice(0, last + 1)
+  return localPath.slice(0, last)
+}
+
+const getLocalBasename = (localPath: string) => {
+  const windows = /^[a-z]:[\\/]/i.test(localPath) || localPath.startsWith('\\\\')
+  const last = windows ? Math.max(localPath.lastIndexOf('/'), localPath.lastIndexOf('\\')) : localPath.lastIndexOf('/')
+  return localPath.slice(last + 1)
+}
+
+const joinLocalDownloadPath = (base: string, name: string) => {
+  const windows = /^[a-z]:[\\/]/i.test(base) || base.startsWith('\\\\')
+  if (!name || name === '.' || name === '..' || name.includes('\0') || name.includes('/') ||
+    (windows && (/[\\<>:"|?*]/.test(name) || [...name].some(character => character.charCodeAt(0) < 32) || /[. ]$/.test(name) ||
+      /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)))) {
+    throw new Error(`文件名无法安全保存到所选本地目录：${name}`)
+  }
+  return `${base.replace(/\/$/, '')}/${name}`
+}
+
+const ensureRemoteDirectoryExists = async (
+  connectionId: string,
+  remoteDir: string,
+  cache: Set<string>,
+  isCancelled: () => boolean = () => false
+) => {
+  if (!connectionId || !window.electronAPI || isCancelled()) return
   const normalized = normalizeRemotePath(remoteDir)
   if (normalized === '/' || cache.has(normalized)) return
 
-  try {
-    await window.electronAPI.ssh.createDirectory(currentConnectionId.value, normalized)
-    cache.add(normalized)
-  } catch (error: any) {
-    // 如果目录已存在会抛错，忽略即可
-    console.warn(`[远程目录] 创建失败（可能已存在）: ${normalized}`, error.message)
-    cache.add(normalized)
-  }
+  await window.electronAPI.ssh.createDirectory(connectionId, normalized)
+  cache.add(normalized)
 }
 
-const ensureParentDirectories = async (remotePath: string, cache: Set<string>) => {
+const ensureParentDirectories = async (
+  connectionId: string,
+  remotePath: string,
+  cache: Set<string>,
+  isCancelled: () => boolean = () => false
+) => {
   const parent = getRemoteDirname(remotePath)
   if (!parent || parent === '/') return
 
   const segments = parent.split('/').filter(segment => segment.length > 0)
   let current = ''
   for (const segment of segments) {
+    if (isCancelled()) return
     current += `/${segment}`
     // 已知目录存在时，其父目录也必然存在。
     if (Array.from(cache).some(existing => existing === current || existing.startsWith(`${current}/`))) {
       continue
     }
-    await ensureRemoteDirectoryExists(current, cache)
+    await ensureRemoteDirectoryExists(connectionId, current, cache, isCancelled)
   }
 }
 
 // 上传文件
 const handleUpload = async () => {
-  if (!currentConnectionId.value || !window.electronAPI) return
+  const target = captureDirectoryTarget()
+  if (!target || !window.electronAPI) return
+  const generation = uploadGeneration
 
   try {
     const filePaths = await window.electronAPI.fs.showOpenDialog({
@@ -973,7 +1056,7 @@ const handleUpload = async () => {
       properties: ['openFile', 'multiSelections']
     })
 
-    if (filePaths && filePaths.length > 0) {
+    if (filePaths && filePaths.length > 0 && generation === uploadGeneration) {
       // 获取每个文件的大小信息
       const fileStats = await Promise.all(
         filePaths.map(async localPath => {
@@ -986,15 +1069,16 @@ const handleUpload = async () => {
           }
         })
       )
+      if (generation !== uploadGeneration) return
 
       // 创建上传任务队列
       const tasks: UploadTask[] = fileStats.map(({ localPath, size }) => {
-        const fileName = localPath.split(/[/\\]/).pop() || 'file'
-        const remotePath =
-          currentPath.value === '/' ? `/${fileName}` : `${currentPath.value}/${fileName}`
+        const fileName = getLocalBasename(localPath) || 'file'
+        const remotePath = joinRemotePath(target.directory, fileName)
 
         return {
           id: `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          connectionId: target.connectionId,
           name: fileName,
           localPath,
           remotePath,
@@ -1029,7 +1113,8 @@ const uploadFilesFromDialogAsync = async (filePaths: string[], tasks: UploadTask
     try {
       // 启动真实进度跟踪（在状态更新之前设置监听器）
       const progressController = startRealProgressTracking(task.id, 'ssh:upload-progress', {
-        id: currentConnectionId.value,
+        requestId: task.id,
+        id: task.connectionId,
         localPath: localPath,
         remotePath: task.remotePath
       })
@@ -1038,8 +1123,9 @@ const uploadFilesFromDialogAsync = async (filePaths: string[], tasks: UploadTask
       updateUploadTaskStatus(task.id, { status: 'uploading', progress: 0 })
 
       try {
+        nativeTransferRequests.add(task.id)
         await window.electronAPI!.ssh.uploadFile(
-          currentConnectionId.value,
+          task.connectionId,
           localPath,
           task.remotePath,
           task.id
@@ -1052,9 +1138,15 @@ const uploadFilesFromDialogAsync = async (filePaths: string[], tasks: UploadTask
       } catch (error) {
         progressController.stop()
         throw error
+      } finally {
+        nativeTransferRequests.delete(task.id)
       }
     } catch (error: any) {
       if (isUploadTaskCancelled(task.id)) continue
+      if (isTransferCancellation(error)) {
+        updateUploadTaskStatus(task.id, { status: 'cancelled', cancelled: true })
+        continue
+      }
       console.error(`[上传文件] 失败 ${task.name}:`, error)
 
       // 提供更友好的错误消息
@@ -1076,22 +1168,28 @@ const uploadFilesFromDialogAsync = async (filePaths: string[], tasks: UploadTask
 
   // 只有在有文件成功上传时才刷新文件列表
   if (hasSuccessfulUploads) {
-    invalidateFileListCache(currentPath.value)
-    await loadFiles()
+    const changedDirectories = new Map<string, DirectoryTarget>()
+    for (const task of tasks) {
+      const directory = getRemoteDirname(task.remotePath)
+      changedDirectories.set(`${task.connectionId}:${directory}`, { connectionId: task.connectionId, directory })
+    }
+    for (const target of changedDirectories.values()) await refreshMutatedDirectory(target)
   }
 }
 
 const handleFileDragStart = (event: DragEvent, file: FileItem) => {
   if (!event.dataTransfer) return
-  if (!currentConnectionId.value || !window.electronAPI) return
+  const target = captureDirectoryTarget()
+  if (!target || !window.electronAPI) return
 
   const targets =
     selectedFiles.value.length > 0 && isFileSelected(file) ? selectedFiles.value : [file]
 
   const payload: DragDownloadPayloadItem[] = targets.map(item => ({
+    connectionId: target.connectionId,
     name: item.name,
     type: item.type,
-    remotePath: joinRemotePath(currentPath.value, item.name),
+    remotePath: `${target.directory.replace(/\/$/, '')}/${item.name}`,
     size: item.size
   }))
 
@@ -1179,23 +1277,23 @@ const handleDrop = async (event: DragEvent) => {
 }
 
 const processUploadDrop = async (dataTransfer: DataTransfer) => {
-  if (!currentConnectionId.value || !window.electronAPI) return
+  const target = captureDirectoryTarget()
+  if (!target || !window.electronAPI) return
+  const generation = uploadGeneration
 
   try {
     const payload = await collectDroppedFiles(dataTransfer)
-    if (payload.files.length === 0) {
+    if (payload.files.length === 0 || generation !== uploadGeneration) {
       return
     }
 
     // 创建上传任务队列
     const tasks: UploadTask[] = payload.files.map(file => ({
       id: `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      connectionId: target.connectionId,
       name: file.relativePath,
       localPath: file.localPath,
-      remotePath:
-        currentPath.value === '/'
-          ? `/${file.relativePath}`
-          : `${currentPath.value}/${file.relativePath}`,
+      remotePath: joinRemotePath(target.directory, file.relativePath),
       status: 'pending' as const,
       progress: 0,
       size: file.size
@@ -1204,7 +1302,7 @@ const processUploadDrop = async (dataTransfer: DataTransfer) => {
     uploadTasks.value.push(...tasks)
 
     // 异步处理上传任务，不阻塞UI
-    uploadDroppedFilesAsync(payload, tasks)
+    uploadDroppedFilesAsync(payload, tasks, target)
   } catch (error: any) {
     console.error('[拖拽上传] 收集文件失败:', error)
     $alert(`收集文件失败: ${error.message || error}`)
@@ -1348,8 +1446,8 @@ const traverseEntry = async (
 }
 
 // 异步上传文件，支持任务队列管理
-const uploadDroppedFilesAsync = async (payload: DroppedFilesPayload, tasks: UploadTask[]) => {
-  const remoteDirCache = new Set<string>([normalizeRemotePath(currentPath.value)])
+const uploadDroppedFilesAsync = async (payload: DroppedFilesPayload, tasks: UploadTask[], target: DirectoryTarget) => {
+  const remoteDirCache = new Set<string>([normalizeRemotePath(target.directory)])
   let hasSuccessfulUploads = false
 
   // 异步创建目录
@@ -1359,8 +1457,10 @@ const uploadDroppedFilesAsync = async (payload: DroppedFilesPayload, tasks: Uplo
 
   for (const dir of sortedDirectories) {
     try {
-      const remoteDir = joinRemotePath(currentPath.value, dir)
-      await ensureRemoteDirectoryExists(remoteDir, remoteDirCache)
+      if (tasks.every(task => isUploadTaskCancelled(task.id))) break
+      const remoteDir = joinRemotePath(target.directory, dir)
+      await ensureRemoteDirectoryExists(target.connectionId, remoteDir, remoteDirCache,
+        () => tasks.every(task => isUploadTaskCancelled(task.id)))
     } catch (error: any) {
       console.error(`[上传目录] 创建失败 ${dir}:`, error)
     }
@@ -1381,21 +1481,24 @@ const uploadDroppedFilesAsync = async (payload: DroppedFilesPayload, tasks: Uplo
       // 更新任务状态为上传中
       updateUploadTaskStatus(task.id, { status: 'uploading', progress: 0 })
 
-      const remotePath = joinRemotePath(currentPath.value, file.relativePath)
-      await ensureParentDirectories(remotePath, remoteDirCache)
+      const remotePath = task.remotePath
+      await ensureParentDirectories(task.connectionId, remotePath, remoteDirCache,
+        () => isUploadTaskCancelled(task.id))
       if (isUploadTaskCancelled(task.id)) continue
 
       // 启动真实进度跟踪
       const progressController = startRealProgressTracking(task.id, 'ssh:upload-progress', {
-        id: currentConnectionId.value,
+        requestId: task.id,
+        id: task.connectionId,
         localPath: file.localPath,
         remotePath: remotePath
       })
 
       try {
+        nativeTransferRequests.add(task.id)
         await window.electronAPI!.ssh.uploadFile(
-          currentConnectionId.value,
-          file.localPath,
+          task.connectionId,
+          task.localPath,
           remotePath,
           task.id
         )
@@ -1407,9 +1510,15 @@ const uploadDroppedFilesAsync = async (payload: DroppedFilesPayload, tasks: Uplo
       } catch (error) {
         progressController.stop()
         throw error
+      } finally {
+        nativeTransferRequests.delete(task.id)
       }
     } catch (error: any) {
       if (isUploadTaskCancelled(task.id)) continue
+      if (isTransferCancellation(error)) {
+        updateUploadTaskStatus(task.id, { status: 'cancelled', cancelled: true })
+        continue
+      }
       console.error(`[上传文件] 失败 ${file.relativePath}:`, error)
 
       // 提供更友好的错误消息
@@ -1434,7 +1543,7 @@ const uploadDroppedFilesAsync = async (payload: DroppedFilesPayload, tasks: Uplo
     t => tasks.some(task => task.id === t.id) && t.status === 'completed'
   ).length
   if (hasSuccessfulUploads) {
-    await loadFiles()
+    await refreshMutatedDirectory(target)
     $alert(`成功上传 ${completedCount} 个文件`)
   }
 }
@@ -1487,25 +1596,32 @@ const startRealProgressTracking = (taskId: string, eventName: string, matchCrite
 
 const handleDownloadDrop = async (rawPayload: string) => {
   if (!rawPayload || !window.electronAPI) return
+  const generation = downloadGeneration
 
   try {
     const payload: DragDownloadPayloadItem[] = JSON.parse(rawPayload)
-    if (!payload || payload.length === 0) return
+    if (!Array.isArray(payload) || payload.length === 0) return
+    if (payload.some(item => !item || typeof item.connectionId !== 'string' || !item.connectionId ||
+      typeof item.remotePath !== 'string' || !item.remotePath.startsWith('/') ||
+      typeof item.name !== 'string' || !item.name || /[/\0]/.test(item.name) ||
+      item.name === '.' || item.name === '..' || !['file', 'directory'].includes(item.type))) {
+      throw new Error('拖拽文件信息无效，请从文件列表重新拖动。')
+    }
 
     const folderPath = await window.electronAPI.fs.showOpenDialog({
       title: '选择下载目录',
       properties: ['openDirectory']
     })
 
-    if (!folderPath || folderPath.length === 0) {
+    if (!folderPath || folderPath.length === 0 || generation !== downloadGeneration) {
       return
     }
 
     isDownloadCancelled = false
 
     for (const item of payload) {
-      const localPath = `${folderPath[0]}/${item.name}`
-      await addDownloadTask(item.name, item.type, item.remotePath, localPath, item.size || 0)
+      const localPath = joinLocalDownloadPath(folderPath[0], item.name)
+      await addDownloadTask(item.connectionId, item.name, item.type, item.remotePath, localPath, item.size || 0, generation)
     }
   } catch (error: any) {
     console.error('[拖拽下载] 失败:', error)
@@ -1515,11 +1631,12 @@ const handleDownloadDrop = async (rawPayload: string) => {
 
 // 下载文件或文件夹
 const downloadFile = async (file: FileItem) => {
-  if (!currentConnectionId.value || !window.electronAPI) return
+  const target = captureDirectoryTarget()
+  if (!target || !window.electronAPI) return
+  const generation = downloadGeneration
 
   try {
-    const remotePath =
-      currentPath.value === '/' ? `/${file.name}` : `${currentPath.value}/${file.name}`
+    const remotePath = `${target.directory.replace(/\/$/, '')}/${file.name}`
 
     if (file.type === 'directory') {
       // 下载文件夹
@@ -1528,9 +1645,10 @@ const downloadFile = async (file: FileItem) => {
         properties: ['openDirectory']
       })
 
-      if (folderPath && folderPath.length > 0) {
-        const localPath = `${folderPath[0]}/${file.name}`
-        await addDownloadTask(file.name, 'directory', remotePath, localPath, file.size || 0)
+      if (folderPath && folderPath.length > 0 && generation === downloadGeneration) {
+        const localPath = joinLocalDownloadPath(folderPath[0], file.name)
+        isDownloadCancelled = false
+        await addDownloadTask(target.connectionId, file.name, 'directory', remotePath, localPath, file.size || 0, generation)
       }
     } else {
       // 下载文件
@@ -1539,8 +1657,9 @@ const downloadFile = async (file: FileItem) => {
         defaultPath: file.name
       })
 
-      if (localPath) {
-        await addDownloadTask(file.name, 'file', remotePath, localPath, file.size)
+      if (localPath && generation === downloadGeneration) {
+        isDownloadCancelled = false
+        await addDownloadTask(target.connectionId, file.name, 'file', remotePath, localPath, file.size, generation)
       }
     }
   } catch (error: any) {
@@ -1568,40 +1687,34 @@ const ensureDirectoryExists = async (dirPath: string): Promise<void> => {
 
   // 创建新的Promise并立即加入队列（在await之前）
   const creationPromise = (async () => {
-    try {
-      // 使用recursive: true，自动创建所有父目录
-      await api.fs.createDirectory(dirPath)
-      createdDirectories.add(dirPath)
-    } catch (error: any) {
-      // 任何错误都当作成功（可能是已存在）
-      console.warn(`[目录创建] 警告: ${dirPath}`, error.message)
-      createdDirectories.add(dirPath)
-    } finally {
-      // 完成后从队列中移除
-      directoryCreationPromises.delete(dirPath)
-    }
+    // 使用recursive: true，自动创建所有父目录
+    await api.fs.createDirectory(dirPath)
+    createdDirectories.add(dirPath)
   })()
 
   // 立即设置到 Map 中（在 await 之前）
   directoryCreationPromises.set(dirPath, creationPromise)
 
   // 等待创建完成
-  await creationPromise
+  try { await creationPromise }
+  finally { if (directoryCreationPromises.get(dirPath) === creationPromise) directoryCreationPromises.delete(dirPath) }
 }
 
 // 边扫描边创建下载任务（流式处理，避免卡顿）
 const collectAndAddDownloadTasks = async (
+  connectionId: string,
   remotePath: string,
   localBasePath: string,
   relativePrefix: string = '',
-  depth: number = 0
+  depth: number = 0,
+  generation: number = downloadGeneration
 ): Promise<number> => {
-  if (!currentConnectionId.value || !window.electronAPI) {
+  if (!connectionId || !window.electronAPI) {
     return 0
   }
 
   // 检查是否已被取消
-  if (isDownloadCancelled) {
+  if (isDownloadCancelled || generation !== downloadGeneration) {
     return 0
   }
 
@@ -1614,24 +1727,26 @@ const collectAndAddDownloadTasks = async (
   let fileCount = 0
 
   try {
-    const result = await window.electronAPI.ssh.listFiles(currentConnectionId.value, remotePath)
+    const result = await window.electronAPI.ssh.listFiles(connectionId, remotePath)
+    if (isDownloadCancelled || generation !== downloadGeneration) return 0
 
     if (result.success) {
       // 先处理所有文件（立即创建下载任务）
       for (const item of result.files) {
         // 每次循环都检查取消标志
-        if (isDownloadCancelled) {
+        if (isDownloadCancelled || generation !== downloadGeneration) {
           return fileCount
         }
 
         if (item.type === 'file') {
           const itemRemotePath = `${remotePath}/${item.name}`
-          const itemLocalPath = `${localBasePath}/${item.name}`
+          const itemLocalPath = joinLocalDownloadPath(localBasePath, item.name)
           const itemRelativeName = relativePrefix ? `${relativePrefix}/${item.name}` : item.name
 
           const taskId = `download-${Date.now()}-${Math.random()}`
           const task: DownloadTask = {
             id: taskId,
+            connectionId,
             name: itemRelativeName,
             remotePath: itemRemotePath,
             localPath: itemLocalPath,
@@ -1656,29 +1771,33 @@ const collectAndAddDownloadTasks = async (
       // 再递归处理所有子目录
       for (const item of result.files) {
         // 每次循环都检查取消标志
-        if (isDownloadCancelled) {
+        if (isDownloadCancelled || generation !== downloadGeneration) {
           return fileCount
         }
 
         if (item.type === 'directory') {
           const itemRemotePath = `${remotePath}/${item.name}`
-          const itemLocalPath = `${localBasePath}/${item.name}`
+          const itemLocalPath = joinLocalDownloadPath(localBasePath, item.name)
           const itemRelativeName = relativePrefix ? `${relativePrefix}/${item.name}` : item.name
 
           const subCount = await collectAndAddDownloadTasks(
+            connectionId,
             itemRemotePath,
             itemLocalPath,
             itemRelativeName,
-            depth + 1
+            depth + 1,
+            generation
           )
           fileCount += subCount
         }
       }
     } else {
-      console.error(`[收集文件] 列出失败:`, result)
+      throw new Error(result.error || `无法读取远程目录：${remotePath}`)
     }
   } catch (error) {
+    if (isDownloadCancelled || generation !== downloadGeneration) return fileCount
     console.error('[收集文件] 错误:', error)
+    throw error
   }
 
   return fileCount
@@ -1686,14 +1805,16 @@ const collectAndAddDownloadTasks = async (
 
 // 添加下载任务
 const addDownloadTask = async (
+  connectionId: string,
   name: string,
   type: 'file' | 'directory',
   remotePath: string,
   localPath: string,
-  size: number
+  size: number,
+  generation: number
 ) => {
   // 检查是否已被取消
-  if (isDownloadCancelled) {
+  if (isDownloadCancelled || generation !== downloadGeneration) {
     return
   }
 
@@ -1702,6 +1823,7 @@ const addDownloadTask = async (
     const taskId = `download-${Date.now()}-${Math.random()}`
     const task: DownloadTask = {
       id: taskId,
+      connectionId,
       name,
       remotePath,
       localPath,
@@ -1715,9 +1837,9 @@ const addDownloadTask = async (
   } else {
     // 文件夹，边扫描边下载（流式处理）
     try {
-      const fileCount = await collectAndAddDownloadTasks(remotePath, localPath)
+      const fileCount = await collectAndAddDownloadTasks(connectionId, remotePath, localPath, '', 0, generation)
 
-      if (fileCount === 0) {
+      if (fileCount === 0 && generation === downloadGeneration && !isDownloadCancelled) {
         $alert('文件夹为空或无法访问')
       }
     } catch (error: any) {
@@ -1738,8 +1860,8 @@ const updateTaskStatus = (taskId: string, updates: Partial<DownloadTask>) => {
 // 执行下载任务
 const executeDownloadTask = async (task: DownloadTask) => {
   const getTask = () => downloadTasks.value.find(t => t.id === task.id)
-  const isCancelled = () => !getTask() || getTask()!.cancelled || isDownloadCancelled
-  if (isCancelled() || !currentConnectionId.value || !window.electronAPI) return
+  const isCancelled = () => !getTask() || getTask()!.cancelled
+  if (isCancelled() || !task.connectionId || !window.electronAPI) return
 
   // 检查全局取消标志
   if (isDownloadCancelled) {
@@ -1761,7 +1883,8 @@ const executeDownloadTask = async (task: DownloadTask) => {
 
   // 启动真实进度跟踪（在状态更新之前设置监听器）
   const progressController = startRealProgressTracking(task.id, 'ssh:download-progress', {
-    id: currentConnectionId.value,
+    requestId: task.id,
+    id: task.connectionId,
     remotePath: task.remotePath,
     localPath: task.localPath
   })
@@ -1770,41 +1893,25 @@ const executeDownloadTask = async (task: DownloadTask) => {
 
   try {
     // 确保本地目录存在 - 使用 path 分隔符（支持 Windows 和 Unix）
-    const pathSeparator = task.localPath.includes('\\') ? '\\' : '/'
-    const lastSeparatorIndex = task.localPath.lastIndexOf(pathSeparator)
-
-    if (lastSeparatorIndex > 0) {
-      const localDir = task.localPath.substring(0, lastSeparatorIndex)
+    const localDir = getLocalDirname(task.localPath)
+    if (localDir) {
       // 使用带锁机制的目录创建函数
       await ensureDirectoryExists(localDir)
     }
 
-    // 下载文件（带重试机制）
-    let retryCount = 0
-    const maxRetries = 3
-
-    while (retryCount < maxRetries) {
-      if (isCancelled()) return
-      try {
-        await window.electronAPI.ssh.downloadFile(
-          currentConnectionId.value,
-          task.remotePath,
-          task.localPath,
-          task.id
-        )
-        break // 成功，退出重试循环
-      } catch (downloadError: any) {
-        if (isCancelled()) return
-        retryCount++
-        if (retryCount >= maxRetries) {
-          throw downloadError // 达到最大重试次数，抛出错误
-        }
-        console.warn(
-          `[下载任务] 下载失败，重试 ${retryCount}/${maxRetries}:`,
-          downloadError.message
-        )
-        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)) // 递增延迟
-      }
+    if (isCancelled()) return
+    // An interrupted replacement may have committed remotely. Never replay it
+    // automatically, or reopen an overwrite decision without another user action.
+    nativeTransferRequests.add(task.id)
+    try {
+      await window.electronAPI.ssh.downloadFile(
+        task.connectionId,
+        task.remotePath,
+        task.localPath,
+        task.id
+      )
+    } finally {
+      nativeTransferRequests.delete(task.id)
     }
 
     // 下载成功，停止进度跟踪并设为完成状态
@@ -1814,6 +1921,11 @@ const executeDownloadTask = async (task: DownloadTask) => {
     // 检查是否所有任务都完成了
     checkAndAutoCleanup()
   } catch (error: any) {
+    if (isTransferCancellation(error)) {
+      updateTaskStatus(task.id, { status: 'cancelled', cancelled: true })
+      checkAndAutoCleanup()
+      return
+    }
     if (!isCancelled()) console.error(`[下载任务] 失败: ${task.name}`, error)
     const currentTask = getTask()
     if (currentTask && !currentTask.cancelled) {
@@ -1846,11 +1958,8 @@ const checkAndAutoCleanup = () => {
     if (firstCompletedTask && window.electronAPI) {
       const localPath = firstCompletedTask.localPath
       // 提取目录路径（去掉文件名）
-      const pathSeparator = localPath.includes('\\') ? '\\' : '/'
-      const lastSeparatorIndex = localPath.lastIndexOf(pathSeparator)
-
-      if (lastSeparatorIndex > 0) {
-        const dirPath = localPath.substring(0, lastSeparatorIndex)
+      const dirPath = getLocalDirname(localPath)
+      if (dirPath) {
         // 异步打开目录，不阻塞后续流程
         window.electronAPI.fs.openPath(dirPath).catch((error: any) => {
           console.error('[下载管理] 打开目录失败:', error)
@@ -1866,11 +1975,13 @@ const checkAndAutoCleanup = () => {
 }
 
 // 取消下载
-const cancelDownload = (taskId: string) => {
+const cancelDownload = async (taskId: string) => {
   const task = downloadTasks.value.find(t => t.id === taskId)
-  if (task) {
+  if (!task || !['pending', 'downloading'].includes(task.status)) return
+  const cancelled = !nativeTransferRequests.has(taskId) || await requestTransferCancellation(taskId)
+  const currentTask = downloadTasks.value.find(t => t.id === taskId)
+  if (cancelled && currentTask && ['pending', 'downloading'].includes(currentTask.status)) {
     updateTaskStatus(taskId, { cancelled: true, status: 'cancelled' })
-    requestTransferCancellation(taskId)
     checkAndAutoCleanup()
   }
 }
@@ -1879,12 +1990,12 @@ const cancelDownload = (taskId: string) => {
 const cancelAllDownloads = () => {
   // 设置全局取消标志，阻止新任务创建
   isDownloadCancelled = true
+  downloadGeneration++
 
   // 取消所有现有任务
   downloadTasks.value.forEach(task => {
     if (task.status === 'downloading' || task.status === 'pending') {
-      updateTaskStatus(task.id, { cancelled: true, status: 'cancelled' })
-      requestTransferCancellation(task.id)
+      void cancelDownload(task.id)
     }
   })
   checkAndAutoCleanup()
@@ -1901,7 +2012,7 @@ const removeDownloadTask = (taskId: string) => {
 // 清除已完成的任务
 const clearCompletedTasks = () => {
   downloadTasks.value = downloadTasks.value.filter(
-    t => t.status !== 'completed' && t.status !== 'error' && t.status !== 'cancelled'
+    t => t.status !== 'completed'
   )
 
   // 如果所有任务都清除了，重置取消标志，允许下次下载
@@ -1911,20 +2022,31 @@ const clearCompletedTasks = () => {
 }
 
 // 上传任务管理函数
+const isTransferCancellation = (error: { name?: string; code?: string; message?: string }) =>
+  error?.name === 'AbortError' || error?.code === 'TRANSFER_CANCELLED' ||
+  String(error?.message || '').includes('TRANSFER_CANCELLED:')
+
 const isUploadTaskCancelled = (taskId: string) => {
   const task = uploadTasks.value.find(t => t.id === taskId)
   return !task || task.cancelled === true
 }
 
-const requestTransferCancellation = (taskId: string) => {
-  window.electronAPI?.ssh.cancelTransfer(taskId).catch(error => {
+const requestTransferCancellation = async (taskId: string): Promise<boolean> => {
+  if (!nativeTransferRequests.has(taskId)) return true
+  try {
+    return await window.electronAPI!.ssh.cancelTransfer(taskId)
+  } catch (error) {
     console.warn('[传输] 取消请求失败:', error)
-  })
+    return false
+  }
 }
 
-const cancelUploadTask = (taskId: string) => {
-  updateUploadTaskStatus(taskId, { cancelled: true, status: 'cancelled' })
-  requestTransferCancellation(taskId)
+const cancelUploadTask = async (taskId: string) => {
+  const cancelled = !nativeTransferRequests.has(taskId) || await requestTransferCancellation(taskId)
+  const task = uploadTasks.value.find(t => t.id === taskId)
+  if (cancelled && task && ['pending', 'uploading'].includes(task.status)) {
+    updateUploadTaskStatus(taskId, { cancelled: true, status: 'cancelled' })
+  }
 }
 
 const removeUploadTask = (taskId: string) => {
@@ -1936,22 +2058,25 @@ const removeUploadTask = (taskId: string) => {
 
 const clearCompletedUploadTasks = () => {
   uploadTasks.value = uploadTasks.value.filter(
-    t => t.status !== 'completed' && t.status !== 'error' && t.status !== 'cancelled'
+    t => t.status !== 'completed'
   )
 }
 
 const cancelAllUploads = () => {
+  uploadGeneration++
   uploadTasks.value.forEach(task => {
     if (task.status === 'uploading' || task.status === 'pending') {
-      updateUploadTaskStatus(task.id, { cancelled: true, status: 'cancelled' })
-      requestTransferCancellation(task.id)
+      void cancelUploadTask(task.id)
     }
   })
 }
 
 // 批量下载
 const handleBulkDownload = async () => {
-  if (selectedFiles.value.length === 0 || !window.electronAPI) return
+  const target = captureDirectoryTarget()
+  const selection = selectedFiles.value.map(file => ({ ...file }))
+  if (selection.length === 0 || !target || !window.electronAPI) return
+  const generation = downloadGeneration
 
   try {
     const folderPath = await window.electronAPI.fs.showOpenDialog({
@@ -1959,17 +2084,16 @@ const handleBulkDownload = async () => {
       properties: ['openDirectory']
     })
 
-    if (folderPath && folderPath.length > 0) {
+    if (folderPath && folderPath.length > 0 && generation === downloadGeneration) {
       // 重置取消标志，允许新的下载任务
       isDownloadCancelled = false
 
       // 为每个选中的文件/文件夹创建下载任务
-      for (const file of selectedFiles.value) {
-        const remotePath =
-          currentPath.value === '/' ? `/${file.name}` : `${currentPath.value}/${file.name}`
-        const localPath = `${folderPath[0]}/${file.name}`
+      for (const file of selection) {
+        const remotePath = `${target.directory.replace(/\/$/, '')}/${file.name}`
+        const localPath = joinLocalDownloadPath(folderPath[0], file.name)
 
-        await addDownloadTask(file.name, file.type, remotePath, localPath, file.size || 0)
+        await addDownloadTask(target.connectionId, file.name, file.type, remotePath, localPath, file.size || 0, generation)
       }
 
       selectedFiles.value = []
@@ -1982,23 +2106,21 @@ const handleBulkDownload = async () => {
 
 // 删除文件
 const deleteFile = async (file: FileItem) => {
+  const target = captureDirectoryTarget()
+  if (!target || !window.electronAPI) return
   if (!(await $confirm(`确定要删除 "${file.name}" 吗？`))) return
 
-  if (!currentConnectionId.value || !window.electronAPI) return
-
   try {
-    const remotePath =
-      currentPath.value === '/' ? `/${file.name}` : `${currentPath.value}/${file.name}`
+    const remotePath = `${target.directory.replace(/\/$/, '')}/${file.name}`
 
     await window.electronAPI.ssh.deleteFile(
-      currentConnectionId.value,
+      target.connectionId,
       remotePath,
       file.type === 'directory',
       file.identity
     )
 
-    invalidateFileListCache(currentPath.value)
-    await loadFiles()
+    await refreshMutatedDirectory(target)
   } catch (error: any) {
     $alert(`删除失败: ${error.message}`)
   }
@@ -2006,19 +2128,18 @@ const deleteFile = async (file: FileItem) => {
 
 // 批量删除
 const handleBulkDelete = async () => {
-  if (selectedFiles.value.length === 0) return
+  const target = captureDirectoryTarget()
+  const selection = selectedFiles.value.map(file => ({ ...file }))
+  if (selection.length === 0 || !target || !window.electronAPI) return
 
-  if (!(await $confirm(`确定要删除选中的 ${selectedFiles.value.length} 个项目吗？`))) return
-
-  if (!currentConnectionId.value || !window.electronAPI) return
+  if (!(await $confirm(`确定要删除选中的 ${selection.length} 个项目吗？`))) return
 
   try {
-    for (const file of selectedFiles.value) {
-      const remotePath =
-        currentPath.value === '/' ? `/${file.name}` : `${currentPath.value}/${file.name}`
+    for (const file of selection) {
+      const remotePath = `${target.directory.replace(/\/$/, '')}/${file.name}`
 
       await window.electronAPI.ssh.deleteFile(
-        currentConnectionId.value,
+        target.connectionId,
         remotePath,
         file.type === 'directory',
         file.identity
@@ -2026,8 +2147,7 @@ const handleBulkDelete = async () => {
     }
 
     selectedFiles.value = []
-    invalidateFileListCache(currentPath.value)
-    await loadFiles()
+    await refreshMutatedDirectory(target)
   } catch (error: any) {
     $alert(`批量删除失败: ${error.message}`)
   }
@@ -2035,6 +2155,8 @@ const handleBulkDelete = async () => {
 
 // 新建文件夹 - 显示对话框
 const createFolder = () => {
+  createFolderTarget.value = captureDirectoryTarget()
+  if (!createFolderTarget.value) return
   newFolderName.value = ''
   showCreateFolderDialog.value = true
   // 延迟聚焦输入框
@@ -2048,18 +2170,21 @@ const confirmCreateFolder = async () => {
   const folderName = newFolderName.value.trim()
   if (!folderName) return
 
-  if (!currentConnectionId.value || !window.electronAPI) return
+  const target = createFolderTarget.value
+  if (!target || !window.electronAPI) return
 
   try {
-    const remotePath =
-      currentPath.value === '/' ? `/${folderName}` : `${currentPath.value}/${folderName}`
+    if (folderName === '.' || folderName === '..' || folderName.includes('/') || folderName.includes('\0')) {
+      throw new Error('请输入单个文件夹名称。')
+    }
+    const remotePath = `${target.directory.replace(/\/$/, '')}/${folderName}`
 
     showCreateFolderDialog.value = false
 
-    await window.electronAPI.ssh.createDirectory(currentConnectionId.value, remotePath)
+    await window.electronAPI.ssh.createDirectory(target.connectionId, remotePath)
 
-    invalidateFileListCache(currentPath.value)
-    await loadFiles()
+    await refreshMutatedDirectory(target)
+    createFolderTarget.value = null
   } catch (error: any) {
     $alert(`创建文件夹失败: ${error.message}`)
   }
@@ -2069,6 +2194,7 @@ const confirmCreateFolder = async () => {
 const cancelCreateFolder = () => {
   showCreateFolderDialog.value = false
   newFolderName.value = ''
+  createFolderTarget.value = null
 }
 
 // 工具函数
@@ -2127,14 +2253,16 @@ const syncRouteState = () => {
     return
   }
 
-  const nextPath = route.query.path as string | undefined
+  const nextPath = routeSnapshot.value.path as string | undefined
   const decodedPath = nextPath ? decodeURIComponent(nextPath) : '/'
+  const pathChanged = currentPath.value !== decodedPath
 
   currentConnectionId.value = nextConnectionId
   connectionStatus.value = 'connected'
   currentPath.value = decodedPath
+  pathInput.value = decodedPath
 
-  if (!hasInitializedRouteState.value) {
+  if (!hasInitializedRouteState.value || pathChanged) {
     hasInitializedRouteState.value = true
     loadFiles()
   }
@@ -2142,16 +2270,10 @@ const syncRouteState = () => {
 
 // 监听路由状态变化，避免 connectionId 和 path 分开更新时串用旧路径
 watch(
-  () => [actualConnectionId.value, route.query.path as string | undefined],
-  ([newId, newPath], [oldId, oldPath]) => {
-    if (!newId) {
-      return
-    }
-
-    if (newId === oldId && newPath === oldPath) {
-      return
-    }
-
+  () => [route.path, route.query.connectionId, route.query.path, route.query.nodeId],
+  () => {
+    if (!isOwnRoute()) return
+    routeSnapshot.value = { ...route.query }
     syncRouteState()
   }
 )
@@ -2171,6 +2293,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  cancelAllDownloads()
+  cancelAllUploads()
   // 清理自动清理定时器
   if (autoCleanupTimer) {
     clearTimeout(autoCleanupTimer)
@@ -3115,6 +3239,13 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   margin-bottom: 6px;
+}
+
+.task-path {
+  margin-bottom: 6px;
+  color: var(--vscode-fg-muted);
+  font-size: var(--prism-font-11);
+  overflow-wrap: anywhere;
 }
 
 .task-details {

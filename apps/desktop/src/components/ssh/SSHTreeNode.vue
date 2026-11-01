@@ -187,6 +187,7 @@
         @delete="$emit('delete', $event)"
         @connect="$emit('connect', $event)"
         @drag-node="$emit('drag-node', $event)"
+        @drag-end="$emit('drag-end')"
         @drop-node="$emit('drop-node', $event)"
         @create-folder="$emit('create-folder', $event)"
         @create-connection="$emit('create-connection', $event)"
@@ -200,6 +201,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { parseSSHDragNode, serializeSSHDragNode, type SSHDragNode } from '@/utils/ssh-tree-drag'
 
 export interface SSHTreeNodeData {
   id: string
@@ -248,8 +250,9 @@ const emit = defineEmits<{
   update: [node: SSHTreeNodeData]
   delete: [node: SSHTreeNodeData]
   connect: [node: SSHTreeNodeData]
-  'drag-node': [node: SSHTreeNodeData]
-  'drop-node': [data: { dragNode: SSHTreeNodeData; dropNode: SSHTreeNodeData }]
+  'drag-node': [node: SSHDragNode]
+  'drag-end': []
+  'drop-node': [data: { dragNode: SSHDragNode; dropNode: SSHTreeNodeData }]
   'create-folder': [data: { parentId: string; name: string }]
   'create-connection': [data: { folderId: string; name: string }]
   'edit-connection': [connection: SSHTreeNodeData]
@@ -539,15 +542,17 @@ const handleEditBlur = () => {
 const handleDragStart = (event: DragEvent) => {
   isDragging.value = true
   if (event.dataTransfer) {
+    event.dataTransfer.clearData()
     event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('application/json', JSON.stringify(props.node))
+    event.dataTransfer.setData('application/json', serializeSSHDragNode(props.node))
   }
-  emit('drag-node', props.node)
+  emit('drag-node', { id: props.node.id, type: props.node.type })
 }
 
 // 拖拽结束
 const handleDragEnd = () => {
   isDragging.value = false
+  emit('drag-end')
 }
 
 // 拖拽经过
@@ -569,8 +574,8 @@ const handleDragLeave = () => {
 const handleDrop = (event: DragEvent) => {
   isDragOver.value = false
   if (props.node.type === 'folder' && event.dataTransfer) {
-    const dragNodeData = JSON.parse(event.dataTransfer.getData('application/json'))
-    emit('drop-node', { dragNode: dragNodeData, dropNode: props.node })
+    const dragNodeData = parseSSHDragNode(event.dataTransfer.getData('application/json'))
+    if (dragNodeData) emit('drop-node', { dragNode: dragNodeData, dropNode: props.node })
   }
 }
 </script>

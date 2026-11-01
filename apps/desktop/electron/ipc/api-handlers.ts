@@ -1,6 +1,7 @@
 import { app, ipcMain } from 'electron'
 import fetch from 'node-fetch'
 import { getApiBaseUrlByMode } from '../../src/config/api-environment'
+import { summarizeApiPayload, summarizeApiUrl, summarizeApiError } from '../services/api-log-summary'
 
 const isProductionApi = app.isPackaged || process.env.ELECTRON_FORCE_PROD_RENDERER === '1'
 const API_BASE_URL = getApiBaseUrlByMode(isProductionApi)
@@ -10,42 +11,11 @@ function previewToken(token?: string) {
     return null
   }
 
-  return token.slice(0, 16)
+  return '[present]'
 }
 
 function summarizePayload(data: unknown) {
-  if (!data || typeof data !== 'object') {
-    return data
-  }
-
-  const input = data as Record<string, unknown>
-  const summary: Record<string, unknown> = {}
-
-  for (const [key, value] of Object.entries(input)) {
-    if (key.toLowerCase().includes('token')) {
-      summary[key] = typeof value === 'string' ? previewToken(value) : '[present]'
-      continue
-    }
-
-    if (typeof value === 'string') {
-      summary[key] = value.length > 120 ? `${value.slice(0, 120)}...` : value
-      continue
-    }
-
-    if (Array.isArray(value)) {
-      summary[key] = `[array:${value.length}]`
-      continue
-    }
-
-    if (value && typeof value === 'object') {
-      summary[key] = '[object]'
-      continue
-    }
-
-    summary[key] = value
-  }
-
-  return summary
+  return summarizeApiPayload(data)
 }
 
 function logApiStart(
@@ -55,11 +25,11 @@ function logApiStart(
   extra: Record<string, unknown> = {}
 ) {
   console.log(`[API][${label}] request start`, {
-    method,
-    url,
-    apiBaseUrl: API_BASE_URL,
+    method: ['GET', 'POST', 'PUT', 'DELETE'].includes(method) ? method : '[other]',
+    url: summarizeApiUrl(url),
+    apiBaseUrl: summarizeApiUrl(API_BASE_URL),
     nodeEnv: process.env.NODE_ENV,
-    ...extra
+    metadata: summarizePayload(extra)
   })
 }
 
@@ -72,11 +42,11 @@ function logApiSuccess(
   extra: Record<string, unknown> = {}
 ) {
   console.log(`[API][${label}] request success`, {
-    method,
-    url,
+    method: ['GET', 'POST', 'PUT', 'DELETE'].includes(method) ? method : '[other]',
+    url: summarizeApiUrl(url),
     status,
     response: summarizePayload(data as Record<string, unknown>),
-    ...extra
+    metadata: summarizePayload(extra)
   })
 }
 
@@ -88,12 +58,12 @@ function logApiFailure(
   extra: Record<string, unknown> = {}
 ) {
   console.error(`[API][${label}] request failed`, {
-    method,
-    url,
-    apiBaseUrl: API_BASE_URL,
+    method: ['GET', 'POST', 'PUT', 'DELETE'].includes(method) ? method : '[other]',
+    url: summarizeApiUrl(url),
+    apiBaseUrl: summarizeApiUrl(API_BASE_URL),
     nodeEnv: process.env.NODE_ENV,
-    error: error instanceof Error ? error.message : error,
-    ...extra
+    error: summarizeApiError(error),
+    metadata: summarizePayload(extra)
   })
 }
 
@@ -110,7 +80,7 @@ async function fetchJson<T>(
   const { data, headers = {}, extra = {} } = options
 
   logApiStart(label, method, url, {
-    payload: summarizePayload(data as Record<string, unknown>),
+    payload: data,
     ...extra
   })
 

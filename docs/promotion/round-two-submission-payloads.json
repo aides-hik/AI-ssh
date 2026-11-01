@@ -1,0 +1,55 @@
+{
+  "discussion": {
+    "repository": "tw93/Weekly",
+    "number": 22,
+    "body": "作者自荐一下：我是 aides-hik，在做棱镜 Prism，一个把 SSH 终端、SFTP 文件管理和 AI 助手放在同一窗口的桌面工作台，适合自己管理几台 VPS 或自托管应用的开发者。\n\n想解决的场景是：连接服务器后，在终端旁分析输出，对选中的多台已连接主机检查 CPU、内存、磁盘、服务和端口，再按主机查看结果。Docker / Compose 部署可以分阶段查看脚本、实时输出和验证步骤。\n\n操作范围有明确区分：专用巡检和读取工具直接运行；自定义命令、部署阶段及服务器环境文档修改，会先展示具体目标和内容，由用户确认。\n\n提供 Windows、macOS、Linux 安装包。桌面功能和自配模型无需 Prism 账号或项目后端；模型可用自己的服务或支持工具调用的本地 Ollama。使用外部模型时，相关对话和终端输出会发送到所配置的服务，费用由服务商决定。\n\n[官网与上手](https://aides-hik.github.io/AI-ssh/) · [项目与教程](https://github.com/aides-hik/AI-ssh) · [安装包](https://github.com/aides-hik/AI-ssh/releases/latest)\n\n欢迎编辑独立评估，也想听听首次连接、配置模型和多机巡检的使用反馈。作者自荐，文字经 AI 辅助整理。"
+  },
+  "issue": {
+    "repository": "ljinkai/weekly",
+    "title": "【产品自荐】棱镜 Prism：面向自管 VPS 的 SSH、SFTP 与 AI 工作台",
+    "body": "大家好，我是 aides-hik，自荐正在维护的桌面工具「棱镜 Prism」，面向自己管理少量服务器、部署个人项目的独立开发者。\n\nPrism 把 SSH 终端、SFTP 文件管理和 AI 助手放在同一窗口。日常可以连接 VPS、查看远程文件、分析终端输出，也能对选中的多台已连接主机检查 CPU、内存、磁盘、服务和端口。Docker / Compose 部署按阶段展示脚本、实时输出和验证步骤。\n\n专用巡检和读取工具直接执行；自定义命令、部署阶段与服务器环境文档修改，先展示具体目标及内容，经用户确认后执行。\n\n支持 Windows、macOS、Linux。使用桌面功能和自配模型无需注册 Prism 账号或部署项目后端。AI 接用户自己的模型服务，或支持工具调用的本地 Ollama；使用外部模型时，相关对话与终端输出会发送到该服务，费用取决于服务商。\n\n- [官网与上手](https://aides-hik.github.io/AI-ssh/)\n- [项目与教程](https://github.com/aides-hik/AI-ssh)\n- [安装包下载](https://github.com/aides-hik/AI-ssh/releases/latest)\n- [问题与反馈](https://github.com/aides-hik/AI-ssh/issues)\n\n希望收集首次连接、模型配置和服务器巡检流程的实际反馈，帮助确定下一步改进。作者自荐，文字经 AI 辅助整理。"
+  },
+  "hubwizEmail": {
+    "to": "support@hubwiz.com",
+    "subject": "工具评测推荐｜棱镜 Prism：SSH、SFTP 与本地模型辅助多机巡检",
+    "body": "汇智网 Software 2.0 编辑您好：\n\n我是 aides-hik，正在维护桌面 SSH 工作台「棱镜 Prism」。看到贵站接受 Agent、自动化、本地模型相关内容及工具实测，想推荐 Prism 供编辑独立评估是否适合做工具评测。\n\nPrism 将 SSH 终端、SFTP 文件管理与 AI 助手放在同一窗口，面向自己管理少量服务器的开发者。可围绕“连接测试服务器 → 配置支持工具调用的本地 Ollama 模型 → 检查选中主机的 CPU、内存、磁盘、服务与端口 → 查看并确认后续自定义命令”体验。Docker / Compose 部署另有分阶段脚本、实时输出与验证步骤。\n\n专用巡检和读取工具直接执行；自定义命令、部署阶段及服务器环境文档修改，会先展示具体目标和内容，经用户确认后执行。桌面功能及自配模型不要求 Prism 账号或部署项目后端，支持 Windows、macOS、Linux。\n\nAI 需用户自行配置模型服务或支持工具调用的本地 Ollama。使用外部模型时，相关对话与终端输出会发给所配置的服务，模型费用由服务商决定。\n\n官网与上手：https://aides-hik.github.io/AI-ssh/\n项目与教程：https://github.com/aides-hik/AI-ssh\n安装包：https://github.com/aides-hik/AI-ssh/releases/latest\n问题反馈：https://github.com/aides-hik/AI-ssh/issues\n\n这封邮件是作者提供工具供编辑评测的推荐，并非已完成的实测稿件。目前推广截图和动图是有显著标记的界面预览，使用模拟服务器及模型数据；真实服务器实操视频尚未录制，未提供性能或效果结论。若贵站认为适合，欢迎按编辑标准独立测试和评价。\n\n项目也已向开发者周刊及工具目录自荐；本邮件未提交同一篇已发表文章。文字经 AI 辅助整理。\n\n谢谢！\naides-hik\nhttps://github.com/aides-hik"
+  },
+  "fazier": {
+    "name": "Prism",
+    "tagline": "SSH, SFTP and AI-assisted server checks in one desktop workspace",
+    "website": "https://aides-hik.github.io/AI-ssh/",
+    "sourceAndDocs": "https://github.com/aides-hik/AI-ssh",
+    "download": "https://github.com/aides-hik/AI-ssh/releases/latest",
+    "platforms": [
+      "Windows",
+      "macOS",
+      "Linux"
+    ],
+    "description": "Prism brings SSH terminals, SFTP file management and an AI assistant into one desktop workspace for developers managing their own servers. Inspect selected connected hosts and review staged Docker / Compose deployments with live output and verification commands. Dedicated inspection and read tools run directly; custom commands, deployment stages and server environment document changes show their targets and contents for approval. No Prism account or project backend is required. Bring your own model service or a local Ollama model with tool-calling support. External model use sends relevant conversation and terminal output to the configured service; model fees depend on the provider.",
+    "author": "aides-hik",
+    "licenseNote": "No project license has been established in the current repository; do not claim Open Source or select a specific license without clarification.",
+    "mediaNote": "Current promotional screenshots and GIF use visibly labelled simulated server and model data. They illustrate the interface, not real server results.",
+    "submissionUrl": "https://fazier.com/submit",
+    "listingOption": "Basic / Free",
+    "prerequisite": "The free plan requires a Fazier badge or backlink on the product homepage or footer. Do not buy an upgrade; verify the backlink and actual form requirements before submitting."
+  },
+  "indiefront": {
+    "name": "棱镜 Prism",
+    "tagline": "将 SSH 终端、SFTP 文件管理和 AI 助手放在同一窗口的桌面工作台",
+    "website": "https://aides-hik.github.io/AI-ssh/",
+    "sourceAndDocs": "https://github.com/aides-hik/AI-ssh",
+    "download": "https://github.com/aides-hik/AI-ssh/releases/latest",
+    "platforms": [
+      "Windows",
+      "macOS",
+      "Linux"
+    ],
+    "author": "aides-hik",
+    "submissionUrl": "https://indiefront.cn/dashboard/products/new/",
+    "description": "面向自己管理几台 VPS 或自托管应用的开发者，集成 SSH、SFTP 与 AI 助手，支持选中主机的多机巡检及分阶段确认的 Docker / Compose 部署。专用巡检和读取工具直接执行；自定义命令、部署阶段及服务器环境文档修改先展示目标与内容，经用户确认后执行。Windows、macOS、Linux 均提供安装包，桌面功能及自配模型无需 Prism 账号或项目后端。AI 需配置自己的模型服务或支持工具调用的本地 Ollama；使用外部模型时，相关对话与终端输出会发给该服务，费用取决于服务商。",
+    "pending": "需登录核实完整字段与收费要求；尚未提交。",
+    "licenseNote": "No project license has been established in the current repository; do not claim Open Source or select a specific license without clarification.",
+    "mediaNote": "Current promotional screenshots and GIF use visibly labelled simulated server and model data. They illustrate the interface, not real server results."
+  }
+}
+

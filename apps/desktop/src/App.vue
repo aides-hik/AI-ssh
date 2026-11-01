@@ -442,14 +442,30 @@ watch(
   { immediate: true }
 )
 
-watch(
-  () => updater.state.value,
-  nextState => {
-    if (!updater.shouldShowInstallPrompt(nextState) || !window.$notification) {
-      return
-    }
-
-    window.$notification.add({
+let updateInstallNotificationId: string | undefined
+let notifiedUpdateVersion: string | undefined
+async function installPreparedUpdate(version: string) {
+  if (updater.state.value.status !== 'downloaded' || updater.state.value.availableVersion !== version) return
+  try {
+    await updater.installDownloadedUpdate()
+  } catch (error) {
+    window.$notification?.error(
+      `无法安装更新：${error instanceof Error ? error.message : String(error)}。请在设置中重试。`,
+      { title: '安装未启动', persistent: true }
+    )
+  }
+}
+function handleUpdaterState(nextState: typeof updater.state.value) {
+  if (updateInstallNotificationId &&
+    (nextState.status !== 'downloaded' || nextState.availableVersion !== notifiedUpdateVersion)) {
+    window.$notification?.remove(updateInstallNotificationId)
+    updateInstallNotificationId = undefined
+  }
+  if (!window.$notification || !updater.shouldShowInstallPrompt(nextState)) return
+  const version = nextState.availableVersion
+  if (!version) return
+  notifiedUpdateVersion = version
+  updateInstallNotificationId = window.$notification.add({
       type: 'success',
       title: '发现新版本',
       message: `新版本 ${nextState.availableVersion} 已下载完成，点击即可直接安装。`,
@@ -457,15 +473,12 @@ watch(
       actions: [
         {
           label: '立即安装',
-          handler: async () => {
-            await updater.installDownloadedUpdate()
-          }
+          handler: () => installPreparedUpdate(version)
         }
       ]
     })
-  },
-  { deep: true }
-)
+}
+watch(() => updater.state.value, handleUpdaterState, { deep: true })
 
 // 提供打开新标签和关闭标签的方法给子组件
 provide('openNewTab', openNewTab)
@@ -681,11 +694,14 @@ const handleResize = () => {
   if (isSidebarLayoutAnimating.value) queueSidebarLayoutEnd()
 }
 
-onMounted(async () => {
+let unsubscribeFullscreen: (() => void) | undefined
+onMounted(() => {
   // 初始化应用
   app.initialize()
   theme.initialize()
-  await updater.initialize()
+  void updater.initialize().catch(error => {
+    console.warn('Unable to initialize app updates:', error)
+  })
 
   // SSH、设置和历史记录始终使用本地存储，无需登录。
 
@@ -697,7 +713,7 @@ onMounted(async () => {
 
   // 监听全屏状态变化
   if (window.electronAPI?.onFullscreenChange) {
-    window.electronAPI.onFullscreenChange((fullscreen: boolean) => {
+    unsubscribeFullscreen = window.electronAPI.onFullscreenChange((fullscreen: boolean) => {
       isFullscreen.value = fullscreen
     })
   }
@@ -705,6 +721,9 @@ onMounted(async () => {
 
 onUnmounted(async () => {
   // 清理事件监听器
+  updater.dispose()
+  unsubscribeFullscreen?.()
+  if (updateInstallNotificationId) window.$notification?.remove(updateInstallNotificationId)
   stopResize()
   finishSidebarLayoutMotion()
   document.removeEventListener('keydown', handleKeydown)

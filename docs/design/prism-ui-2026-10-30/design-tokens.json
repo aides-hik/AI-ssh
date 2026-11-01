@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "name": "Prism · 烟晶工作台",
+  "date": "2026-10-30",
+  "status": "Local design prototype. Figma write blocked by Starter MCP quota.",
+  "color": {
+    "dark": {
+      "bg": "#101923",
+      "surface": "#17232f",
+      "raised": "#1e2c3a",
+      "floating": "#223242",
+      "terminal": "#0d151d",
+      "line": "#2e3d4c",
+      "softline": "#243342",
+      "text": "#edf3f8",
+      "muted": "#a0afbf",
+      "faint": "#75889b",
+      "blue": "#8db9ff",
+      "solidblue": "#7baeff",
+      "onblue": "#0d2443",
+      "bluewash": "#20354f",
+      "green": "#77d7b8",
+      "greenwash": "#183931",
+      "amber": "#e7b96b",
+      "amberwash": "#3a3022",
+      "red": "#ef999c",
+      "redwash": "#3a262e",
+      "field": "#111d28",
+      "shadow": "#060e1780"
+    },
+    "light": {
+      "bg": "#dce3ec",
+      "surface": "#f8fafc",
+      "raised": "#fff",
+      "floating": "#fff",
+      "terminal": "#101b28",
+      "line": "#c9d3df",
+      "softline": "#e2e8ef",
+      "text": "#1c2b3b",
+      "muted": "#52657a",
+      "faint": "#6e8095",
+      "blue": "#255eac",
+      "solidblue": "#3474ce",
+      "onblue": "#fff",
+      "bluewash": "#e3edfa",
+      "green": "#167357",
+      "greenwash": "#e1f2e9",
+      "amber": "#855b13",
+      "amberwash": "#faf0db",
+      "red": "#ad3a45",
+      "redwash": "#fbe8ea",
+      "field": "#eef3f8",
+      "shadow": "#55718a28"
+    }
+  },
+  "typography": {
+    "ui": {
+      "family": "Noto Sans SC",
+      "weightRange": [
+        400,
+        560
+      ],
+      "sizesPx": [
+        10,
+        11,
+        12,
+        13,
+        14,
+        17,
+        23
+      ]
+    },
+    "terminal": {
+      "family": "Consolas, Liberation Mono, monospace",
+      "sizePx": 12,
+      "lineHeight": 1.88
+    }
+  },
+  "layout": {
+    "referenceFramePx": [
+      1440,
+      900
+    ],
+    "sidebarWidthPx": 218,
+    "assistantWidthPx": 391,
+    "titlebarHeightPx": 40,
+    "statusbarHeightPx": 27,
+    "pagePaddingPx": 30,
+    "smallDesktopBreakpointPx": 1220,
+    "minimumPrototypeViewportPx": 1000
+  },
+  "shape": {
+    "buttonRadiusPx": 7,
+    "panelRadiusPx": 11,
+    "modalRadiusPx": 14,
+    "borderPx": 1
+  },
+  "components": [
+    {
+      "name": "ConnectionRow",
+      "states": [
+        "default",
+        "hover",
+        "active",
+        "disconnected"
+      ],
+      "semantics": "Connection identity, saved user/address, state indicator."
+    },
+    {
+      "name": "TargetPicker",
+      "states": [
+        "closed",
+        "open",
+        "selected",
+        "unavailable"
+      ],
+      "semantics": "Host names and count update immediately. Disconnected hosts cannot be selected."
+    },
+    {
+      "name": "AssistantPanel",
+      "states": [
+        "open",
+        "closed"
+      ],
+      "semantics": "Hidden panel is inert and removed from accessible navigation."
+    },
+    {
+      "name": "OperationDialog",
+      "states": [
+        "fingerprint-first-use",
+        "fingerprint-changed",
+        "command-approval",
+        "overwrite-approval"
+      ],
+      "semantics": "Default focus is cancel. Escape cancels. Target and content stay still and readable."
+    },
+    {
+      "name": "TransferRow",
+      "states": [
+        "uploading",
+        "committing",
+        "done",
+        "cancelled",
+        "failed"
+      ],
+      "semantics": "Progress reaches 100 only after commit. Commit blocks cancellation. Failures retain original paths."
+    },
+    {
+      "name": "ModelService",
+      "states": [
+        "local",
+        "external",
+        "untested",
+        "conversation-test-passed"
+      ],
+      "semantics": "Conversation connectivity is distinct from tool-calling capability."
+    }
+  ],
+  "motionSpec": "motion-spec.json",
+  "sourceStyles": "style.css",
+  "proposedProductChanges": [
+    "工作台增加全局最近会话和历史入口；需要后续工程实现。",
+    "服务设置与任务反馈的布局、文案和过渡属于本次设计建议。"
+  ],
+  "scope": "All data is simulated. No production Vue/Electron source was modified by this design artifact. These design states do not assert shipped features."
+}
