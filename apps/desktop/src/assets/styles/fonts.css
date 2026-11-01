@@ -1,0 +1,8 @@
+/* Full local character set, used offline for both interface and user-entered text. */
+@font-face {
+  font-family: 'ChillRoundM';
+  src: url('../fonts/ChillRoundM-Regular.otf') format('opentype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}

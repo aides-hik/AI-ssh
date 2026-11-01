@@ -151,7 +151,7 @@ function resolveHistoryTools(messages: Message[]): {
 export function fromUserMessage(content: string): Message {
   return {
     info: {
-      id: `msg_${Date.now()}`,
+      id: `msg_${crypto.randomUUID()}`,
       role: 'user',
       createdAt: Date.now()
     },

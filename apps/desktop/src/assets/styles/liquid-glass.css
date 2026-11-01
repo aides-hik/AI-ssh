@@ -96,11 +96,7 @@
   overflow: hidden;
   background: var(--liquid-canvas);
   color: var(--vscode-fg);
-  font:
-    var(--prism-font-13)/1.5 'Segoe UI Variable',
-    'Segoe UI',
-    'Microsoft YaHei',
-    sans-serif;
+  font: var(--prism-font-13)/1.5 var(--prism-font);
   -webkit-user-select: none;
   user-select: none;
 }

@@ -14,6 +14,20 @@
   --chat-gutter: 20px;
 }
 
+.oc-conversation-toolbar { position:relative; z-index:6; display:flex; align-items:center; gap:10px; flex:none; min-width:0; min-height:44px; padding:6px 14px; border-bottom:1px solid var(--chat-border); background:var(--background-base); }
+.oc-conversation-toolbar > .oc-conversation-history { position:absolute; top:calc(100% + 6px); right:8px; width:min(380px, calc(100% - 16px)); max-height:min(460px, calc(100cqh - 58px)); }
+.oc-conversation-heading { display:flex; align-items:center; gap:7px; min-width:0; flex:1; color:var(--text-weak); font:var(--prism-font-12)/1.5 var(--font-family-sans); }
+.oc-conversation-heading > i { flex:none; }
+.oc-conversation-heading > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.oc-conversation-actions { display:flex; align-items:center; gap:4px; flex:none; }
+.oc-conversation-action { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:30px; padding:5px 8px; border:0; border-radius:9px; background:transparent; color:var(--text-weak); font:var(--prism-font-11)/1.4 var(--font-family-sans); cursor:pointer; white-space:nowrap; }
+.oc-conversation-action:hover:not(:disabled) { color:var(--text-base); background:var(--surface-base-hover); }
+.oc-conversation-action[aria-expanded="true"] { color:var(--text-interactive-base); background:var(--surface-interactive-weak); }
+.oc-conversation-action:focus-visible { outline:2px solid var(--text-interactive-base); outline-offset:2px; }
+.oc-conversation-action:disabled { opacity:.45; cursor:not-allowed; }
+.oc-chat > .oc-history-error { flex:none; margin:0; padding:7px 16px; color:var(--text-critical-base); background:var(--surface-critical-weak); font:var(--prism-font-11)/1.6 var(--font-family-sans); }
+@container chat-pane (max-width: 440px) { .oc-conversation-toolbar { padding-inline:10px; } .oc-conversation-actions .oc-conversation-action > span { display:none; } .oc-conversation-action { min-width:30px; padding:5px 7px; } }
+
 .oc-chat .oc-conversation {
   position: relative;
   display: flex;

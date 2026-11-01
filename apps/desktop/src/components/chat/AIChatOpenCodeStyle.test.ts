@@ -15,11 +15,12 @@ import { MultiHostRun, buildMultiHostPrompt, type HostTarget } from '../../servi
 import { ExecutionLogBuffer, type HostExecutionLog } from '../../services/execution-log'
 import type { FrozenDeploymentStage } from '../../services/multi-host-deployment'
 import type { MultiHostToolOptions } from '../../services/tools/multi-host-tools'
+import { ChatHistoryStore, type ConversationSummary, type HistorySettings } from '../../services/chat-history'
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const chatViewPath = join(currentDir, 'AIChatOpenCodeStyle.vue')
 
-async function loadComponentFunctions(names: string[], dependencies: Record<string, unknown> = {}) {
+async function loadComponentFunctions(names: string[], dependencies: Record<string, unknown> = {}, bindings: string[] = []) {
   const source = await readFile(chatViewPath, 'utf8')
   const script = source.slice(source.indexOf('>') + 1, source.indexOf('</script>'))
   const parsed = ts.createSourceFile('chat.ts', script, ts.ScriptTarget.Latest, true)
@@ -33,9 +34,78 @@ async function loadComponentFunctions(names: string[], dependencies: Record<stri
   const javascript = ts.transpileModule(declarations.join('\n'), {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
   }).outputText
-  return new Function(...Object.keys(dependencies), javascript + `\nreturn { ${names.join(', ')} }`)(
+  return new Function(...Object.keys(dependencies), javascript + `\nreturn { ${names.join(', ')}, getBindings: () => ({ ${bindings.join(', ')} }) }`)(
     ...Object.values(dependencies)
   ) as Record<string, (...args: unknown[]) => unknown>
+}
+
+function conversationTestState() {
+  const values: Record<string, string> = {}
+  const storageState = { failWrites: false, failReads: false }
+  const storage = new Proxy(values, { get(target, key) {
+    if (key === 'getItem') return (name: string) => {
+      if (storageState.failReads) throw new Error('Storage is unavailable')
+      return target[name] ?? null
+    }
+    if (key === 'setItem') return (name: string, value: string) => {
+      if (storageState.failWrites) throw new Error('Storage is full')
+      target[name] = value
+    }
+    if (key === 'removeItem') return (name: string) => { delete target[name] }
+    return target[String(key)]
+  } }) as unknown as Storage
+  const state = {
+    props: { connectionId: 'runtime-a', historyId: 'saved-a' },
+    activeConversationId: { value: '' }, conversations: { value: [] as ConversationSummary[] },
+    historyEnabled: { value: true }, historyReady: { value: true },
+    conversationBusy: { value: false }, requestSettling: { value: false },
+    historyOpen: { value: true }, historyError: { value: '' },
+    conversationDrafts: new Map<string, string>(), inputMessage: { value: '' },
+    isGenerating: { value: false }, messages: { value: [] as Message[] },
+    activeAssistantId: { value: null as string | null }, error: { value: null as Error | null },
+    currentStage: { value: 'idle' }, currentStatus: { value: '' }, stopRequested: { value: false }, isStopping: { value: false },
+    interruptionState: { value: null }, pendingDeploymentApproval: { value: null },
+    multiHostStates: { value: [] }, selectedHostIds: { value: null },
+    deploymentStatus: { value: null }, deploymentIssue: { value: null },
+    executionLogBuffer: new ExecutionLogBuffer(), executionLogs: { value: [] as HostExecutionLog[] },
+    sessionDuration: { value: '' }, sessionStartTime: { value: null }, sessionStatusExpanded: { value: false },
+    performanceMetrics: { value: {} }, expandedTools: { value: new Set() }, expandedTurns: { value: new Set() },
+    visibleCount: { value: 5 }, isLoadingMore: { value: false }, copiedId: { value: null },
+    codeCopyFeedback: new Map(), serverEnvMenuOpen: { value: false }, followLatest: { value: true },
+    inputRef: { value: { focus() {} } }, historyTrigger: { value: { focus() {} } },
+    contextClears: 0,
+    ui: { value: { historySaveFailed: 'save failed', historyChangeFailed: 'change failed', historyLoadFailed: 'load failed' } }
+  }
+  const dependencies = {
+    ...state, localStorage: storage, ChatHistoryStore,
+    loadedHistoryId: '', historySettings: {} as HistorySettings, historyLoading: undefined,
+    conversationLocked: { get value() {
+      return state.isGenerating.value || state.requestSettling.value || state.conversationBusy.value || !state.historyReady.value
+    } },
+    processorHistory: { clear() { state.contextClears++ } },
+    multiHostRun: null, executionLogTimer: undefined, copyFeedbackTimer: undefined, scrollFrame: 0,
+    nextTick: async (callback?: () => void) => { callback?.() },
+    stopDurationTimer() {}, resizeInputHeight() {}, scrollToBottom() {}, cancelAnimationFrame() {},
+    clearTimeout() {}, console: { warn() {} },
+    sshService: { getConnections: async () => [] }
+  }
+  return { state, dependencies, storage, storageState, store: new ChatHistoryStore(storage), values }
+}
+
+async function loadConversationFixture(getSettings: () => Promise<Record<string, unknown>> = async () => ({})) {
+  const fixture = conversationTestState()
+  const functions = await loadComponentFunctions([
+    'loadConversationHistory', 'saveConversationHistory', 'rememberConversationDraft',
+    'resetConversationView', 'changeConversation', 'deleteConversation', 'closeConversationHistory', 'toggleConversationHistory'
+  ], { ...fixture.dependencies, settingsService: { getSettings } }, ['loadedHistoryId', 'historySettings'])
+  return { ...fixture,
+    loadConversationHistory: functions.loadConversationHistory,
+    saveConversationHistory: functions.saveConversationHistory,
+    changeConversation: functions.changeConversation,
+    deleteConversation: functions.deleteConversation,
+    toggleConversationHistory: functions.toggleConversationHistory,
+    getBindings: functions.getBindings
+  }
 }
 
 test('IME confirmation Enter never sends or blocks the composition event', async () => {
@@ -135,41 +205,289 @@ test('reaching the tool round budget keeps the reply unfinished in the chat UI',
 test('changing host while history is loading queues the selected host instead of reusing stale history', async () => {
   const initial = Promise.withResolvers<Record<string, unknown>>()
   let settingsReads = 0
-  const props = { connectionId: 'runtime-a', historyId: 'saved-a' }
-  const messages = { value: [] as Message[] }
-  const functions = await loadComponentFunctions(['loadConversationHistory'], {
-    props, messages, historyLoading: undefined, historySettings: {}, loadedHistoryId: '',
-    settingsService: { getSettings: () => ++settingsReads === 1 ? initial.promise : Promise.resolve({}) },
-    localStorage: {},
-    ChatHistoryStore: class {
-      applySettings() {}
-      load(id: string) { return [createUserMessage(id, `request for ${id}`)] }
-    },
-    processorHistory: { clear() {} }
-  })
+  const functions = await loadConversationFixture(() => ++settingsReads === 1 ? initial.promise : Promise.resolve({}))
+  functions.store.save('saved-a', [createUserMessage('saved-a', 'request for a')], {})
+  functions.store.save('saved-b', [createUserMessage('saved-b', 'request for b')], {})
   const pendingA = functions.loadConversationHistory()
   await Promise.resolve()
-  props.connectionId = 'runtime-b'
-  props.historyId = 'saved-b'
+  functions.state.props.connectionId = 'runtime-b'
+  functions.state.props.historyId = 'saved-b'
   const pendingB = functions.loadConversationHistory()
   initial.resolve({})
   await Promise.all([pendingA, pendingB])
-  assert.equal(messages.value[0].info.id, 'saved-b')
+  assert.equal(functions.state.messages.value[0].info.id, 'saved-b')
   assert.equal(settingsReads, 2)
 })
 
 test('closing a chat uses the latest history setting and cannot resurrect disabled records', async () => {
-  const saved: unknown[] = []
-  const { saveConversationHistory } = await loadComponentFunctions(['saveConversationHistory'], {
-    loadedHistoryId: 'saved-host', messages: { value: [createUserMessage('user', 'request')] },
-    historySettings: { enableChatHistory: true }, localStorage: {},
-    settingsService: { getSettings: async () => ({ aiAssistant: { enableChatHistory: false } }) },
-    ChatHistoryStore: class {
-      save(id: string, _messages: Message[], settings: unknown) { saved.push({ id, settings }) }
-    }
+  let enabled = true
+  const fixture = await loadConversationFixture(async () => ({ aiAssistant: { enableChatHistory: enabled } }))
+  await fixture.loadConversationHistory()
+  fixture.state.messages.value = [createUserMessage('user', 'request')]
+  await fixture.saveConversationHistory()
+  enabled = false
+  assert.equal(await fixture.saveConversationHistory(), true)
+  assert.deepEqual(fixture.store.list('saved-a', {}), [])
+  assert.equal(fixture.state.activeConversationId.value, '')
+})
+
+test('new conversations preserve the previous messages and switching restores each separate draft', async () => {
+  const fixture = await loadConversationFixture()
+  await fixture.loadConversationHistory()
+  const firstId = fixture.state.activeConversationId.value
+  fixture.state.messages.value = [createUserMessage('first-user', 'first conversation'), createAssistantMessage('first-answer', 'first-user')]
+  fixture.state.inputMessage.value = 'unfinished first draft'
+  fixture.state.currentStage.value = 'complete'
+  fixture.state.expandedTools.value.add('old-tool')
+  fixture.state.visibleCount.value = 30
+  const clears = fixture.state.contextClears
+  await fixture.changeConversation()
+  const secondId = fixture.state.activeConversationId.value
+  assert.notEqual(secondId, firstId)
+  assert.deepEqual(fixture.state.messages.value, [])
+  assert.equal(fixture.state.inputMessage.value, '')
+  assert.equal(fixture.state.currentStage.value, 'idle')
+  assert.equal(fixture.state.expandedTools.value.size, 0)
+  assert.equal(fixture.state.visibleCount.value, 5)
+  assert.equal(fixture.state.contextClears, clears + 1)
+  assert.deepEqual(fixture.store.load('saved-a', {}, firstId).map(message => message.info.id), ['first-user', 'first-answer'])
+  fixture.state.messages.value = [createUserMessage('second-user', 'second conversation')]
+  fixture.state.inputMessage.value = 'unfinished second draft'
+  await fixture.changeConversation(firstId)
+  assert.equal(fixture.state.inputMessage.value, 'unfinished first draft')
+  assert.deepEqual(fixture.state.messages.value.map(message => message.info.id), ['first-user', 'first-answer'])
+  await fixture.changeConversation(secondId)
+  assert.equal(fixture.state.inputMessage.value, 'unfinished second draft')
+  assert.deepEqual(fixture.state.messages.value.map(message => message.info.id), ['second-user'])
+})
+
+test('new, select and delete do nothing while generating, settling, switching or loading history', async () => {
+  let settingsReads = 0
+  const fixture = await loadConversationFixture(async () => { settingsReads++; return {} })
+  await fixture.loadConversationHistory()
+  const firstId = fixture.state.activeConversationId.value
+  fixture.state.messages.value = [createUserMessage('user', 'do not lose this request')]
+  const other = fixture.store.create('saved-a', {})
+  assert.ok(other)
+  const before = JSON.stringify(fixture.values)
+  for (const state of ['isGenerating', 'requestSettling', 'conversationBusy', 'historyReady'] as const) {
+    fixture.state[state].value = state !== 'historyReady'
+    const reads = settingsReads
+    await fixture.changeConversation()
+    await fixture.changeConversation(other.id)
+    await fixture.deleteConversation(firstId)
+    assert.equal(settingsReads, reads)
+    assert.equal(fixture.state.activeConversationId.value, firstId)
+    assert.equal(fixture.state.messages.value[0].info.id, 'user')
+    assert.equal(JSON.stringify(fixture.values), before)
+    fixture.state[state].value = state === 'historyReady'
+  }
+})
+
+test('opening history while generating or settling lists records without loading over live messages', async () => {
+  let settingsReads = 0
+  const fixture = await loadConversationFixture(async () => { settingsReads++; return {} })
+  await fixture.loadConversationHistory()
+  fixture.state.messages.value = [createUserMessage('live-user', 'in-progress conversation')]
+  for (const flag of ['isGenerating', 'requestSettling'] as const) {
+    fixture.state.historyOpen.value = false
+    fixture.state[flag].value = true
+    const reads = settingsReads
+    fixture.toggleConversationHistory()
+    assert.equal(fixture.state.historyOpen.value, true)
+    assert.equal(fixture.state.historyReady.value, true)
+    assert.equal(settingsReads, reads)
+    assert.equal(fixture.state.messages.value[0].info.id, 'live-user')
+    fixture.state[flag].value = false
+  }
+})
+
+test('a changed host waits for the active request or its final history save before replacing the view', async () => {
+  for (const flag of ['isGenerating', 'requestSettling'] as const) {
+    const fixture = await loadConversationFixture()
+    await fixture.loadConversationHistory()
+    const initialId = fixture.state.activeConversationId.value
+    fixture.state.messages.value = [createUserMessage('live-user', 'finish before host change')]
+    fixture.store.save('saved-b', [createUserMessage('other-user', 'other host conversation')], {})
+    fixture.state[flag].value = true
+    fixture.state.props.connectionId = 'runtime-b'
+    fixture.state.props.historyId = 'saved-b'
+    await fixture.loadConversationHistory()
+    assert.equal(fixture.state.activeConversationId.value, initialId)
+    assert.equal(fixture.state.messages.value[0].info.id, 'live-user')
+    assert.equal(fixture.state.historyReady.value, true)
+    fixture.state[flag].value = false
+    await fixture.loadConversationHistory()
+    assert.equal(fixture.state.messages.value[0].info.id, 'other-user')
+  }
+})
+
+test('a late history reload cannot replace an explicitly selected conversation or leave it locked', async () => {
+  const waiting = Promise.withResolvers<Record<string, unknown>>()
+  let waitForReload = false
+  const fixture = await loadConversationFixture(() => waitForReload ? waiting.promise : Promise.resolve({}))
+  await fixture.loadConversationHistory()
+  const other = fixture.store.create('saved-a', {})
+  assert.ok(other)
+  fixture.store.save('saved-a', [createUserMessage('other-user', 'selected conversation')], {}, other.id)
+  waitForReload = true
+  const loading = fixture.loadConversationHistory()
+  await Promise.resolve()
+  fixture.store.select('saved-a', other.id, {})
+  fixture.state.activeConversationId.value = other.id
+  fixture.state.messages.value = fixture.store.load('saved-a', {}, other.id)
+  waiting.resolve({})
+  await loading
+  assert.equal(fixture.state.activeConversationId.value, other.id)
+  assert.equal(fixture.state.messages.value[0].info.id, 'other-user')
+  assert.equal(fixture.state.historyReady.value, true)
+})
+
+test('a delayed save retains its captured host and conversation and does not change the newly loaded view', async () => {
+  let pendingRead: Promise<Record<string, unknown>> | undefined
+  const fixture = await loadConversationFixture(() => {
+    const current = pendingRead
+    pendingRead = undefined
+    return current || Promise.resolve({})
   })
-  await saveConversationHistory()
-  assert.deepEqual(saved, [{ id: 'saved-host', settings: { enableChatHistory: false } }])
+  await fixture.loadConversationHistory()
+  const firstId = fixture.state.activeConversationId.value
+  fixture.state.messages.value = [createUserMessage('first-user', 'captured old conversation')]
+  const waiting = Promise.withResolvers<Record<string, unknown>>()
+  pendingRead = waiting.promise
+  const saving = fixture.saveConversationHistory()
+  fixture.state.props.connectionId = 'runtime-b'
+  fixture.state.props.historyId = 'saved-b'
+  await fixture.loadConversationHistory()
+  const secondId = fixture.state.activeConversationId.value
+  fixture.state.messages.value = [createUserMessage('second-user', 'new live draft history')]
+  waiting.resolve({})
+  assert.equal(await saving, true)
+  assert.equal(fixture.state.activeConversationId.value, secondId)
+  assert.equal(fixture.state.messages.value[0].info.id, 'second-user')
+  assert.equal(fixture.store.load('saved-a', {}, firstId)[0].info.id, 'first-user')
+  assert.deepEqual(fixture.store.load('saved-b', {}, secondId), [])
+})
+
+test('failed history writes preserve the current conversation, draft and selected identity', async () => {
+  const fixture = await loadConversationFixture()
+  await fixture.loadConversationHistory()
+  const id = fixture.state.activeConversationId.value
+  fixture.state.messages.value = [createUserMessage('user', 'unsaved request must remain')]
+  fixture.state.inputMessage.value = 'draft must remain'
+  fixture.storageState.failWrites = true
+  const clears = fixture.state.contextClears
+  await fixture.changeConversation()
+  assert.equal(fixture.state.activeConversationId.value, id)
+  assert.equal(fixture.state.messages.value[0].info.id, 'user')
+  assert.equal(fixture.state.inputMessage.value, 'draft must remain')
+  assert.equal(fixture.state.contextClears, clears)
+  assert.equal(fixture.state.conversationBusy.value, false)
+  assert.equal(fixture.state.historyError.value, 'save failed')
+})
+
+test('history cleared by settings permits an explicit new conversation without resurrecting its deleted predecessor', async () => {
+  const fixture = await loadConversationFixture()
+  await fixture.loadConversationHistory()
+  const removedId = fixture.state.activeConversationId.value
+  fixture.state.messages.value = [createUserMessage('removed-user', 'history cleared by settings')]
+  fixture.state.inputMessage.value = 'old draft'
+  fixture.store.clear('saved-a')
+  await fixture.changeConversation()
+  const createdId = fixture.state.activeConversationId.value
+  assert.notEqual(createdId, removedId)
+  assert.ok(createdId)
+  assert.equal(fixture.store.has('saved-a', removedId, {}), false)
+  assert.equal(fixture.store.has('saved-a', createdId, {}), true)
+  assert.deepEqual(fixture.state.messages.value, [])
+  assert.equal(fixture.state.inputMessage.value, '')
+  assert.deepEqual(fixture.store.list('saved-a', {}).map(conversation => conversation.id), [createdId])
+  assert.doesNotMatch(JSON.stringify(fixture.values), /history cleared by settings|removed-user/)
+})
+
+test('a cleared empty active conversation is replaced rather than being reused as a nonexistent chat', async () => {
+  const fixture = await loadConversationFixture()
+  await fixture.loadConversationHistory()
+  const removedId = fixture.state.activeConversationId.value
+  fixture.store.clear('saved-a')
+  fixture.state.conversations.value = []
+  await fixture.changeConversation()
+  const createdId = fixture.state.activeConversationId.value
+  assert.notEqual(createdId, removedId)
+  assert.ok(createdId)
+  assert.equal(fixture.store.has('saved-a', createdId, {}), true)
+  assert.deepEqual(fixture.state.messages.value, [])
+})
+
+test('selecting surviving history after the active record was removed never saves the removed messages into it', async () => {
+  const fixture = await loadConversationFixture()
+  await fixture.loadConversationHistory()
+  const removedId = fixture.state.activeConversationId.value
+  fixture.state.messages.value = [createUserMessage('removed-user', 'removed conversation must stay removed')]
+  const surviving = fixture.store.create('saved-a', {})
+  assert.ok(surviving)
+  fixture.store.save('saved-a', [createUserMessage('surviving-user', 'surviving conversation')], {}, surviving.id)
+  fixture.store.delete('saved-a', removedId, {})
+  await fixture.changeConversation(surviving.id)
+  assert.equal(fixture.state.activeConversationId.value, surviving.id)
+  assert.equal(fixture.state.messages.value[0].info.id, 'surviving-user')
+  assert.equal(fixture.store.has('saved-a', removedId, {}), false)
+  assert.doesNotMatch(JSON.stringify(fixture.values), /removed conversation must stay removed/)
+})
+
+test('unreadable history cannot be mistaken for deleted history and discard the current conversation', async () => {
+  const fixture = await loadConversationFixture()
+  await fixture.loadConversationHistory()
+  const id = fixture.state.activeConversationId.value
+  fixture.state.messages.value = [createUserMessage('live-user', 'keep current content when storage cannot be read')]
+  fixture.state.inputMessage.value = 'keep current draft'
+  const previous = JSON.stringify(fixture.values)
+  fixture.storageState.failReads = true
+  assert.equal(fixture.store.has('saved-a', id, {}), null)
+  const clears = fixture.state.contextClears
+  await fixture.changeConversation()
+  assert.equal(fixture.state.activeConversationId.value, id)
+  assert.equal(fixture.state.messages.value[0].info.id, 'live-user')
+  assert.equal(fixture.state.inputMessage.value, 'keep current draft')
+  assert.equal(fixture.state.contextClears, clears)
+  assert.equal(fixture.state.conversationBusy.value, false)
+  assert.equal(JSON.stringify(fixture.values), previous)
+})
+
+test('deleting the active conversation selects existing fallback and creates a fresh one after the last deletion', async () => {
+  const fixture = await loadConversationFixture()
+  await fixture.loadConversationHistory()
+  const firstId = fixture.state.activeConversationId.value
+  fixture.state.messages.value = [createUserMessage('first-user', 'first history')]
+  await fixture.saveConversationHistory()
+  const second = fixture.store.create('saved-a', {})
+  assert.ok(second)
+  fixture.store.save('saved-a', [createUserMessage('second-user', 'second history')], {}, second.id)
+  fixture.store.select('saved-a', firstId, {})
+  fixture.state.conversationDrafts.set(JSON.stringify(['saved-a', firstId]), 'deleted draft')
+  await fixture.deleteConversation(firstId)
+  assert.equal(fixture.state.activeConversationId.value, second.id)
+  assert.equal(fixture.state.messages.value[0].info.id, 'second-user')
+  assert.equal(fixture.state.conversationDrafts.has(JSON.stringify(['saved-a', firstId])), false)
+  await fixture.deleteConversation(second.id)
+  assert.notEqual(fixture.state.activeConversationId.value, firstId)
+  assert.notEqual(fixture.state.activeConversationId.value, second.id)
+  assert.ok(fixture.state.activeConversationId.value)
+  assert.deepEqual(fixture.state.messages.value, [])
+  assert.equal(fixture.store.list('saved-a', {}).length, 1)
+})
+
+test('disabled history permits a fresh temporary chat without persisting messages or a conversation index', async () => {
+  const fixture = await loadConversationFixture(async () => ({ aiAssistant: { enableChatHistory: false } }))
+  await fixture.loadConversationHistory()
+  fixture.state.messages.value = [createUserMessage('temporary', 'temporary messages')]
+  fixture.state.inputMessage.value = 'temporary draft'
+  await fixture.changeConversation()
+  assert.equal(fixture.state.activeConversationId.value, '')
+  assert.deepEqual(fixture.state.messages.value, [])
+  assert.equal(fixture.state.inputMessage.value, '')
+  assert.deepEqual(fixture.store.list('saved-a', {}), [])
+  assert.deepEqual(fixture.values, {})
 })
 
 test('disabling automatic read approval also prevents background environment document reads', async () => {
@@ -295,6 +613,7 @@ async function loadSendHandler(overrides: Record<string, any> = {}) {
     props: { currentProvider: { id: 'openai' }, currentModel: { id: 'test-model' }, connectionId: 'test-ssh' },
     inputMessage: { value: '  保留这段草稿  ' },
     isGenerating: { value: false },
+    requestSettling: { value: false }, conversationBusy: { value: false },
     activeAssistantId: { value: null as string | null },
     error: { value: null as Error | null },
     statuses: [] as string[],
@@ -411,7 +730,9 @@ test('request preparation and missing key errors cannot mark the previous respon
 test('ignored empty or busy sends keep the current response identity intact', async () => {
   for (const overrides of [
     { inputMessage: { value: '   ' } },
-    { isGenerating: { value: true } }
+    { isGenerating: { value: true } },
+    { requestSettling: { value: true } },
+    { conversationBusy: { value: true } }
   ]) {
     const activeAssistantId = { value: 'current-response' as string | null }
     const { state, run } = await loadSendHandler({ ...overrides, activeAssistantId })
@@ -456,7 +777,8 @@ type ToolExecutionContext = {
   extra: { connectionId: string; serverEnvDocId: string }
 }
 
-async function loadToolSendFixture(getSettings?: () => Promise<RequestSettings>, fixtureOptions: { targets?: HostTarget[] } = {}) {
+async function loadToolSendFixture(getSettings?: () => Promise<RequestSettings>, fixtureOptions: { targets?: HostTarget[]; conversations?: boolean } = {}) {
+  const conversationFixture = conversationTestState()
   const provider: AIProvider = {
     id: 'initial-provider', name: 'Initial provider', endpoint: 'https://initial.invalid/v1',
     description: '', icon: '', website: '',
@@ -468,12 +790,16 @@ async function loadToolSendFixture(getSettings?: () => Promise<RequestSettings>,
     reasoning: { protocol: 'openai', supportedEfforts: ['low', 'high'] }
   }
   const state = {
+    ...conversationFixture.state,
     props: {
       currentProvider: provider, currentModel: model, connectionId: 'initial-ssh',
-      sessionId: 'initial-session', serverEnvDocId: 'initial-env'
+      sessionId: 'initial-session', serverEnvDocId: 'initial-env',
+      historyId: fixtureOptions.conversations ? 'saved-a' : undefined
     },
     reasoningSelection: { value: 'high' as ReasoningSelection },
     isGenerating: { value: false }, isStopping: { value: false }, stopRequested: { value: false },
+    requestSettling: { value: false }, conversationBusy: { value: false },
+    activeConversationId: { value: 'initial-conversation' },
     abortController: { value: null as AbortController | null },
     error: { value: null as Error | null }, interruptionState: { value: null },
     activeAssistantId: { value: null as string | null }, messages: { value: [] as Message[] },
@@ -515,14 +841,21 @@ async function loadToolSendFixture(getSettings?: () => Promise<RequestSettings>,
   let timerId = 0
   const functions = await loadComponentFunctions([
     'sendMessageWithTools', 'handleStop', 'appendAssistantTextBlock', 'markLastAssistantTextBlockAsSummary',
-    'requestDeploymentApproval', 'queueExecutionLog', 'flushExecutionLogs'
+    'requestDeploymentApproval', 'queueExecutionLog', 'flushExecutionLogs',
+    ...(fixtureOptions.conversations ? ['loadConversationHistory', 'saveConversationHistory', 'rememberConversationDraft',
+      'resetConversationView', 'changeConversation', 'deleteConversation', 'closeConversationHistory'] : [])
   ], {
+    ...conversationFixture.dependencies,
     ...state, getReasoningCapability, getModelAPIStyle, createAssistantMessage, fromUserMessage, updateToolResult,
+    conversationLocked: { get value() {
+      return state.isGenerating.value || state.requestSettling.value || state.conversationBusy.value || !state.historyReady.value
+    } },
     filterValidMessages, filterCompactedMessages, compactMessages,
     settingsService: {
       getSettings: getSettings || (async () => ({ aiProviders: [{ id: provider.id, apiKey: 'initial-key' }] }))
     },
     processorHistory: {
+      clear: () => history.clear(),
       toModelMessages: (messages: Message[], scope: string, requireOpaqueState: boolean) => {
         state.historyReads.push({ scope, requireOpaqueState })
         return history.toModelMessages(messages, scope, requireOpaqueState)
@@ -553,15 +886,16 @@ async function loadToolSendFixture(getSettings?: () => Promise<RequestSettings>,
     },
     window: { setTimeout: () => ++timerId }, clearTimeout() {},
     setTimeout: () => ++timerId,
-    nextTick: async () => {}, scrollToBottom() {}, startDurationTimer() {}, stopDurationTimer() {},
+    nextTick: async (callback?: () => void) => { callback?.() }, scrollToBottom() {}, startDurationTimer() {}, stopDurationTimer() {},
     refreshSessionContext: async () => {}, getAdaptiveCompactionLimit: () => 20,
     loadConversationHistory: async () => {}, saveConversationHistory() {},
     buildSystemPrompt: () => 'Fixture system prompt', summarizeServerEnvDoc: () => 'Fixture environment documentation',
     getStatusDescription: () => 'Executing fixture tool', updateStatus() {}, logPerformanceSummary() {},
     captureInterruptionState() {}, normalizeUserErrorMessage: (message: string) => message,
-    setStatus: (stage: string) => { state.currentStage.value = stage }, console: { error() {} }
+    setStatus: (stage: string) => { state.currentStage.value = stage }, console: { error() {}, warn() {} }
   })
-  return { state, history, hooks, send: functions.sendMessageWithTools, stop: functions.handleStop }
+  return { state, history, hooks, send: functions.sendMessageWithTools, stop: functions.handleStop,
+    changeConversation: functions.changeConversation, loadConversationHistory: functions.loadConversationHistory }
 }
 
 test('tool requests retain the clicked model and effort across asynchronous settings, then preserve completed processor history', async () => {
@@ -609,7 +943,7 @@ test('tool requests retain the clicked model and effort across asynchronous sett
   assert.equal(config.connectionId, 'initial-ssh')
   assert.equal(config.serverEnvDocId, 'initial-env')
   assert.deepEqual(state.historyReads, [{
-    scope: JSON.stringify(['initial-provider', 'https://initial.invalid/v1', 'gpt-6-astra', ['initial-ssh'], 'initial-session', true, 'responses']),
+    scope: JSON.stringify(['initial-provider', 'https://initial.invalid/v1', 'gpt-6-astra', ['initial-ssh'], 'initial-session', 'initial-conversation', true, 'responses']),
     requireOpaqueState: true
   }])
   const assistant = state.messages.value.find(message => message.info.role === 'assistant')
@@ -623,6 +957,56 @@ test('tool requests retain the clicked model and effort across asynchronous sett
   ])
   assert.equal(state.isGenerating.value, false)
   assert.equal(state.abortController.value, null)
+})
+
+test('a new conversation sends only its own user request and clears opaque processor context', async () => {
+  const fixture = await loadToolSendFixture(undefined, { conversations: true })
+  await fixture.loadConversationHistory()
+  await fixture.send('OLD_CONVERSATION_PRIVATE_REQUEST')
+  const firstId = fixture.state.activeConversationId.value
+  assert.equal(fixture.state.remembered.length, 1)
+  await fixture.changeConversation()
+  assert.notEqual(fixture.state.activeConversationId.value, firstId)
+  await fixture.send('NEW_CONVERSATION_REQUEST')
+  assert.equal(fixture.state.configs.length, 2)
+  assert.doesNotMatch(JSON.stringify(fixture.state.configs[1].messages), /OLD_CONVERSATION_PRIVATE_REQUEST|fixture-encrypted-state|encrypted_content/)
+  assert.match(JSON.stringify(fixture.state.configs[1].messages), /NEW_CONVERSATION_REQUEST/)
+  assert.notEqual(fixture.state.historyReads[0].scope, fixture.state.historyReads[1].scope)
+})
+
+test('conversation actions stay locked until the completed request finishes saving history', async context => {
+  context.mock.method(Date, 'now', () => 1793534687000)
+  const waiting = Promise.withResolvers<RequestSettings>()
+  const saving = Promise.withResolvers<void>()
+  let waitForSave = false
+  const settings = { aiProviders: [{ id: 'initial-provider', apiKey: 'initial-key' }] }
+  const fixture = await loadToolSendFixture(async () => {
+    if (waitForSave) { saving.resolve(); return waiting.promise }
+    return settings
+  }, { conversations: true })
+  await fixture.loadConversationHistory()
+  const id = fixture.state.activeConversationId.value
+  fixture.hooks.process = async config => {
+    config.onEvent?.({ type: 'text-delta', delta: 'completed answer' })
+    config.onEvent?.({ type: 'done', finish: 'stop' })
+    waitForSave = true
+    return { finish: 'stop', messages: [...config.messages, { role: 'assistant', content: 'completed answer' }] }
+  }
+  const pending = fixture.send('request that finishes before disk history')
+  await saving.promise
+  assert.equal(fixture.state.isGenerating.value, false)
+  assert.equal(fixture.state.requestSettling.value, true)
+  await fixture.changeConversation()
+  assert.equal(fixture.state.activeConversationId.value, id)
+  assert.deepEqual(fixture.state.messages.value.map(message => message.info.role), ['user', 'assistant'])
+  assert.equal(new Set(fixture.state.messages.value.map(message => message.info.id)).size, 2, 'a same-millisecond reply must not replace the user request')
+  assert.match(JSON.stringify(fixture.state.messages.value), /request that finishes before disk history/)
+  waitForSave = false
+  waiting.resolve(settings)
+  await pending
+  assert.equal(fixture.state.requestSettling.value, false)
+  await fixture.changeConversation()
+  assert.notEqual(fixture.state.activeConversationId.value, id)
 })
 
 test('the real send handler preserves a long user request on initial, same-model and switched-model sends', async context => {
@@ -967,7 +1351,7 @@ test('chat input stays editable while generation is in progress', async () => {
   const input = source.match(/<textarea\b[\s\S]*?>/)
   assert.ok(input, 'the draft input must remain available')
   assert.doesNotMatch(input[0], /:disabled="isGenerating"/)
-  assert.match(source, /if \(!inputMessage\.value\.trim\(\) \|\| isGenerating\.value\) return/)
+  assert.match(source, /if \(!inputMessage\.value\.trim\(\) \|\| isGenerating\.value \|\| requestSettling\.value \|\| conversationBusy\.value\) return/)
 })
 
 test('chat stop button shows stopping state and aborted tools render as cancelled', async () => {

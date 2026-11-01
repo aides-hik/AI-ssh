@@ -1,6 +1,10 @@
 /* Prism chrome. Terminal output, code and model branding keep their own semantics. */
 :root {
-  --prism-font: 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --prism-font: 'ChillRoundM', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --bs-font-sans-serif: var(--prism-font);
+  --bs-body-font-family: var(--prism-font);
+  --font-sans: var(--prism-font);
+  --default-font-family: var(--prism-font);
   --prism-surface: var(--liquid-panel);
   --prism-surface-raised: var(--liquid-panel-solid);
   --prism-surface-floating: color-mix(in srgb, var(--liquid-panel-solid) 88%, transparent);

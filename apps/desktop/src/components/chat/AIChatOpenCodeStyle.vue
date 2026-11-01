@@ -6,7 +6,8 @@ import { createMarkdownRenderCache } from '@/utils/markdown-render-cache'
 import { renderChatMarkdown } from '@/utils/chat-markdown'
 
 import { settingsService } from '@/services/settings.service'
-import { ChatHistoryStore, type HistorySettings } from '@/services/chat-history'
+import { ChatHistoryStore, type ConversationSummary, type HistorySettings } from '@/services/chat-history'
+import ConversationHistory from './ConversationHistory.vue'
 import { sshService, type SSHConnection } from '@/services/ssh.service'
 import { docStorageService } from '@/services/doc-storage.service'
 import { Message as V2Message, createAssistantMessage, type ToolPart, type TextPart } from '@/services/messages/message'
@@ -70,7 +71,12 @@ const ui = computed(() => locale.value.startsWith('zh') ? {
   details: '展开或收起过程', model: '选择模型',
   sendHint: '发送', newlineHint: '换行', environment: '环境文档',
   connectionHint: '连接主机后，AI 可以协助处理当前终端的问题。',
-  modelHint: '先配置模型服务，再开始对话。'
+  modelHint: '先配置模型服务，再开始对话。',
+  newConversation: '新建对话', history: '历史对话', currentConversation: '当前对话',
+  waitToSwitch: '请先停止当前请求，再新建或切换对话。',
+  historyLoadFailed: '无法读取历史对话，请重新打开历史对话重试。',
+  historySaveFailed: '未能保存对话，请检查本地存储空间后重试。',
+  historyChangeFailed: '未能更新历史对话，当前内容已保留。'
 } : {
   configure: 'Configure model',
   emptyTitle: 'Start with a question', emptyText: 'Troubleshoot an error, explain a command, or plan your next step.',
@@ -83,7 +89,12 @@ const ui = computed(() => locale.value.startsWith('zh') ? {
   details: 'Toggle process details', model: 'Choose model',
   sendHint: 'send', newlineHint: 'new line', environment: 'Environment',
   connectionHint: 'Connect a host so AI can help with this terminal.',
-  modelHint: 'Configure a model service to start chatting.'
+  modelHint: 'Configure a model service to start chatting.',
+  newConversation: 'New conversation', history: 'Conversation history', currentConversation: 'Current conversation',
+  waitToSwitch: 'Stop the current request before creating or switching conversations.',
+  historyLoadFailed: 'Could not load history. Open conversation history again to retry.',
+  historySaveFailed: 'Could not save this conversation. Check local storage space and retry.',
+  historyChangeFailed: 'Could not update history. Your current conversation is still here.'
 })
 const quickPrompts = computed(() => locale.value.startsWith('zh') ? [
   { icon: 'bi-activity', title: '检查主机状态', prompt: effectiveHostIds.value.length > 1 ? '请并行检查所有选中服务器的 CPU、内存、磁盘和运行中的服务，按服务器汇总只读检查结果并比较异常。' : '请检查当前主机的 CPU、内存、磁盘和运行中的服务，先给出只读检查结果。' },
@@ -189,41 +200,241 @@ const activeAssistantId = ref<string | null>(null)
 const isStopping = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
 const messages = ref<V2Message[]>([])
+const conversations = ref<ConversationSummary[]>([])
+const activeConversationId = ref('')
+const historyEnabled = ref(true)
+const historyReady = ref(false)
+const conversationBusy = ref(false)
+const requestSettling = ref(false)
+const historyOpen = ref(false)
+const historyError = ref('')
+const historyTrigger = ref<HTMLButtonElement | null>(null)
+const historyArea = ref<HTMLElement | null>(null)
+const historyPanelId = `conversation-history-${useId()}`
+const conversationDrafts = new Map<string, string>()
+const conversationLocked = computed(() => isGenerating.value || requestSettling.value || conversationBusy.value || !historyReady.value)
+const conversationTitle = computed(() => conversations.value.find(item => item.id === activeConversationId.value)?.title || ui.value.newConversation)
 let historySettings: HistorySettings = {}
 let loadedHistoryId = ''
 let historyLoading: Promise<void> | undefined
 async function loadConversationHistory() {
   const connectionId = props.connectionId
   const historyId = props.historyId
+  const previousScope = loadedHistoryId
+  const previousConversation = activeConversationId.value
+  let failed = false
+  historyReady.value = false
   const pending = (historyLoading || Promise.resolve()).catch(() => {}).then(async () => {
     const settings = await settingsService.getSettings()
-    historySettings = settings.aiAssistant || {}
     const connection = historyId ? null : (await sshService.getConnections()).find(item => item.id === connectionId)
     if (connectionId !== props.connectionId || historyId !== props.historyId) return
+    if (loadedHistoryId === previousScope && activeConversationId.value !== previousConversation) return
     const config = connection?.config
     const id = historyId || config?.id || (config ? JSON.stringify([config.host, config.port, config.username]) : '')
+    if (loadedHistoryId && id !== loadedHistoryId && (isGenerating.value || requestSettling.value)) return
+    if (id !== loadedHistoryId && loadedHistoryId) {
+      await saveConversationHistory()
+      if (connectionId !== props.connectionId || historyId !== props.historyId) return
+      rememberConversationDraft()
+    }
+    historySettings = settings.aiAssistant || {}
+    historyEnabled.value = historySettings.enableChatHistory !== false
     const store = new ChatHistoryStore(localStorage)
     store.applySettings(historySettings)
+    historyError.value = ''
     if (id !== loadedHistoryId) {
-      // A runtime reconnect of the same saved connection keeps this conversation.
-      messages.value = store.load(id, historySettings)
-      processorHistory.clear()
       loadedHistoryId = id
+      const selected = historyEnabled.value ? store.getActive(id, historySettings) || store.create(id, historySettings) : null
+      activeConversationId.value = selected?.id || ''
+      resetConversationView(selected ? store.load(id, historySettings, selected.id) : [])
+    } else if (historyEnabled.value && id && !activeConversationId.value) {
+      const selected = store.getActive(id, historySettings) || store.create(id, historySettings)
+      activeConversationId.value = selected?.id || ''
+      if (selected && messages.value.length && !store.save(id, messages.value, historySettings, selected.id)) historyError.value = ui.value.historySaveFailed
+    } else if (!historyEnabled.value) {
+      activeConversationId.value = ''
     }
+    conversations.value = store.list(id, historySettings)
+    if (historyEnabled.value && id && !activeConversationId.value) historyError.value = ui.value.historySaveFailed
+  }).catch(cause => {
+    failed = true
+    historyError.value = ui.value.historyLoadFailed
+    throw cause
   })
   historyLoading = pending
-  return pending.finally(() => { if (historyLoading === pending) historyLoading = undefined })
+  return pending.finally(() => {
+    if (historyLoading === pending) { historyLoading = undefined; historyReady.value = !failed }
+  })
 }
 async function saveConversationHistory() {
   const id = loadedHistoryId
+  const conversationId = activeConversationId.value
   const conversation = messages.value
   try {
     // Read the authoritative setting at save time. A closing tab must not
     // recreate records after another view has just disabled history.
     const settings = await settingsService.getSettings()
-    new ChatHistoryStore(localStorage).save(id, conversation, settings.aiAssistant || {})
+    const preferences = settings.aiAssistant || {}
+    const store = new ChatHistoryStore(localStorage)
+    const enabled = preferences.enableChatHistory !== false
+    const saved = !id || (!enabled
+      ? (store.applySettings(preferences), true)
+      : Boolean(conversationId) && store.save(id, conversation, preferences, conversationId))
+    if (id === loadedHistoryId && conversationId === activeConversationId.value) {
+      historySettings = preferences
+      historyEnabled.value = enabled
+      conversations.value = store.list(id, preferences)
+      if (!enabled) activeConversationId.value = ''
+      historyError.value = saved ? '' : ui.value.historySaveFailed
+    }
+    return saved
   }
-  catch (cause) { console.warn('[AIChat] 保存本地历史失败:', cause) }
+  catch (cause) {
+    if (id === loadedHistoryId && conversationId === activeConversationId.value) historyError.value = ui.value.historySaveFailed
+    console.warn('[AIChat] 保存本地历史失败:', cause)
+    return false
+  }
+}
+
+function rememberConversationDraft() {
+  conversationDrafts.set(JSON.stringify([loadedHistoryId, activeConversationId.value]), inputMessage.value)
+}
+
+function resetConversationView(nextMessages: V2Message[]) {
+  processorHistory.clear()
+  messages.value = nextMessages
+  inputMessage.value = conversationDrafts.get(JSON.stringify([loadedHistoryId, activeConversationId.value])) || ''
+  activeAssistantId.value = null
+  error.value = null
+  currentStage.value = 'idle'
+  currentStatus.value = ''
+  stopRequested.value = false
+  isStopping.value = false
+  interruptionState.value = null
+  pendingDeploymentApproval.value?.resolve(false)
+  pendingDeploymentApproval.value = null
+  multiHostRun?.finish()
+  multiHostRun = null
+  multiHostStates.value = []
+  selectedHostIds.value = null
+  deploymentStatus.value = null
+  deploymentIssue.value = null
+  clearTimeout(executionLogTimer)
+  executionLogTimer = undefined
+  executionLogBuffer.reset([])
+  executionLogs.value = []
+  stopDurationTimer()
+  sessionDuration.value = ''
+  sessionStartTime.value = null
+  sessionStatusExpanded.value = false
+  performanceMetrics.value = { prepMs: null, firstResponseMs: null, totalMs: null, toolCalls: 0, compactionLimit: null, contextCompacted: false }
+  expandedTools.value = new Set()
+  expandedTurns.value = new Set()
+  visibleCount.value = 5
+  isLoadingMore.value = false
+  clearTimeout(copyFeedbackTimer)
+  copiedId.value = null
+  codeCopyFeedback.forEach(timer => clearTimeout(timer))
+  codeCopyFeedback.clear()
+  serverEnvMenuOpen.value = false
+  followLatest.value = true
+  if (scrollFrame) cancelAnimationFrame(scrollFrame)
+  scrollFrame = 0
+  nextTick(() => { resizeInputHeight(); scrollToBottom(true) })
+}
+
+async function changeConversation(conversationId?: string) {
+  if (conversationLocked.value) return
+  const reusableEmpty = !historyEnabled.value || !loadedHistoryId || conversations.value.some(item => item.id === activeConversationId.value)
+  if (conversationId === activeConversationId.value || (!conversationId && reusableEmpty && !messages.value.length && !inputMessage.value.trim())) {
+    closeConversationHistory(false)
+    inputRef.value?.focus()
+    return
+  }
+  conversationBusy.value = true
+  const scope = loadedHistoryId
+  const previous = activeConversationId.value
+  try {
+    if (!await saveConversationHistory()) {
+      // A cleared/deleted record cannot be saved back. Permit an explicit new
+      // selection only after confirming that this is not a storage failure.
+      const settings = await settingsService.getSettings()
+      if (scope !== loadedHistoryId || previous !== activeConversationId.value) return
+      historySettings = settings.aiAssistant || {}
+      historyEnabled.value = historySettings.enableChatHistory !== false
+      const existing = new ChatHistoryStore(localStorage)
+      if (historyEnabled.value && existing.has(scope, previous, historySettings) !== false) return
+      if (!historyEnabled.value) existing.applySettings(historySettings)
+    }
+    if (scope !== loadedHistoryId || (previous && previous !== activeConversationId.value && historyEnabled.value)) return
+    rememberConversationDraft()
+    const store = new ChatHistoryStore(localStorage)
+    if (!historyEnabled.value || !scope) {
+      if (conversationId) return
+      activeConversationId.value = ''
+      conversationDrafts.delete(JSON.stringify([scope, '']))
+      resetConversationView([])
+    } else {
+      const selected = conversationId
+        ? (store.select(scope, conversationId, historySettings) ? store.list(scope, historySettings).find(item => item.id === conversationId) : null)
+        : store.create(scope, historySettings)
+      if (!selected) { historyError.value = ui.value.historyChangeFailed; return }
+      activeConversationId.value = selected.id
+      resetConversationView(store.load(scope, historySettings, selected.id))
+      conversations.value = store.list(scope, historySettings)
+    }
+    historyError.value = ''
+    closeConversationHistory(false)
+    await nextTick()
+    inputRef.value?.focus()
+  } catch (cause) {
+    historyError.value = ui.value.historyChangeFailed
+    console.warn('[AIChat] 切换对话失败:', cause)
+  } finally { conversationBusy.value = false }
+}
+
+async function deleteConversation(conversationId: string) {
+  if (conversationLocked.value) return
+  conversationBusy.value = true
+  const scope = loadedHistoryId
+  try {
+    const settings = await settingsService.getSettings()
+    if (scope !== loadedHistoryId) return
+    historySettings = settings.aiAssistant || {}
+    historyEnabled.value = historySettings.enableChatHistory !== false
+    const store = new ChatHistoryStore(localStorage)
+    if (!store.delete(scope, conversationId, historySettings)) {
+      historyError.value = historyEnabled.value ? ui.value.historyChangeFailed : ''
+      conversations.value = store.list(scope, historySettings)
+      return
+    }
+    conversationDrafts.delete(JSON.stringify([scope, conversationId]))
+    if (conversationId === activeConversationId.value) {
+      const selected = store.getActive(scope, historySettings) || store.create(scope, historySettings)
+      activeConversationId.value = selected?.id || ''
+      resetConversationView(selected ? store.load(scope, historySettings, selected.id) : [])
+    }
+    conversations.value = store.list(scope, historySettings)
+    historyError.value = ''
+  } catch (cause) {
+    historyError.value = ui.value.historyChangeFailed
+    console.warn('[AIChat] 删除对话失败:', cause)
+  } finally { conversationBusy.value = false }
+}
+
+function closeConversationHistory(restoreFocus = true) {
+  historyOpen.value = false
+  if (restoreFocus) historyTrigger.value?.focus({ preventScroll: true })
+}
+
+function toggleConversationHistory() {
+  if (historyOpen.value) { closeConversationHistory(); return }
+  historyOpen.value = true
+  if (isGenerating.value || requestSettling.value) {
+    conversations.value = new ChatHistoryStore(localStorage).list(loadedHistoryId, historySettings)
+    return
+  }
+  void loadConversationHistory().catch(cause => console.warn('[AIChat] 读取本地历史失败:', cause))
 }
 const processorHistory = new ProcessorHistory()
 const error = ref<any>(null)
@@ -744,6 +955,7 @@ async function sendMessageWithTools(content: string) {
   const requestEnvDocId = requestConnectionId === props.connectionId ? props.serverEnvDocId : requestConnectionId
 
   isGenerating.value = true
+  requestSettling.value = true
   error.value = null
   abortController.value = new AbortController()
   const requestSignal = abortController.value.signal
@@ -855,7 +1067,7 @@ async function sendMessageWithTools(content: string) {
       },
       ...processorHistory.toModelMessages(
         compactedMessages,
-        JSON.stringify([requestProvider.id, requestProvider.endpoint, requestModel.id, requestTargets.map(target => target.id).sort(), requestSessionId,
+        JSON.stringify([requestProvider.id, requestProvider.endpoint, requestModel.id, requestTargets.map(target => target.id).sort(), requestSessionId, activeConversationId.value,
           requestModel.capabilities.functionCall, getModelAPIStyle(requestProvider, requestModel)]),
         true // Missing or interrupted tool state is summarized instead of replaying incomplete calls.
       )
@@ -903,7 +1115,7 @@ async function sendMessageWithTools(content: string) {
               }
               if (!currentMsg) {
                 currentMsg = createAssistantMessage(
-                  `msg_${Date.now()}`,
+                  `msg_${crypto.randomUUID()}`,
                   userMsg.info.id,
                   requestSessionId,
                   'ssh-agent'
@@ -952,7 +1164,7 @@ async function sendMessageWithTools(content: string) {
               }, 2500)
               if (!currentMsg) {
                 currentMsg = createAssistantMessage(
-                  `msg_${Date.now()}`,
+                  `msg_${crypto.randomUUID()}`,
                   userMsg.info.id,
                   requestSessionId,
                   'ssh-agent'
@@ -1187,7 +1399,6 @@ async function sendMessageWithTools(content: string) {
       messages.value = [...messages.value]
     }
     isGenerating.value = false
-    if (props.historyId && loadedHistoryId !== props.historyId) void loadConversationHistory()
     isStopping.value = false
     stopDurationTimer()
     abortController.value = null
@@ -1200,7 +1411,13 @@ async function sendMessageWithTools(content: string) {
       logPerformanceSummary('aborted')
       performanceLogged = true
     }
-    await saveConversationHistory()
+    try { await saveConversationHistory() }
+    finally {
+      requestSettling.value = false
+      if (props.historyId && loadedHistoryId !== props.historyId) {
+        void loadConversationHistory().catch(cause => console.warn('[AIChat] 读取本地历史失败:', cause))
+      }
+    }
   }
 }
 
@@ -1454,7 +1671,7 @@ function buildSystemPrompt(
 }
 
 async function handleSendMessage() {
-  if (!inputMessage.value.trim() || isGenerating.value) return
+  if (!inputMessage.value.trim() || isGenerating.value || requestSettling.value || conversationBusy.value) return
   activeAssistantId.value = null
 
   if (!props.currentProvider || !props.currentModel || !props.connectionId) {
@@ -1558,6 +1775,7 @@ function handleStop() {
 }
 
 function handlePointerDownOutsideMenu(event: PointerEvent) {
+  if (historyOpen.value && event.target && !historyArea.value?.contains(event.target as Node)) closeConversationHistory(false)
   if (!serverEnvMenuOpen.value) return
 
   const target = event.target as Node | null
@@ -2033,6 +2251,29 @@ function toolOutputForDisplay(part: ToolPart): string {
     class="oc-chat"
     :class="{ generating: isGenerating }"
   >
+    <div ref="historyArea" class="oc-conversation-toolbar">
+      <div class="oc-conversation-heading" :title="conversationTitle">
+        <i class="bi bi-chat-left-text" aria-hidden="true"></i>
+        <span>{{ conversationTitle }}</span>
+      </div>
+      <div class="oc-conversation-actions">
+        <button ref="historyTrigger" type="button" class="oc-conversation-action" :aria-label="ui.history"
+          :aria-expanded="historyOpen" :aria-controls="historyPanelId" aria-haspopup="dialog"
+          :title="ui.history" @click="toggleConversationHistory">
+          <i class="bi bi-clock-history" aria-hidden="true"></i><span>{{ ui.history }}</span>
+        </button>
+        <button type="button" class="oc-conversation-action" :disabled="conversationLocked"
+          :aria-label="ui.newConversation" :title="isGenerating || requestSettling ? ui.waitToSwitch : ui.newConversation"
+          @click="changeConversation()">
+          <i class="bi bi-plus-lg" aria-hidden="true"></i><span>{{ ui.newConversation }}</span>
+        </button>
+      </div>
+      <ConversationHistory v-if="historyOpen" :id="historyPanelId" :conversations="conversations"
+        :active-id="activeConversationId" :busy="isGenerating || requestSettling || conversationBusy" :loading="!historyReady"
+        :enabled="historyEnabled" :error="historyError"
+        @select="changeConversation" @delete="deleteConversation" @close="closeConversationHistory()" />
+    </div>
+    <p v-if="historyError && !historyOpen" class="oc-history-error" role="status">{{ historyError }}</p>
     <div class="oc-conversation">
     <div ref="messagesContainer" class="oc-messages" :class="{ 'is-empty': displayMessages.length === 0 }" @scroll.passive="handleMessagesScroll" @click="handleCodeCopy" tabindex="0" :aria-label="locale.startsWith('zh') ? '对话记录' : 'Conversation'">
       <div v-if="displayMessages.length === 0" class="oc-empty">
@@ -2853,7 +3094,7 @@ function toolOutputForDisplay(part: ToolPart): string {
             v-if="!isGenerating"
             class="oc-send-button"
             type="button"
-            :disabled="!inputMessage.trim()"
+            :disabled="!inputMessage.trim() || requestSettling || conversationBusy"
             :data-prism-tooltip="ui.send"
             :aria-label="ui.send"
             @click="handleSendMessage"

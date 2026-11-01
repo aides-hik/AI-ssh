@@ -8,6 +8,8 @@ directories:
 extraResources:
   - from: resources/icons/prism.png
     to: icons/prism.png
+  - from: src/assets/fonts/ChillRound-OFL.txt
+    to: licenses/ChillRound-OFL.txt
 files:
   - dist/**/*
   - dist-electron/**/*
