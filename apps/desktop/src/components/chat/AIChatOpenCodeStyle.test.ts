@@ -7,9 +7,10 @@ import ts from 'typescript'
 import type { AIModel, AIProvider } from '../../types/ai-providers.types'
 import { SessionProcessor, type ProcessorConfig, type ProcessorResult } from '../../services/processor'
 import { createAssistantMessage, createUserMessage, type Message } from '../../services/messages/message'
-import { compactMessages, filterCompactedMessages, filterValidMessages, fromUserMessage, type ModelMessage } from '../../services/messages/convert'
+import { compactMessages, filterCompactedMessages, filterValidMessages, fromUserMessage, updateToolResult, type ModelMessage } from '../../services/messages/convert'
 import { ProcessorHistory } from '../../services/messages/processor-history'
 import { getReasoningCapability, type ReasoningSelection } from '../../utils/model-reasoning'
+import { getModelAPIStyle } from '../../utils/model-capabilities'
 import { MultiHostRun, buildMultiHostPrompt, type HostTarget } from '../../services/multi-host-run'
 import { ExecutionLogBuffer, type HostExecutionLog } from '../../services/execution-log'
 import type { FrozenDeploymentStage } from '../../services/multi-host-deployment'
@@ -516,7 +517,7 @@ async function loadToolSendFixture(getSettings?: () => Promise<RequestSettings>,
     'sendMessageWithTools', 'handleStop', 'appendAssistantTextBlock', 'markLastAssistantTextBlockAsSummary',
     'requestDeploymentApproval', 'queueExecutionLog', 'flushExecutionLogs'
   ], {
-    ...state, getReasoningCapability, createAssistantMessage, fromUserMessage,
+    ...state, getReasoningCapability, getModelAPIStyle, createAssistantMessage, fromUserMessage, updateToolResult,
     filterValidMessages, filterCompactedMessages, compactMessages,
     settingsService: {
       getSettings: getSettings || (async () => ({ aiProviders: [{ id: provider.id, apiKey: 'initial-key' }] }))
@@ -555,7 +556,8 @@ async function loadToolSendFixture(getSettings?: () => Promise<RequestSettings>,
     nextTick: async () => {}, scrollToBottom() {}, startDurationTimer() {}, stopDurationTimer() {},
     refreshSessionContext: async () => {}, getAdaptiveCompactionLimit: () => 20,
     loadConversationHistory: async () => {}, saveConversationHistory() {},
-    buildSystemPrompt: () => 'Fixture system prompt', updateStatus() {}, logPerformanceSummary() {},
+    buildSystemPrompt: () => 'Fixture system prompt', summarizeServerEnvDoc: () => 'Fixture environment documentation',
+    getStatusDescription: () => 'Executing fixture tool', updateStatus() {}, logPerformanceSummary() {},
     captureInterruptionState() {}, normalizeUserErrorMessage: (message: string) => message,
     setStatus: (stage: string) => { state.currentStage.value = stage }, console: { error() {} }
   })
@@ -567,12 +569,18 @@ test('tool requests retain the clicked model and effort across asynchronous sett
   const { state, history, send } = await loadToolSendFixture(() => settings.promise)
   const initialProvider = state.props.currentProvider
   const initialModel = state.props.currentModel
+  initialProvider.config = { temperature: 0.2 }
+  initialModel.requestConfig = { maxTokens: 300 }
+  initialModel.parameters = { maxOutputTokens: 800 }
   const pending = send('Initial request')
   assert.equal(state.isGenerating.value, true)
   assert.equal(state.configs.length, 0, 'settings preparation must still be pending')
 
   initialProvider.endpoint = 'https://mutated.invalid/v1'
   initialModel.capabilities.functionCall = false
+  initialProvider.config.temperature = 0.9
+  initialModel.requestConfig.maxTokens = 600
+  initialModel.parameters.maxOutputTokens = 1600
   assert(initialModel.reasoning)
   initialModel.reasoning.supportedEfforts?.splice(0, 2, 'none')
   state.props.currentProvider = { ...initialProvider, id: 'different-provider', endpoint: 'https://different.invalid/v1' }
@@ -593,12 +601,15 @@ test('tool requests retain the clicked model and effort across asynchronous sett
   assert.equal(config.provider.apiKey, 'initial-key')
   assert.equal(config.model.id, 'gpt-6-astra')
   assert.equal(config.model.capabilities.functionCall, true)
+  assert.equal(config.provider.config?.temperature, 0.2)
+  assert.equal(config.model.requestConfig?.maxTokens, 300)
+  assert.equal(config.model.parameters?.maxOutputTokens, 800)
   assert.deepEqual(config.model.reasoning && config.model.reasoning.supportedEfforts, ['low', 'high'])
   assert.equal(config.reasoning, 'high')
   assert.equal(config.connectionId, 'initial-ssh')
   assert.equal(config.serverEnvDocId, 'initial-env')
   assert.deepEqual(state.historyReads, [{
-    scope: JSON.stringify(['initial-provider', 'https://initial.invalid/v1', 'gpt-6-astra', ['initial-ssh'], 'initial-session']),
+    scope: JSON.stringify(['initial-provider', 'https://initial.invalid/v1', 'gpt-6-astra', ['initial-ssh'], 'initial-session', true, 'responses']),
     requireOpaqueState: true
   }])
   const assistant = state.messages.value.find(message => message.info.role === 'assistant')
@@ -635,6 +646,85 @@ test('the real send handler preserves a long user request on initial, same-model
   assert.doesNotMatch(JSON.stringify(state.configs[2].messages), /fixture-encrypted-state|encrypted_content|responseItems/, 'switching models drops provider state without dropping user instructions')
   assert.deepEqual(state.messages.value.find(message => message.info.role === 'user')?.parts, [{ type: 'text', text: content }])
   assert.doesNotMatch(JSON.stringify(state.messages.value), /fixture-encrypted-state|encrypted_content|responseItems/)
+})
+
+test('a model without tool capability gets an explanatory prompt without executable tool instructions', async () => {
+  const { state, send } = await loadToolSendFixture()
+  state.props.currentModel.capabilities.functionCall = false
+  await send('检查服务器 CPU')
+  const policy = state.configs[0].messages[0].content || ''
+  assert.match(policy, /Tool calling is disabled/)
+  assert.match(policy, /Do not emit tool markup or claim to have inspected/)
+  assert.match(policy, /Fixture environment documentation/)
+  assert.doesNotMatch(policy, /multi_host_targets|inspect_server|structured tool calls/)
+})
+
+test('reused provider call IDs keep separate UI tool results across real processor rounds', async context => {
+  let requests = 0
+  let timestamp = Date.now()
+  context.mock.method(Date, 'now', () => ++timestamp)
+  const bodies: Array<{ tools?: unknown[]; messages: ModelMessage[] }> = []
+  context.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+    bodies.push(JSON.parse(String(init.body)))
+    requests++
+    const response = requests < 3 || requests === 4
+      ? { choices: [{ delta: { tool_calls: [{ index: 0, id: 'reused_id', type: 'function', function: {
+          name: 'inspect_server', arguments: JSON.stringify({ targetId: 'initial-ssh', checks: [requests === 1 ? 'cpu' : 'memory'] })
+        } }] }, finish_reason: 'tool_calls' }] }
+      : { choices: [{ delta: { content: 'Both inspections completed' }, finish_reason: 'stop' }] }
+    return new Response(`data: ${JSON.stringify(response)}\n\n`)
+  })
+  const { state, hooks, send } = await loadToolSendFixture()
+  state.props.currentModel = { ...state.props.currentModel, id: 'fixture-chat-model', reasoning: undefined }
+  hooks.process = config => new SessionProcessor(config).process()
+  await send('检查 CPU 和内存')
+  const parts = state.messages.value.flatMap(message => message.parts).filter(part => part.type === 'tool')
+  assert.equal(state.toolExecutions.length, 2)
+  assert.equal(parts.length, 2)
+  assert.equal(new Set(parts.map(part => part.callID)).size, 2)
+  assert.deepEqual(parts.map(part => part.state.input?.checks), [['cpu'], ['memory']])
+  assert.deepEqual(parts.map(part => part.state.status), ['completed', 'completed'])
+  assert.deepEqual(state.remembered[0].messages.filter(message => message.role === 'tool').map(message => message.tool_call_id), ['reused_id', 'reused_id'])
+  await send('再次读取内存')
+  const allParts = state.messages.value.flatMap(message => message.parts).filter(part => part.type === 'tool')
+  assert.equal(allParts.length, 3)
+  assert.equal(new Set(allParts.map(part => part.callID)).size, 3, 'new user requests also need independent expansion and result identities')
+  state.props.currentModel.capabilities.functionCall = false
+  await send('解释刚才的观察结果')
+  const disabled = bodies.at(-1)!
+  assert.equal(disabled.tools, undefined)
+  assert.equal(disabled.messages.some(message => message.role === 'tool' || message.tool_calls?.length || message.responseItems?.length), false)
+  assert.match(JSON.stringify(disabled.messages), /cpu/)
+  assert.match(JSON.stringify(disabled.messages), /memory/)
+})
+
+for (const failure of [
+  { error: 'The inspect_server tool was called with invalid arguments', status: 'error' },
+  { error: 'Command aborted', status: 'stopped' }
+]) {
+  test(`an ordinary tool ${failure.status} cannot become success when the model ends its response`, async () => {
+    const { state, hooks, send } = await loadToolSendFixture()
+    hooks.process = async config => {
+      config.onEvent?.({ type: 'tool-call', toolCallId: 'failed_call', toolName: 'inspect_server', input: { targetId: 'initial-ssh' } })
+      config.onEvent?.({ type: 'tool-error', toolCallId: 'failed_call', error: failure.error })
+      config.onEvent?.({ type: 'done', finish: 'stop' })
+      return { finish: 'stop', messages: config.messages }
+    }
+    await send('检查服务器')
+    assert.equal(state.currentStage.value, failure.status)
+    const part = state.messages.value.flatMap(message => message.parts).find(part => part.type === 'tool')
+    assert.equal(part?.state.status, failure.status === 'stopped' ? 'aborted' : 'error')
+  })
+}
+
+test('cancelled historical tool steps stay cancelled after switching to another reply', async () => {
+  const { messageStatus } = await loadComponentFunctions(['messageStatus'], {
+    activeAssistantId: { value: 'another-reply' }, ui: { value: statusLabels }
+  })
+  assert.deepEqual(messageStatus({
+    id: 'historical', role: 'assistant', finish: 'stop',
+    blocks: [{ type: 'tool', toolPart: { state: { status: 'aborted' } } }]
+  }), { label: 'Stopped', kind: 'muted' })
 })
 
 test('the real send compaction path carries old user constraints and its summary through the actual model request', async context => {
@@ -794,21 +884,55 @@ test('stopping clears the controller ref while the processor and tools retain th
     assert(signal)
     assert.equal(signal, state.abortController.value?.signal)
     config.onEvent?.({ type: 'text-delta', delta: 'Partial answer' })
+    await config.onToolExecute?.('fixture-tool', { synthetic: true })
     stop()
     assert.equal(state.abortController.value, null)
     assert.equal(signal.aborted, true)
-    await config.onToolExecute?.('fixture-tool', { synthetic: true })
+    await assert.rejects(config.onToolExecute!('fixture-tool', { late: true }), { name: 'AbortError' })
     assert.equal(state.toolExecutions.length, 1)
     assert.equal(state.toolExecutions[0].abort, signal)
     assert.equal(state.toolExecutions[0].abort.aborted, true)
     assert.equal(state.toolExecutions[0].sessionID, 'initial-session')
     assert.deepEqual(state.toolExecutions[0].extra, { connectionId: 'initial-ssh', serverEnvDocId: 'initial-env' })
     config.onEvent?.({ type: 'done', finish: 'stop' })
+    config.onEvent?.({ type: 'text-delta', delta: 'Late answer after stop' })
     return { finish: 'stop', messages: [...config.messages, { role: 'assistant', content: 'Late result after stop' }] }
   }
   await send('Request that is stopped')
   assert.equal(state.remembered.length, 0, 'a late resolving processor must not retain an aborted turn')
   assert.equal(state.error.value, null)
+  assert.equal(state.isGenerating.value, false)
+  assert.equal(state.isStopping.value, false)
+  assert.equal(state.currentStage.value, 'stopped')
+  assert.doesNotMatch(JSON.stringify(state.messages.value), /Late answer after stop/)
+})
+
+test('stopping from approval aborts the real request signal and dismisses the unresolved stage without executing', async () => {
+  const source = await readFile(chatViewPath, 'utf8')
+  assert.match(source, /<DeploymentApproval\b[^>]*@stop="handleStop"/s)
+  const { state, hooks, send, stop } = await loadToolSendFixture()
+  hooks.process = async config => {
+    const signal = config.abortSignal
+    assert.ok(signal)
+    const approval = state.toolRegistrations[0].options.approveDeployment
+    assert.ok(approval)
+    const pending = approval({
+      name: 'Awaiting approval', kind: 'command', strategy: 'rolling',
+      steps: [{ targetId: 'initial-ssh', label: 'Print marker', command: "printf '%s\\n' 'must-not-run'" }]
+    }, signal)
+    assert.ok(state.pendingDeploymentApproval.value)
+    stop()
+    assert.equal(signal.aborted, true)
+    assert.equal(state.pendingDeploymentApproval.value, null)
+    assert.equal(await pending, false)
+    await assert.rejects(config.onToolExecute!('fixture-tool', {}), { name: 'AbortError' })
+    signal.throwIfAborted()
+    return { finish: 'stop' }
+  }
+  await send('Wait for approval, then stop the request')
+  assert.equal(state.currentStage.value, 'stopped')
+  assert.equal(state.toolExecutions.length, 0)
+  assert.equal(state.remembered.length, 0)
   assert.equal(state.isGenerating.value, false)
   assert.equal(state.isStopping.value, false)
 })

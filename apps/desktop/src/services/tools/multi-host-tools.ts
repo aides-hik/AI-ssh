@@ -46,6 +46,25 @@ function deploymentOutput(result: SSHCommandResult, budget: number): SSHCommandR
     truncated: result.truncated === true || output !== result.output || stderr !== result.stderr || error !== result.error }
 }
 
+/** Stop waiting even when a dismissed approval callback never settles. */
+function waitForReadApproval(pending: Promise<boolean>, signal: AbortSignal): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const stop = () => {
+      signal.removeEventListener('abort', stop)
+      reject(signal.reason)
+    }
+    pending.then(value => {
+      signal.removeEventListener('abort', stop)
+      resolve(value)
+    }, error => {
+      signal.removeEventListener('abort', stop)
+      reject(error)
+    })
+    if (signal.aborted) stop()
+    else signal.addEventListener('abort', stop, { once: true })
+  })
+}
+
 const inspections = {
   system: 'uname -a',
   cpu: 'uptime && getconf _NPROCESSORS_ONLN',
@@ -171,15 +190,19 @@ export function createMultiHostTools(run: MultiHostRun, options: MultiHostToolOp
       // Independent hosts may request reads together; present each review in order.
       const pending = readApprovalQueue.then(async () => {
         signal.throwIfAborted()
-        return approve(stage, signal)
+        return waitForReadApproval(approve(stage, signal), signal)
       })
       readApprovalQueue = pending.catch(() => {})
-      if (!await pending) throw new Error('用户未批准只读检查，未读取远程信息')
+      if (await waitForReadApproval(pending, signal) !== true) throw new Error('用户未批准只读检查，未读取远程信息')
     }
     signal.throwIfAborted()
+    // The user can leave approval open while the selected connection disconnects.
+    await assertLive(id, signal)
     phase({ targetId: id, phase: 'inspecting', label: '读取服务器状态', stageName: '只读检查' })
     const result = await executeSSHCommand(id, script, signal, { onOutput: output(id) })
-    if (!result.success) throw new Error(`${result.error || '巡检失败'}${result.output ? `\n${result.output.slice(0, 12000)}` : ''}`)
+    if (!result.success || result.exitCode !== 0 || result.signal) {
+      throw new Error(`${result.error || (result.exitCode == null ? '巡检未返回退出状态，无法确认成功' : '巡检失败')}${result.output ? `\n${result.output.slice(0, 12000)}` : ''}`)
+    }
     const bytes = new TextEncoder().encode(result.output)
     const limit = Math.min(24000, readLimit === undefined ? 24000 : readLimit - 1)
     let end = Math.min(bytes.length, limit)

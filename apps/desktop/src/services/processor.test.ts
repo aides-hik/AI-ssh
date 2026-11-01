@@ -53,6 +53,8 @@ test('all tool rounds keep the model, provider and reasoning selected when the t
     onToolExecute: async () => {
       config.reasoning = 'low'
       config.model.id = 'gpt-4.1'
+      config.model.capabilities.functionCall = false
+      config.tools.splice(0)
       config.provider.endpoint = 'https://changed.invalid/v1'
       return { output: 'fixture contents' }
     }
@@ -64,6 +66,7 @@ test('all tool rounds keep the model, provider and reasoning selected when the t
     assert.equal(request.body.model, 'gpt-5')
     assert.equal(request.body.reasoning_effort, 'high')
     assert.equal(request.body.temperature, undefined)
+    assert.ok(Array.isArray(request.body.tools) && request.body.tools.length === 1)
   }
 })
 
@@ -287,4 +290,252 @@ test('reasoning text aliases remain internal when no structured reasoning detail
   assert.equal(messages[1].reasoning_content, 'private alias')
   assert.equal(messages[1].reasoning_details, undefined)
   assert.deepEqual(visible, ['done'])
+})
+
+const screenshotDSML = '我再次发起只读检查。\n\n<｜DSML｜calls><｜DSML｜invoke name="inspect_server"><｜DSML｜parameter name="targetId" string="true">5ab2a802-3361-472a-bcb1-35e4d743ba98</｜DSML｜parameter></｜DSML｜invoke></｜DSML｜calls>'
+const inspectionInput = { targetId: '5ab2a802-3361-472a-bcb1-35e4d743ba98', checks: ['cpu', 'memory', 'disk', 'services'] }
+const inspectionTool = {
+  id: 'inspect_server',
+  init: async () => ({
+    description: 'Inspect selected server using bounded read-only checks',
+    parameters: z.object({
+      targetId: z.literal(inspectionInput.targetId),
+      checks: z.array(z.enum(['cpu', 'memory', 'disk', 'services'])).min(1)
+    }),
+    execute: async () => ({ title: '', metadata: {}, output: 'fixture' })
+  })
+}
+const inspectionCall = (id = 'native_inspection') => ({
+  index: 0, id, type: 'function',
+  function: { name: 'inspect_server', arguments: JSON.stringify(inspectionInput) }
+})
+const rawProtocolResponse = (text = screenshotDSML) => asResponse([
+  ...Array.from(text, character => ({ choices: [{ delta: { content: character } }] })),
+  { choices: [{ delta: {}, finish_reason: 'stop' }] }
+])
+const rawProtocolPattern = /<[/]?[｜|]DSML[｜|]/
+
+test('raw screenshot DSML is repaired once using the original schema and executes only a complete native inspection', async context => {
+  const requests: Array<Record<string, unknown>> = []
+  const visible: string[] = []
+  const executions: Array<{ name: string; input: unknown }> = []
+  context.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+    requests.push(JSON.parse(String(init.body)))
+    if (requests.length === 1) return rawProtocolResponse()
+    if (requests.length === 2) return asResponse([{ choices: [{ delta: { tool_calls: [inspectionCall()] }, finish_reason: 'tool_calls' }] }])
+    return complete()
+  })
+  const processor = new SessionProcessor({
+    provider: provider('deepseek'), model: model('deepseek-v4-pro'), tools: [inspectionTool], maxSteps: 2,
+    messages: [{ role: 'system', content: 'Use read-only tools for inspection.' }, { role: 'user', content: '检查当前主机的 CPU、内存、磁盘和运行中的服务' }],
+    onToolExecute: async (name, input) => {
+      const info = await inspectionTool.init()
+      assert.deepEqual(info.parameters.parse(input), inspectionInput)
+      executions.push({ name, input })
+      return { output: 'All four inspection checks completed' }
+    },
+    onEvent: event => { if (event.type === 'text-delta') visible.push(event.delta) }
+  })
+  const result = await processor.process()
+  assert.equal(result.finish, 'stop')
+  assert.equal(requests.length, 3, 'repair does not consume another tool round or loop indefinitely')
+  assert.deepEqual(executions, [{ name: 'inspect_server', input: inspectionInput }])
+  assert.doesNotMatch(visible.join(''), rawProtocolPattern)
+  assert.doesNotMatch(JSON.stringify(processor.getMessages()), rawProtocolPattern)
+  assert.deepEqual(requests[1].tools, requests[0].tools, 'retry must retain required checks and selected target schema')
+  const firstMessages = requests[0].messages as Array<{ role: string; content: string }>
+  const retryMessages = requests[1].messages as Array<{ role: string; content: string }>
+  for (const message of firstMessages) assert.ok(retryMessages.some(candidate => candidate.role === message.role && candidate.content === message.content))
+  assert.equal(retryMessages.filter(message => message.role === 'system').length, 2, 'one temporary correction accompanies the original policy')
+  assert.ok(retryMessages.filter(message => message.role === 'assistant').every(message => !rawProtocolPattern.test(message.content || '')))
+  const finalMessages = requests[2].messages as Array<{ role: string; tool_calls?: Array<{ id: string }> }>
+  assert.equal(finalMessages.filter(message => message.role === 'system').length, 1, 'repair instruction is not stored in conversation history')
+  assert.deepEqual(finalMessages.find(message => message.tool_calls)?.tool_calls?.map(item => item.id), ['native_inspection'])
+})
+
+test('persistent raw tool markup stops with a Chinese error after one repair and never reports success', async context => {
+  let requests = 0
+  let executions = 0
+  const finishes: string[] = []
+  const visible: string[] = []
+  context.mock.method(globalThis, 'fetch', async () => { requests++; return rawProtocolResponse('<|DSML| calls><|DSML| invoke name="inspect_server">') })
+  const processor = new SessionProcessor({
+    provider: provider('deepseek'), model: model('deepseek-v4-pro'), tools: [inspectionTool],
+    messages: [{ role: 'user', content: 'inspect' }],
+    onToolExecute: async () => { executions++; return { output: 'must not execute' } },
+    onEvent: event => {
+      if (event.type === 'done') finishes.push(event.finish)
+      if (event.type === 'text-delta') visible.push(event.delta)
+    }
+  })
+  await assert.rejects(processor.process(), error => error instanceof Error && /[\u4e00-\u9fff]/.test(error.message) && /工具/.test(error.message))
+  assert.equal(requests, 2)
+  assert.equal(executions, 0)
+  assert.deepEqual(finishes, [])
+  assert.doesNotMatch(visible.join(''), rawProtocolPattern)
+  assert.deepEqual(processor.getMessages(), [{ role: 'user', content: 'inspect' }])
+})
+
+test('a repair response that only claims completion cannot succeed without a native tool call', async context => {
+  let requests = 0
+  let executions = 0
+  const visible: string[] = []
+  const finishes: string[] = []
+  context.mock.method(globalThis, 'fetch', async () => {
+    requests++
+    return requests === 1 ? rawProtocolResponse() : asResponse([
+      { choices: [{ delta: { content: 'CPU、内存、磁盘和服务检查已完成，一切正常。' }, finish_reason: 'stop' }] }
+    ])
+  })
+  const processor = new SessionProcessor({
+    provider: provider(), model: model('fixture'), tools: [inspectionTool],
+    messages: [{ role: 'user', content: 'inspect' }],
+    onToolExecute: async () => { executions++; return { output: 'must not execute' } },
+    onEvent: event => {
+      if (event.type === 'text-delta') visible.push(event.delta)
+      if (event.type === 'done') finishes.push(event.finish)
+    }
+  })
+  await assert.rejects(processor.process(), /工具/)
+  assert.equal(requests, 2)
+  assert.equal(executions, 0)
+  assert.deepEqual(finishes, [])
+  assert.doesNotMatch(visible.join(''), /检查已完成|一切正常/)
+  assert.doesNotMatch(JSON.stringify(processor.getMessages()), /检查已完成|一切正常/)
+})
+
+for (const configuration of ['no-tools', 'tools-disabled'] as const) {
+  test(`raw DSML with ${configuration} fails without retrying or executing`, async context => {
+    let requests = 0
+    let executions = 0
+    const currentModel = model('fixture')
+    if (configuration === 'tools-disabled') currentModel.capabilities.functionCall = false
+    context.mock.method(globalThis, 'fetch', async () => { requests++; return rawProtocolResponse() })
+    const processor = new SessionProcessor({
+      provider: provider(), model: currentModel, tools: configuration === 'no-tools' ? [] : [inspectionTool],
+      messages: [{ role: 'user', content: 'inspect' }],
+      onToolExecute: async () => { executions++; return { output: 'must not execute' } }
+    })
+    await assert.rejects(processor.process(), /工具/)
+    assert.equal(requests, 1)
+    assert.equal(executions, 0)
+  })
+}
+
+test('mixed native and raw calls discard the failed batch before any tool execution', async context => {
+  let requests = 0
+  const executed: string[] = []
+  const emittedCalls: string[] = []
+  context.mock.method(globalThis, 'fetch', async () => {
+    requests++
+    if (requests === 1) return asResponse([
+      { choices: [{ delta: { tool_calls: [inspectionCall('discarded_native')] } }] },
+      { choices: [{ delta: { content: '<｜DSML｜invoke name="inspect_server">' } }] },
+      { choices: [{ delta: {}, finish_reason: 'tool_calls' }] }
+    ])
+    if (requests === 2) return asResponse([{ choices: [{ delta: { tool_calls: [inspectionCall('repaired_native')] }, finish_reason: 'tool_calls' }] }])
+    return complete()
+  })
+  const processor = new SessionProcessor({
+    provider: provider(), model: model('fixture'), tools: [inspectionTool],
+    messages: [{ role: 'user', content: 'inspect' }],
+    onToolExecute: async (_name, _input, id) => { executed.push(id || ''); return { output: 'inspection done' } },
+    onEvent: event => { if (event.type === 'tool-call') emittedCalls.push(event.toolCallId) }
+  })
+  await processor.process()
+  assert.equal(requests, 3)
+  assert.deepEqual(executed, ['repaired_native'])
+  assert.deepEqual(emittedCalls, ['repaired_native'])
+  assert.doesNotMatch(JSON.stringify(processor.getMessages()), /discarded_native/)
+})
+
+test('protocol repair does not replay a previously completed tool round', async context => {
+  let requests = 0
+  const executed: string[] = []
+  context.mock.method(globalThis, 'fetch', async () => {
+    requests++
+    if (requests === 1) return asResponse([{ choices: [{ delta: { tool_calls: [inspectionCall('completed_before_repair')] }, finish_reason: 'tool_calls' }] }])
+    if (requests === 2) return rawProtocolResponse()
+    if (requests === 3) return asResponse([{ choices: [{ delta: { tool_calls: [inspectionCall('completed_after_repair')] }, finish_reason: 'tool_calls' }] }])
+    return complete()
+  })
+  const processor = new SessionProcessor({
+    provider: provider(), model: model('fixture'), tools: [inspectionTool], maxSteps: 3,
+    messages: [{ role: 'user', content: 'inspect' }],
+    onToolExecute: async (_name, _input, id) => { executed.push(id || ''); return { output: `inspection ${id}` } }
+  })
+  const result = await processor.process()
+  assert.equal(result.finish, 'stop')
+  assert.equal(requests, 4)
+  assert.deepEqual(executed, ['completed_before_repair', 'completed_after_repair'])
+  assert.deepEqual(processor.getMessages().filter(message => message.role === 'tool').map(message => message.tool_call_id), executed)
+})
+
+test('repair within the last tool round executes once and preserves the step limit', async context => {
+  let requests = 0
+  const executed: string[] = []
+  const finishes: string[] = []
+  context.mock.method(globalThis, 'fetch', async () => ++requests === 1 ? rawProtocolResponse() : asResponse([
+    { choices: [{ delta: { tool_calls: [inspectionCall()] }, finish_reason: 'tool_calls' }] }
+  ]))
+  const processor = new SessionProcessor({
+    provider: provider(), model: model('fixture'), tools: [inspectionTool], maxSteps: 1,
+    messages: [{ role: 'user', content: 'inspect' }],
+    onToolExecute: async (_name, _input, id) => { executed.push(id || ''); return { output: 'bounded inspection result' } },
+    onEvent: event => { if (event.type === 'done') finishes.push(event.finish) }
+  })
+  const result = await processor.process()
+  assert.equal(requests, 2)
+  assert.deepEqual(executed, ['native_inspection'])
+  assert.equal(result.finish, 'step-limit')
+  assert.deepEqual(finishes, ['tool-calls', 'step-limit'])
+  assert.equal(result.messages?.at(-1)?.content, 'bounded inspection result')
+})
+
+test('mixed native and raw calls in the repair response never expose or execute the failed batch', async context => {
+  let requests = 0
+  const toolEvents: string[] = []
+  context.mock.method(globalThis, 'fetch', async () => ++requests === 1 ? rawProtocolResponse() : asResponse([
+    { choices: [{ delta: { tool_calls: [inspectionCall('invalid_repair_call')] } }] },
+    { choices: [{ delta: { content: '<|DSML|invoke name="inspect_server">' } }] },
+    { choices: [{ delta: {}, finish_reason: 'tool_calls' }] }
+  ]))
+  const processor = new SessionProcessor({
+    provider: provider(), model: model('fixture'), tools: [inspectionTool],
+    messages: [{ role: 'user', content: 'inspect' }],
+    onToolExecute: async () => { assert.fail('mixed repair batch must not execute') },
+    onEvent: event => { if (event.type === 'tool-call' || event.type === 'tool-start' || event.type === 'done') toolEvents.push(event.type) }
+  })
+  await assert.rejects(processor.process(), /工具/)
+  assert.equal(requests, 2)
+  assert.deepEqual(toolEvents, [])
+  assert.deepEqual(processor.getMessages(), [{ role: 'user', content: 'inspect' }])
+})
+
+test('cancellation during a raw protocol response does not dispatch a repair request', async context => {
+  const controller = new AbortController()
+  let requests = 0
+  let executions = 0
+  let cancelled = false
+  context.mock.method(globalThis, 'fetch', async () => {
+    requests++
+    return new Response(new ReadableStream({
+      start(stream) {
+        stream.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ delta: { content: screenshotDSML } }] })}\n\n`))
+      },
+      cancel() {
+        cancelled = true
+        controller.abort()
+      }
+    }))
+  })
+  const processor = new SessionProcessor({
+    provider: provider(), model: model('fixture'), tools: [inspectionTool], abortSignal: controller.signal,
+    messages: [{ role: 'user', content: 'inspect' }],
+    onToolExecute: async () => { executions++; return { output: 'must not execute' } }
+  })
+  await assert.rejects(processor.process(), { name: 'AbortError' })
+  assert.equal(cancelled, true)
+  assert.equal(requests, 1)
+  assert.equal(executions, 0)
 })

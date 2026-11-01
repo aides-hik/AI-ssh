@@ -53,7 +53,7 @@ function summarizeStructuredOutput(
     return content
   }
 
-  const head = lines.slice(0, maxLines).join('\n')
+  const head = summarizeForModel(lines.slice(0, maxLines).join('\n'), MAX_TOOL_OUTPUT_LENGTH)
   const remaining = Math.max(lines.length - maxLines, 0)
   return `<${tagName}>\n${head}\n\n...[${label} 已摘要，省略 ${remaining} 行]...\n</${tagName}>`
 }
@@ -92,6 +92,62 @@ function summarizeToolOutput(toolName: string, output: string): string {
   return summarizeForModel(output, MAX_TOOL_OUTPUT_LENGTH)
 }
 
+/** Plain history must retain the actual operation, without replaying unsigned calls. */
+function summarizeToolPart(part: ToolPart): string {
+  const targetId = part.state.metadata?.targetId || part.state.input?.targetId
+  const targetName = part.state.metadata?.targetName || targetId
+  const target = targetId ? ` / ${targetName} (${targetId})` : ''
+  const lines = [`[工具 ${part.tool}${target} (${part.state.status})]`]
+  if (part.state.input) lines.push(`参数: ${summarizeForModel(JSON.stringify(part.state.input), 1000)}`)
+  const output = part.state.output || part.state.error
+  if (output) lines.push(summarizeToolOutput(part.tool, output))
+  return lines.join('\n')
+}
+
+/** Match standalone results only to the immediately preceding assistant round. */
+function resolveHistoryTools(messages: Message[]): {
+  resolved: Map<ToolPart, ToolPart>
+  consumed: Set<ToolPart>
+} {
+  const resolved = new Map<ToolPart, ToolPart>()
+  const consumed = new Set<ToolPart>()
+  let calls = new Map<string, ToolPart | undefined>()
+  for (const message of messages) {
+    if (message.info.role !== 'tool') calls = new Map()
+    for (const part of message.parts) {
+      if (part.type !== 'tool') continue
+      if (message.info.role === 'assistant') {
+        resolved.set(part, part)
+        calls.set(part.callID, calls.has(part.callID) ? undefined : part)
+        continue
+      }
+      const call = message.info.role === 'tool' ? calls.get(part.callID) : undefined
+      if (!call || call.tool !== part.tool) {
+        resolved.set(part, part)
+        continue
+      }
+      const previous = resolved.get(call) || call
+      // A duplicate result must not replace an already completed observation.
+      const terminal = previous.state.status !== 'pending' && previous.state.status !== 'running'
+      const preferred = terminal ? previous : part
+      const fallback = terminal ? part : previous
+      resolved.set(call, {
+        ...preferred,
+        state: {
+          ...fallback.state,
+          ...preferred.state,
+          input: preferred.state.input ?? fallback.state.input,
+          output: preferred.state.output ?? fallback.state.output,
+          error: preferred.state.error ?? fallback.state.error,
+          metadata: { ...fallback.state.metadata, ...preferred.state.metadata }
+        }
+      })
+      consumed.add(part)
+    }
+  }
+  return { resolved, consumed }
+}
+
 export function fromUserMessage(content: string): Message {
   return {
     info: {
@@ -108,9 +164,9 @@ export function fromUserMessage(content: string): Message {
   }
 }
 
-export function toModelMessages(msgs: Message[]): ModelMessage[] {
+export function toModelMessages(msgs: Message[], replayTools = true): ModelMessage[] {
   const result: ModelMessage[] = []
-  const seenToolCallIds = new Set<string>()
+  const { resolved, consumed } = resolveHistoryTools(msgs)
   let toolIndex = 0
 
   for (const msg of msgs) {
@@ -142,10 +198,12 @@ export function toModelMessages(msgs: Message[]): ModelMessage[] {
         content: null as any
       }
 
-      const toolParts = msg.parts.filter((p): p is ToolPart => p.type === 'tool')
+      const toolParts = msg.parts.filter((p): p is ToolPart => p.type === 'tool').map(part => resolved.get(part) || part)
+      const complete = replayTools && toolParts.every(part => part.callID && part.tool && (part.state.status === 'completed' || part.state.status === 'error')) &&
+        new Set(toolParts.map(part => part.callID)).size === toolParts.length
 
-      // 收集所有工具调用（包括已完成和待处理的）
-      if (toolParts.length > 0) {
+      // Only complete, unambiguous rounds are eligible for native replay.
+      if (toolParts.length > 0 && complete) {
         assistantMsg.tool_calls = toolParts.map(tp => ({
           id: tp.callID,
           type: 'function' as const,
@@ -167,43 +225,29 @@ export function toModelMessages(msgs: Message[]): ModelMessage[] {
           : summarizeForModel(textParts, MAX_MODEL_TEXT_LENGTH)
       }
 
+      if (!complete && toolParts.length) {
+        assistantMsg.content = [assistantMsg.content, ...toolParts.map(summarizeToolPart)].filter(Boolean).join('\n\n')
+      }
+
       if (assistantMsg.tool_calls?.length || assistantMsg.content !== null) {
         result.push(assistantMsg)
       }
 
       // 为已完成的 tool parts 添加 tool 结果消息
-      for (const tp of toolParts) {
-        if (tp.state.status === 'completed' || tp.state.status === 'error') {
-          const toolCallId = tp.callID
-          if (!seenToolCallIds.has(toolCallId)) {
-            seenToolCallIds.add(toolCallId)
-            const output = tp.state.output || tp.state.error || ''
-            result.push({
-              role: 'tool',
-              content: (tp.state.metadata?.targetId ? `[服务器: ${tp.state.metadata.targetName} (${tp.state.metadata.targetId})]\n` : '') + summarizeToolOutput(tp.tool, output),
-              tool_call_id: toolCallId,
-              index: toolIndex++
-            })
-          }
-        }
+      for (const tp of complete ? toolParts : []) {
+        const output = tp.state.output || tp.state.error || ''
+        result.push({
+          role: 'tool',
+          content: (tp.state.metadata?.targetId ? `[服务器: ${tp.state.metadata.targetName || tp.state.metadata.targetId} (${tp.state.metadata.targetId})]\n` : '') + summarizeToolOutput(tp.tool, output),
+          tool_call_id: tp.callID,
+          index: toolIndex++
+        })
       }
     }
 
     if (msg.info.role === 'tool') {
-      const toolPart = msg.parts.find((p): p is ToolPart => p.type === 'tool')
-      if (toolPart) {
-        const toolCallId = toolPart.callID
-        if (!seenToolCallIds.has(toolCallId)) {
-          seenToolCallIds.add(toolCallId)
-          const output = toolPart.state.output || toolPart.state.error || ''
-          result.push({
-            role: 'tool',
-            content: (toolPart.state.metadata?.targetId ? `[服务器: ${toolPart.state.metadata.targetName} (${toolPart.state.metadata.targetId})]\n` : '') + summarizeToolOutput(toolPart.tool, output),
-            tool_call_id: toolCallId,
-            index: toolIndex++
-          })
-        }
-      }
+      const orphaned = msg.parts.filter((part): part is ToolPart => part.type === 'tool' && !consumed.has(part))
+      if (orphaned.length) result.push({ role: 'assistant', content: orphaned.map(summarizeToolPart).join('\n\n') })
     }
   }
 
@@ -317,31 +361,7 @@ function isHistorySummary(msg: Message): boolean {
 /** Keep observed outcomes and host identity, rather than only counting tool calls. */
 function generateMessageSummary(msgs: Message[]): string {
   const entries: string[] = []
-  const seenToolCallIds = new Set<string>()
-  const toolResults = new Map<string, ToolPart>()
-  for (const msg of msgs) {
-    for (const part of msg.parts) {
-      if (part.type !== 'tool') continue
-      const previous = toolResults.get(part.callID)
-      // A standalone result may complete an earlier pending call. Keep its outcome
-      // together with the parameters and host metadata from the original call.
-      const terminal = part.state.status !== 'pending' && part.state.status !== 'running'
-      const keepPrevious = previous && previous.state.status !== 'pending' && previous.state.status !== 'running' && !terminal
-      const preferred = keepPrevious ? previous : part
-      const fallback = keepPrevious ? part : previous
-      toolResults.set(part.callID, {
-        ...preferred,
-        state: {
-          ...fallback?.state,
-          ...preferred.state,
-          input: preferred.state.input ?? fallback?.state.input,
-          output: preferred.state.output ?? fallback?.state.output,
-          error: preferred.state.error ?? fallback?.state.error,
-          metadata: { ...fallback?.state.metadata, ...preferred.state.metadata }
-        }
-      })
-    }
-  }
+  const { resolved, consumed } = resolveHistoryTools(msgs)
   for (const msg of msgs) {
     if (msg.info.targets?.length) {
       entries.push(`[操作目标: ${msg.info.targets.map(target => `${target.name} (${target.id})`).join('、')}]`)
@@ -349,9 +369,8 @@ function generateMessageSummary(msgs: Message[]): string {
     const text = msg.parts.filter((part): part is TextPart => part.type === 'text').map(part => part.text).join('\n')
     if (text) entries.push(summarizeForModel(text, MAX_MODEL_TEXT_LENGTH))
     for (const part of msg.parts) {
-      if (part.type !== 'tool' || seenToolCallIds.has(part.callID)) continue
-      seenToolCallIds.add(part.callID)
-      const result = toolResults.get(part.callID) ?? part
+      if (part.type !== 'tool' || consumed.has(part)) continue
+      const result = resolved.get(part) ?? part
       const targetId = result.state.metadata?.targetId || result.state.input?.targetId
       const target = targetId ? ` / ${result.state.metadata?.targetName || targetId} (${targetId})` : ''
       entries.push(`[工具 ${result.tool}${target} / ${result.state.status}]`)

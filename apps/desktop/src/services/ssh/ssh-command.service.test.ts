@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
-import { executeSSHCommand } from './ssh-command.service'
+import { executeSSHCommand, readRemoteFile, listRemoteDirectory, checkRemoteFileExists, getRemoteFileInfo } from './ssh-command.service'
 import { sshExecutionTimeout, type SSHExecuteOutputEvent } from './ssh-execution'
 
 function fixture(context: TestContext) {
@@ -89,4 +89,34 @@ test('a display callback exception cannot mark a successful command failed', asy
   calls[0].resolve({ success: true, output: 'complete', exitCode: 0 })
   assert.equal((await pending).success, true)
   assert.equal(listeners.size, 0)
+})
+
+test('remote file helpers preserve shell metacharacters and leading dashes as literal path bytes', async context => {
+  const { calls } = fixture(context)
+  const path = "-$(touch /tmp/probe) `id` 'literal'"
+  const quoted = "'-$(touch /tmp/probe) `id` '\"'\"'literal'\"'\"''"
+  const operations = [
+    { invoke: () => readRemoteFile('host-a', path), command: `cat -- ${quoted} 2>/dev/null || head -n 1000 -- ${quoted}` },
+    { invoke: () => listRemoteDirectory('host-a', path, true), command: `ls -la -- ${quoted}` },
+    { invoke: () => listRemoteDirectory('host-a', path), command: `ls -l -- ${quoted}` },
+    { invoke: () => checkRemoteFileExists('host-a', path), command: `test -e ${quoted} && echo "exists"` },
+    { invoke: () => getRemoteFileInfo('host-a', path), command: `stat -- ${quoted} 2>/dev/null || ls -l -- ${quoted}` }
+  ]
+  for (const [index, operation] of operations.entries()) {
+    const pending = operation.invoke()
+    assert.equal(calls[index].id, 'host-a')
+    assert.equal(calls[index].command, operation.command)
+    calls[index].resolve({ success: true, output: 'exists', exitCode: 0 })
+    await pending
+  }
+})
+
+test('invalid remote paths never invoke a file helper command', async context => {
+  const { calls } = fixture(context)
+  for (const path of ['', '/tmp/a\nnext', '/tmp/a\rnext', '/tmp/a\0next']) {
+    for (const operation of [readRemoteFile, listRemoteDirectory, checkRemoteFileExists, getRemoteFileInfo]) {
+      await assert.rejects(operation('host-a', path), /文件路径无效/)
+    }
+  }
+  assert.equal(calls.length, 0)
 })

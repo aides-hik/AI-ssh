@@ -21,8 +21,9 @@ function catalogue(providerId: string, id: string): AIModel | undefined {
 }
 
 function knownTools(id: string): boolean {
-  // Exact documented families and snapshots, never image/audio/deep-research variants or aliases.
+  // Documented families and verified exact deployment IDs, never arbitrary aliases.
   const value = id.toLowerCase().replace(/^(?:openai|deepseek)\//, '')
+  if (value === 'deepseek-v4.1-flash') return true
   return /^(?:gpt-4o(?:-mini)?|gpt-4-turbo|gpt-3\.5-turbo|o3(?:-mini)?|o4-mini|gpt-5(?:\.[1-5])?(?:-(?:mini|nano|codex(?:-mini|-max)?))?|gpt-5\.(?:2|4|5)-pro|gpt-5\.6(?:-(?:sol|terra|luna))?|gpt-6(?:\.1)?-(?:astra|sol|luna)|deepseek-chat|deepseek-flash|deepseek-v4-(?:pro|flash|flash-vision-exp))(?:-\d{4}-?\d{2}-?\d{2})?$/.test(value)
 }
 

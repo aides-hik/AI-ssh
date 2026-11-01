@@ -383,3 +383,43 @@ test('real compaction reaches the processor request with old constraints and mat
   assert.doesNotMatch(JSON.stringify(compacted), /opaque-retained-a5|reasoning_content|encrypted_content|thought_signature/)
   assert.equal(JSON.stringify(history), '{}', 'opaque processor state cannot leak through JSON persistence')
 })
+
+test('duplicate and empty tool call IDs cannot enter the signed replay cache', () => {
+  for (const duplicate of [true, false]) {
+    const history = new ProcessorHistory()
+    const user = createUserMessage('user', 'Inspect')
+    const input = history.toModelMessages([user], 'scope', true)
+    const raw = rawTurn('a')
+    assert.ok(raw[0].tool_calls)
+    if (duplicate) raw[0].tool_calls.push(structuredClone(raw[0].tool_calls[0]))
+    else {
+      raw[0].tool_calls[0].id = ''
+      raw[1].tool_call_id = ''
+    }
+    history.remember('a', [...input, ...raw])
+    const replay = history.toModelMessages([user, assistant('a')], 'scope', true)
+    assert.equal(replay.some(message => message.tool_calls || message.role === 'tool'), false)
+    assert.doesNotMatch(JSON.stringify(replay), /opaque_|thought_signature|reasoning_content/)
+    assert.match(replay[1].content || '', /"path":"a"/)
+  }
+})
+
+test('deduplicating cached standalone results retains other observations in the same visible message', () => {
+  const history = new ProcessorHistory()
+  const user = createUserMessage('user', 'Inspect')
+  const input = history.toModelMessages([user], 'scope', true)
+  history.remember('a', [...input, ...rawTurn('a')])
+  const standalone: Message = {
+    info: { id: 'standalone', role: 'tool', createdAt: 2 },
+    parts: [
+      { type: 'tool', tool: 'read_file', callID: 'call_a', state: { status: 'completed', output: 'Cached duplicate' } },
+      { type: 'tool', tool: 'list_files', callID: 'other', state: { status: 'completed', output: 'OTHER_OBSERVATION' } }
+    ]
+  }
+  const replay = history.toModelMessages([user, assistant('a'), standalone], 'scope', true)
+  assert.deepEqual(replay.slice(1, 4), rawTurn('a'))
+  assert.match(replay[4].content || '', /OTHER_OBSERVATION/)
+  assert.doesNotMatch(JSON.stringify(replay), /Cached duplicate/)
+  const afterUser = history.toModelMessages([user, assistant('a'), createUserMessage('next', 'Follow up'), standalone], 'scope', true)
+  assert.match(afterUser.at(-1)?.content || '', /Cached duplicate[\s\S]*OTHER_OBSERVATION/)
+})

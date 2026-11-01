@@ -9,6 +9,7 @@ export function toAnthropicMessages(messages: ChatMessage[]) {
   for (const message of messages) {
     if (message.role === 'system') {
       if (typeof message.content === 'string') system.push(message.content)
+      else system.push(...message.content.filter(part => part.type === 'text' && typeof part.text === 'string').map(part => part.text))
       continue
     }
     const role = message.role === 'tool' ? 'user' : message.role
@@ -68,13 +69,21 @@ export async function* parseAnthropicTerminalStream(events: AsyncIterable<unknow
     const event = raw as AnthropicEvent
     if (event.type === 'error') throw new Error(event.error?.message || event.error?.type || 'Claude request failed')
     if (event.type === 'content_block_start') {
-      if (!Number.isInteger(event.index) || blocks.has(event.index!) || !event.content_block ||
+      const index = event.index
+      if (typeof index !== 'number' || !Number.isSafeInteger(index) || index < 0 || blocks.has(index) || !event.content_block ||
         !NATIVE_BLOCKS.has(String(event.content_block.type))) throw new Error('Claude returned an invalid content block')
-      blocks.set(event.index!, { value: { ...event.content_block }, json: '', complete: false })
+      blocks.set(index, { value: { ...event.content_block }, json: '', complete: false })
+      if (event.content_block.type === 'text') {
+        if (typeof event.content_block.text !== 'string') throw new Error('Claude returned an invalid text block')
+        if (event.content_block.text) yield { type: 'text', content: event.content_block.text }
+      } else if (event.content_block.type === 'thinking') {
+        if (typeof event.content_block.thinking !== 'string') throw new Error('Claude returned an invalid thinking block')
+        if (event.content_block.thinking) yield { type: 'reasoning', content: event.content_block.thinking }
+      }
       continue
     }
     if (event.type === 'content_block_delta' || event.type === 'content_block_stop') {
-      const block = blocks.get(event.index!)
+      const block = typeof event.index === 'number' ? blocks.get(event.index) : undefined
       if (!block || block.complete) throw new Error('Claude stream contains an incomplete content block')
       const delta = event.delta
       if (event.type === 'content_block_stop') {
@@ -84,14 +93,18 @@ export async function* parseAnthropicTerminalStream(events: AsyncIterable<unknow
         }
         block.complete = true
       } else if (delta?.type === 'text_delta' && block.value.type === 'text') {
+        if (typeof delta.text !== 'string') throw new Error('Claude returned an invalid text delta')
         block.value.text = String(block.value.text || '') + (delta.text || '')
         if (delta.text) yield { type: 'text', content: delta.text }
       } else if (delta?.type === 'thinking_delta' && block.value.type === 'thinking') {
+        if (typeof delta.thinking !== 'string') throw new Error('Claude returned an invalid thinking delta')
         block.value.thinking = String(block.value.thinking || '') + (delta.thinking || '')
         if (delta.thinking) yield { type: 'reasoning', content: delta.thinking }
       } else if (delta?.type === 'signature_delta' && block.value.type === 'thinking') {
+        if (typeof delta.signature !== 'string') throw new Error('Claude returned an invalid thinking signature')
         block.value.signature = String(block.value.signature || '') + (delta.signature || '')
       } else if (delta?.type === 'input_json_delta' && block.value.type === 'tool_use') {
+        if (typeof delta.partial_json !== 'string') throw new Error('Claude returned invalid tool arguments')
         block.json += delta.partial_json || ''
       } else if (delta?.type) throw new Error(`Unsupported Claude stream delta: ${delta.type}`)
       continue
@@ -108,9 +121,12 @@ export async function* parseAnthropicTerminalStream(events: AsyncIterable<unknow
     const tools = complete.filter(block => block.type === 'tool_use')
     if ((stopReason === 'tool_use') !== !!tools.length) throw new Error('Claude returned an inconsistent tool result')
     // Validate the whole response before exposing any executable tool call.
+    const callIds = new Set<string>()
     for (const tool of tools) {
-      if (typeof tool.id !== 'string' || !tool.id || typeof tool.name !== 'string' || !tool.name ||
+      if (typeof tool.id !== 'string' || !tool.id.trim() || typeof tool.name !== 'string' || !tool.name.trim() ||
         !tool.input || typeof tool.input !== 'object' || Array.isArray(tool.input)) throw new Error('Claude returned an incomplete tool call')
+      if (callIds.has(tool.id)) throw new Error('Claude returned duplicate tool call IDs')
+      callIds.add(tool.id)
     }
     for (const responseItem of complete) yield { type: 'response-item', responseItem }
     for (const tool of tools) yield { type: 'tool-call', toolCallId: tool.id as string, toolName: tool.name as string, toolInput: tool.input }

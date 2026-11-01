@@ -18,6 +18,11 @@ function createAbortError() {
   return error
 }
 
+function quoteRemotePath(path: string): string {
+  if (typeof path !== 'string' || !path || /[\0\r\n]/.test(path)) throw new Error('文件路径无效')
+  return `'${path.replace(/'/g, `'"'"'`)}'`
+}
+
 /**
  * 执行 SSH 命令
  * @param connectionId SSH 连接 ID
@@ -100,7 +105,8 @@ export async function readRemoteFile(
   signal?: AbortSignal
 ): Promise<SSHCommandResult> {
   // 使用 cat 命令读取文件，如果失败则尝试使用 head
-  const command = `cat "${filePath}" 2>/dev/null || head -n 1000 "${filePath}"`
+  const path = quoteRemotePath(filePath)
+  const command = `cat -- ${path} 2>/dev/null || head -n 1000 -- ${path}`
   return executeSSHCommand(connectionId, command, signal)
 }
 
@@ -117,7 +123,8 @@ export async function listRemoteDirectory(
   showHidden: boolean = false,
   signal?: AbortSignal
 ): Promise<SSHCommandResult> {
-  const command = showHidden ? `ls -la "${dirPath}"` : `ls -l "${dirPath}"`
+  const path = quoteRemotePath(dirPath)
+  const command = showHidden ? `ls -la -- ${path}` : `ls -l -- ${path}`
   return executeSSHCommand(connectionId, command, signal)
 }
 
@@ -131,7 +138,7 @@ export async function checkRemoteFileExists(
   connectionId: string,
   filePath: string
 ): Promise<boolean> {
-  const result = await executeSSHCommand(connectionId, `test -e "${filePath}" && echo "exists"`)
+  const result = await executeSSHCommand(connectionId, `test -e ${quoteRemotePath(filePath)} && echo "exists"`)
   return result.success && result.output.trim() === 'exists'
 }
 
@@ -145,6 +152,7 @@ export async function getRemoteFileInfo(
   connectionId: string,
   filePath: string
 ): Promise<SSHCommandResult> {
-  const command = `stat "${filePath}" 2>/dev/null || ls -l "${filePath}"`
+  const path = quoteRemotePath(filePath)
+  const command = `stat -- ${path} 2>/dev/null || ls -l -- ${path}`
   return executeSSHCommand(connectionId, command)
 }

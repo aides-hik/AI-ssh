@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createLLMSession, type ChatMessage, type StreamChunk } from './llm'
-import { toAnthropicMessages } from './anthropic-terminal'
+import { parseAnthropicTerminalStream, toAnthropicMessages } from './anthropic-terminal'
+import { z } from 'zod'
 import { SessionProcessor } from './processor'
 import type { AIModel, AIProvider } from '../types/ai-providers.types'
 
@@ -16,6 +17,10 @@ const model: AIModel = {
   parameters: { apiStyle: 'anthropic', maxOutputTokens: 64000, temperature: false, topP: false },
   requestConfig: { maxTokens: 8192, reasoning: 'high' }
 }
+const tools = [{ id: 'read_file', init: async () => ({
+  description: 'Read a fixture', parameters: z.object({ path: z.string() }),
+  execute: async () => ({ title: '', metadata: {}, output: 'fixture' })
+}) }]
 const events = [
   { type: 'message_start', message: { role: 'assistant' } },
   { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '', signature: '' } },
@@ -55,7 +60,7 @@ test('native Claude terminal requests preserve signed thinking, UTF-8 tool calls
     request = JSON.parse(String(init.body))
     return fragmentedStream(events)
   })
-  const session = createLLMSession(provider, model, [], '')
+  const session = createLLMSession(provider, model, tools, '')
   const chunks = await Array.fromAsync(session.stream([{ role: 'system', content: 'System fixture' }, { role: 'user', content: 'inspect' }]))
   assert.equal(request.system, 'System fixture')
   assert.equal(request.max_tokens, 8192)
@@ -118,7 +123,7 @@ test('Claude tool rounds replay signed blocks through the processor and keep req
   const current = { ...model, requestConfig: { maxTokens: 8192, reasoning: 'high' as const } }
   const visible: string[] = []
   const result = await new SessionProcessor({
-    provider, model: current, tools: [], messages: [{ role: 'user', content: 'inspect' }],
+    provider, model: current, tools, messages: [{ role: 'user', content: 'inspect' }],
     onToolExecute: async () => {
       current.requestConfig.maxTokens = 500
       current.requestConfig.reasoning = 'high'
@@ -133,4 +138,40 @@ test('Claude tool rounds replay signed blocks through the processor and keep req
   assert.equal(requests[1].messages[2].content[0].tool_use_id, 'tool_fixture')
   assert.deepEqual(visible, ['检查中文目录', 'done'])
   assert.equal(visible.join('').includes('Private fixture reasoning'), false)
+})
+
+test('Claude rejects duplicate or blank call identities before emitting any native batch', async () => {
+  async function* from(values: unknown[]) { yield* values }
+  const tool = (index: number, id = 'call', name = 'read_file') => [
+    { type: 'content_block_start', index, content_block: { type: 'tool_use', id, name, input: {} } },
+    { type: 'content_block_stop', index }
+  ]
+  const end = [{ type: 'message_delta', delta: { stop_reason: 'tool_use' } }, { type: 'message_stop' }]
+  for (const blocks of [[...tool(0), ...tool(1)], tool(0, ' '), tool(0, 'call', ' '), tool(-1)]) {
+    const chunks: StreamChunk[] = []
+    await assert.rejects(async () => {
+      for await (const chunk of parseAnthropicTerminalStream(from([...blocks, ...end]))) chunks.push(chunk)
+    })
+    assert.equal(chunks.some(chunk => chunk.type === 'tool-call' || chunk.type === 'done'), false)
+  }
+})
+
+test('Claude preserves initial content-block text and text-array system instructions', async context => {
+  const text = 'initial text 中文'
+  let request: Record<string, unknown> = {}
+  context.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+    request = JSON.parse(String(init.body))
+    return fragmentedStream([
+      { type: 'content_block_start', index: 0, content_block: { type: 'text', text } },
+      { type: 'content_block_stop', index: 0 },
+      { type: 'message_delta', delta: { stop_reason: 'end_turn' } }, { type: 'message_stop' }
+    ])
+  })
+  const chunks = await Array.fromAsync(createLLMSession(provider, model, [], '').stream([
+    { role: 'system', content: [{ type: 'text', text: 'first policy' }, { type: 'text', text: 'second policy' }] },
+    { role: 'user', content: 'hello' }
+  ]))
+  assert.equal(request.system, 'first policy\n\nsecond policy')
+  assert.equal(chunks.filter(chunk => chunk.type === 'text').map(chunk => chunk.content).join(''), text)
+  assert.equal(chunks.at(-1)?.finish, 'stop')
 })

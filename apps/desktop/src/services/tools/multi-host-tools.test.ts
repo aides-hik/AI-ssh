@@ -119,6 +119,76 @@ test('concurrent read approvals queue and approved content is the exact executed
   for (const call of calls) assert.equal(call.command, reviewed.find(stage => stage.steps[0].targetId === call.id)?.steps[0].command)
 })
 
+test('stopping an active read approval releases the queue and late acceptance cannot execute it', { timeout: 3000 }, async context => {
+  let shown!: () => void
+  const visible = new Promise<void>(resolve => { shown = resolve })
+  let accept!: (value: boolean) => void
+  const accepted = new Promise<boolean>(resolve => { accept = resolve })
+  const reviewed: string[] = []
+  const { invoke, run, calls } = await fixture(context, undefined, { approveReadOnly: async stage => {
+    const id = stage.steps[0].targetId
+    reviewed.push(id)
+    if (id === 'runtime-a') { shown(); return accepted }
+    return true
+  } })
+  const pending = invoke('inspect_server', { targetId: 'runtime-a', checks: ['cpu'] })
+  const rejected = assert.rejects(pending, /已停止此服务器/)
+  await visible
+  run.stopTarget('runtime-a')
+  await rejected
+  await invoke('inspect_server', { targetId: 'runtime-b', checks: ['disk'] })
+  accept(true)
+  await Promise.resolve()
+  assert.deepEqual(reviewed, ['runtime-a', 'runtime-b'])
+  assert.deepEqual(calls.map(call => call.id), ['runtime-b'])
+  assert.equal(run.snapshot()[0].completed, 0)
+})
+
+test('stopping a queued read rejects promptly without bypassing the active approval', { timeout: 3000 }, async context => {
+  let shown!: () => void
+  const visible = new Promise<void>(resolve => { shown = resolve })
+  let accept!: (value: boolean) => void
+  const accepted = new Promise<boolean>(resolve => { accept = resolve })
+  const reviewed: string[] = []
+  const { invoke, run, calls } = await fixture(context, undefined, { approveReadOnly: async stage => {
+    reviewed.push(stage.steps[0].targetId)
+    shown()
+    return accepted
+  } })
+  const first = invoke('read_file', { targetId: 'runtime-a', path: '/etc/hostname' })
+  await visible
+  const queued = invoke('read_file', { targetId: 'runtime-b', path: '/etc/hostname' })
+  const rejected = assert.rejects(queued, /已停止此服务器/)
+  run.stopTarget('runtime-b')
+  await rejected
+  assert.deepEqual(reviewed, ['runtime-a'])
+  assert.equal(calls.length, 0)
+  accept(true)
+  await first
+  assert.deepEqual(reviewed, ['runtime-a'])
+  assert.deepEqual(calls.map(call => call.id), ['runtime-a'])
+})
+
+test('read approval rechecks the exact selected connection before observing remote state', async context => {
+  const current = await fixture(context, undefined, { approveReadOnly: async () => {
+    current.bridge.getConnections = async () => [{ id: 'replacement-runtime-id', status: 'connected' }]
+    return true
+  } })
+  await assert.rejects(current.invoke('inspect_server', { targetId: 'runtime-a', checks: ['cpu'] }), /服务器连接已断开/)
+  assert.equal(current.calls.length, 0)
+  assert.equal(current.run.snapshot()[0].status, 'unavailable')
+})
+
+test('read observations require an observed zero exit status rather than a legacy success flag', async context => {
+  const { invoke, bridge, run } = await fixture(context)
+  for (const response of ['legacy output', { success: true, output: 'legacy output' }, { success: true, output: 'interrupted output', exitCode: null }]) {
+    bridge.execute = async () => response
+    await assert.rejects(invoke('inspect_server', { targetId: 'runtime-a', checks: ['cpu'] }), /退出状态/)
+  }
+  assert.equal(run.snapshot()[0].completed, 0)
+  assert.equal(run.snapshot()[0].failed, 3)
+})
+
 test('all remote tools reject targets outside the selected live connection IDs', async context => {
   const { tools, invoke, calls, queries } = await fixture(context)
   const inputs: Record<string, Record<string, unknown>> = {

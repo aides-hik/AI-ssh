@@ -19,6 +19,7 @@ import {
 } from '@/services/messages/convert'
 import { SessionProcessor } from '@/services/processor'
 import { ProcessorHistory } from '@/services/messages/processor-history'
+import { getModelAPIStyle } from '@/utils/model-capabilities'
 import type { AIProvider, AIModel } from '@/types/ai-providers'
 import ReasoningSlider from './ReasoningSlider.vue'
 import ComposerModelList from './ComposerModelList.vue'
@@ -721,10 +722,15 @@ async function sendMessageWithTools(content: string) {
   }
 
   // Keep every tool round on the model and reasoning level chosen when Send was pressed.
-  const requestProvider: AIProvider = { ...props.currentProvider }
+  const requestProvider: AIProvider = {
+    ...props.currentProvider,
+    config: props.currentProvider.config ? { ...props.currentProvider.config } : undefined
+  }
   const requestModel: AIModel = {
     ...props.currentModel,
     capabilities: { ...props.currentModel.capabilities },
+    parameters: props.currentModel.parameters ? { ...props.currentModel.parameters } : undefined,
+    requestConfig: props.currentModel.requestConfig ? { ...props.currentModel.requestConfig } : undefined,
     reasoning: props.currentModel.reasoning ? {
       ...props.currentModel.reasoning,
       supportedEfforts: props.currentModel.reasoning.supportedEfforts ? [...props.currentModel.reasoning.supportedEfforts] : undefined
@@ -838,11 +844,19 @@ async function sendMessageWithTools(content: string) {
     const modelMessages = [
       {
         role: 'system' as const,
-        content: [buildMultiHostPrompt(requestTargets), !isMultiHost ? buildSystemPrompt(currentConnection, serverEnvDoc, serverEnvDocId) : ''].filter(Boolean).join('\n\n')
+        content: requestModel.capabilities.functionCall
+          ? [buildMultiHostPrompt(requestTargets), !isMultiHost ? buildSystemPrompt(currentConnection, serverEnvDoc, serverEnvDocId) : ''].filter(Boolean).join('\n\n')
+          : [
+              'You are an SSH assistant. Tool calling is disabled for the selected model; no tools are available.',
+              'Explain only the supplied conversation and documentation. Do not emit tool markup or claim to have inspected or changed a server.',
+              'If live inspection or execution is needed, ask the user to select a model supporting tools and enable its 工具调用 capability in settings.',
+              summarizeServerEnvDoc(serverEnvDoc)
+            ].filter(Boolean).join('\n\n')
       },
       ...processorHistory.toModelMessages(
         compactedMessages,
-        JSON.stringify([requestProvider.id, requestProvider.endpoint, requestModel.id, requestTargets.map(target => target.id).sort(), requestSessionId]),
+        JSON.stringify([requestProvider.id, requestProvider.endpoint, requestModel.id, requestTargets.map(target => target.id).sort(), requestSessionId,
+          requestModel.capabilities.functionCall, getModelAPIStyle(requestProvider, requestModel)]),
         true // Missing or interrupted tool state is summarized instead of replaying incomplete calls.
       )
     ]
@@ -863,6 +877,7 @@ async function sendMessageWithTools(content: string) {
         serverEnvDocId,
         abortSignal: requestSignal,
         onEvent: event => {
+          if (requestSignal.aborted && ['start', 'text-delta', 'tool-call', 'tool-start', 'done'].includes(event.type)) return
           switch (event.type) {
             case 'start':
               setStatus('thinking', '正在分析你的请求')
@@ -911,6 +926,7 @@ async function sendMessageWithTools(content: string) {
             }
 
             case 'tool-call': {
+              const executionId = event.toolExecutionId || event.toolCallId
               if (!firstResponseRecorded) {
                 performanceMetrics.value.firstResponseMs = Date.now() - requestStartedAt
                 firstResponseRecorded = true
@@ -947,7 +963,7 @@ async function sendMessageWithTools(content: string) {
               }
               // 检查是否已存在相同的 tool call
               const existingToolPart = currentMsg.parts.find(
-                (p): p is ToolPart => p.type === 'tool' && p.callID === event.toolCallId
+                (p): p is ToolPart => p.type === 'tool' && p.callID === executionId
               )
               if (existingToolPart) {
                 break
@@ -957,7 +973,7 @@ async function sendMessageWithTools(content: string) {
               const tp: ToolPart = {
                 type: 'tool',
                 tool: event.toolName,
-                callID: event.toolCallId,
+                callID: executionId,
                 displayKind: event.toolName === 'ask_followup_question' ? 'inquiry' : 'tool',
                 state: { status: 'pending', input: event.input, metadata: toolTarget ? {
                   targetId: event.input.targetId,
@@ -977,7 +993,7 @@ async function sendMessageWithTools(content: string) {
 
             case 'tool-start': {
               if (!currentMsg) break
-              const toolPart = currentMsg.parts.find((part): part is ToolPart => part.type === 'tool' && part.callID === event.toolCallId)
+              const toolPart = currentMsg.parts.find((part): part is ToolPart => part.type === 'tool' && part.callID === (event.toolExecutionId || event.toolCallId))
               if (toolPart) toolPart.state = { ...toolPart.state, status: 'running', time: { start: Date.now() } }
               setStatus('executing', isMultiHost ? '正在处理所选服务器的任务' : toolPart ? getStatusDescription(toolPart) : '正在执行工具')
               messages.value = [...messages.value]
@@ -986,10 +1002,11 @@ async function sendMessageWithTools(content: string) {
 
             case 'tool-result': {
               if (!currentMsg) break
-              const completed = updateToolResult(currentMsg, event.toolCallId, {
+              const executionId = event.toolExecutionId || event.toolCallId
+              const completed = updateToolResult(currentMsg, executionId, {
                 output: event.output.output
               })
-              const stagePart = completed.parts.find((part): part is ToolPart => part.type === 'tool' && part.callID === event.toolCallId && executionStageTools.has(part.tool))
+              const stagePart = completed.parts.find((part): part is ToolPart => part.type === 'tool' && part.callID === executionId && executionStageTools.has(part.tool))
               if (stagePart && deploymentStatus.value && deploymentStatus.value !== 'completed') {
                 stagePart.state.status = deploymentStatus.value === 'failed' ? 'error' : 'aborted'
                 stagePart.state.error = multiHostSummary.value
@@ -997,7 +1014,7 @@ async function sendMessageWithTools(content: string) {
               const idx = messages.value.findIndex(m => m.info.id === completed.info.id)
               if (idx !== -1) messages.value[idx] = completed
               currentMsg = completed
-              const updatedDocument = completed.parts.find((part): part is ToolPart => part.type === 'tool' && part.callID === event.toolCallId && part.tool === 'update_server_env_doc')
+              const updatedDocument = completed.parts.find((part): part is ToolPart => part.type === 'tool' && part.callID === executionId && part.tool === 'update_server_env_doc')
               const documentTargetId = updatedDocument?.state.input?.targetId
               if (typeof documentTargetId === 'string' && deploymentStatus.value === 'completed' && documentTargetId === props.connectionId) {
                 void refreshSessionContext(true, documentTargetId)
@@ -1010,7 +1027,7 @@ async function sendMessageWithTools(content: string) {
             case 'tool-error': {
               if (!currentMsg) break
               const errPart = currentMsg.parts.find(
-                p => p.type === 'tool' && p.callID === event.toolCallId
+                p => p.type === 'tool' && p.callID === (event.toolExecutionId || event.toolCallId)
               ) as ToolPart | undefined
               if (errPart && executionStageTools.has(errPart.tool)) {
                 deploymentStatus.value = 'failed'
@@ -1054,18 +1071,19 @@ async function sendMessageWithTools(content: string) {
                 messages.value = [...messages.value]
               }
               if (event.finish === 'stop') {
-                performanceMetrics.value.totalMs = Date.now() - requestStartedAt
-                if (!performanceLogged) {
-                  logPerformanceSummary('success')
-                  performanceLogged = true
-                }
-              }
-              if (event.finish === 'stop') {
                 requestRun?.finish()
                 sessionStatusExpanded.value = false
                 const hostFailures = requestRun?.snapshot().some(host => host.status === 'error' || host.status === 'unavailable')
-                const stageCancelled = deploymentIssue.value === 'rejected' || deploymentIssue.value === 'stopped'
-                setStatus(deploymentIssue.value === 'failed' || hostFailures ? 'error' : stageCancelled ? 'stopped' : 'complete', multiHostSummary.value || '已完成这次请求')
+                const toolFailures = currentMsg?.parts.some(part => part.type === 'tool' && part.state.status === 'error')
+                const stageCancelled = deploymentIssue.value === 'rejected' || deploymentIssue.value === 'stopped' ||
+                  currentMsg?.parts.some(part => part.type === 'tool' && part.state.status === 'aborted')
+                const finalStage = deploymentIssue.value === 'failed' || hostFailures || toolFailures ? 'error' : stageCancelled ? 'stopped' : 'complete'
+                setStatus(finalStage, toolFailures ? '本次处理有工具步骤失败，请查看执行记录' : multiHostSummary.value || (stageCancelled ? '本次处理有工具步骤被取消' : '已完成这次请求'))
+                performanceMetrics.value.totalMs = Date.now() - requestStartedAt
+                if (!performanceLogged) {
+                  logPerformanceSummary(finalStage === 'complete' ? 'success' : finalStage === 'error' ? 'error' : 'aborted')
+                  performanceLogged = true
+                }
               } else {
                 setStatus('thinking', '正在继续处理下一步')
               }
@@ -1089,9 +1107,11 @@ async function sendMessageWithTools(content: string) {
           }
         },
         onToolExecute: async (toolName, input) => {
+          requestSignal.throwIfAborted()
           const tool = requestTools.find(t => t.id === toolName)
           if (!tool) throw new Error(`Unknown tool: ${toolName}`)
           const info = await tool.init()
+          requestSignal.throwIfAborted()
           const result = await info.execute(input, {
             sessionID: requestSessionId || '',
             messageID: '',
@@ -1117,6 +1137,7 @@ async function sendMessageWithTools(content: string) {
     )
 
     const result = await processor.process()
+    requestSignal.throwIfAborted()
     const completedAssistant = currentMsg as V2Message | null
     if (!requestSignal.aborted && completedAssistant && result.messages) {
       processorHistory.remember(completedAssistant.info.id, result.messages)
@@ -1590,6 +1611,9 @@ function messageStatus(msg: DisplayMessage): { label: string; kind: string } | n
   if (msg.blocks.some(block => block.type === 'tool' && block.toolPart.state.status === 'error')) {
     return { label: ui.value.failed, kind: 'error' }
   }
+  if (msg.blocks.some(block => block.type === 'tool' && block.toolPart.state.status === 'aborted')) {
+    return { label: ui.value.stopped, kind: 'muted' }
+  }
   return msg.finish === 'stop' ? { label: ui.value.done, kind: 'success' } : null
 }
 
@@ -1827,11 +1851,11 @@ function normalizeUserErrorMessage(rawError: string): string {
   }
 
   if (cleaned.includes('content or old_string is required')) {
-    return '这次环境文档更新缺少有效内容，系统将优先改用整篇文档更新。'
+    return '这次环境文档更新缺少有效内容，尚未写入。请补充文档内容或需要替换的原文。'
   }
 
   if (cleaned.includes('old_string not found in document')) {
-    return '当前环境文档已经变化，局部替换无法安全完成。建议直接按整篇文档重新更新。'
+    return '当前环境文档已经变化，尚未执行替换。请重新读取文档后再更新。'
   }
 
   if (cleaned.includes('Failed to read file')) {
@@ -2651,6 +2675,7 @@ function toolOutputForDisplay(part: ToolPart): string {
           :zh="locale.startsWith('zh')"
           @approve="pendingDeploymentApproval?.resolve(true)"
           @reject="pendingDeploymentApproval?.resolve(false)"
+          @stop="handleStop"
         />
       </div>
     </div>

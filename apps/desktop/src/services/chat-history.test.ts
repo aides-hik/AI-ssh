@@ -22,13 +22,16 @@ test('history restores complete user text, tool results and host identity withou
   assistant.parts = [
     { type: 'text', text: 'result', kind: 'summary' },
     { type: 'reasoning', text: 'private', metadata: { encrypted_content: 'opaque' } },
-    { type: 'tool', tool: 'read_file', callID: 'call', metadata: { encrypted_content: 'opaque' }, state: { status: 'completed', input: { path: '/x' }, output: 'contents', raw: 'opaque', metadata: { reasoning: 'private' } } }
+    { type: 'tool', tool: 'read_file', callID: 'call', metadata: { encrypted_content: 'opaque' }, state: { status: 'completed', input: { path: '/x' }, output: 'contents', raw: 'opaque', metadata: { targetId: 'old-runtime', targetName: 'Server A', reasoning: 'private', thought_signature: 'opaque' } } }
   ]
   store.save('saved-config', [user, assistant], {})
   const loaded = store.load('saved-config', {})
   assert.equal(loaded[0].parts[0].type === 'text' && loaded[0].parts[0].text, user.parts[0].type === 'text' && user.parts[0].text)
   assert.deepEqual(loaded[0].info.targets, user.info.targets)
   assert.equal(loaded[1].parts.length, 2)
+  const tool = loaded[1].parts[1]
+  assert.equal(tool.type, 'tool')
+  assert.deepEqual(tool.type === 'tool' && tool.state.metadata, { targetId: 'old-runtime', targetName: 'Server A' })
   assert.doesNotMatch(JSON.stringify(values), /opaque|private|encrypted_content/)
   assert.deepEqual(store.load('another-config', {}), [])
 })

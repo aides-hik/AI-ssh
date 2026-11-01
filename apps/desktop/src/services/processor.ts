@@ -5,10 +5,10 @@ export type StreamEvent =
   | { type: 'start' }
   | { type: 'text-delta'; delta: string }
   | { type: 'text-done' }
-  | { type: 'tool-call'; toolCallId: string; toolName: string; input: any }
-  | { type: 'tool-start'; toolCallId: string; toolName: string; input: any }
-  | { type: 'tool-result'; toolCallId: string; output: { output: string } }
-  | { type: 'tool-error'; toolCallId: string; error: string }
+  | { type: 'tool-call'; toolCallId: string; toolExecutionId?: string; toolName: string; input: any }
+  | { type: 'tool-start'; toolCallId: string; toolExecutionId?: string; toolName: string; input: any }
+  | { type: 'tool-result'; toolCallId: string; toolExecutionId?: string; output: { output: string } }
+  | { type: 'tool-error'; toolCallId: string; toolExecutionId?: string; error: string }
   | { type: 'done'; finish: 'stop' | 'tool-calls' | 'step-limit' }
   | { type: 'error'; error: Error }
 
@@ -17,6 +17,15 @@ import type { ChatMessage, StreamChunk } from './llm'
 import { createLLMSession } from './llm'
 import type { AIProvider, AIModel } from '@/types/ai-providers'
 import type { ReasoningSelection } from '../utils/model-reasoning'
+import { ToolCallProtocolError } from './tool-call-protocol'
+
+const TOOL_CALL_REPAIR_MESSAGE = [
+  'The previous response contained raw DSML tool markup in answer text and was rejected. No tool from that response was executed.',
+  'Repeat the pending tool request using the native structured tool-calling protocol and the provided tools only.',
+  'Use existing tool results and do not repeat previously completed actions.',
+  'Supply every required parameter according to each tool schema and the original user request; do not invent targets or claim observations.',
+  'Do not print DSML/XML, code examples, or a completion summary in place of a tool call.'
+].join('\n')
 
 // 流式处理器配置
 export interface ProcessorConfig {
@@ -63,13 +72,16 @@ export class SessionProcessor {
   private state: SessionState
   private onProgress?: (msg: string) => void
   private messages: ModelMessage[]
+  private readonly executionPrefix = crypto.randomUUID()
 
   constructor(config: ProcessorConfig, onProgress?: (msg: string) => void) {
     this.config = {
       ...config,
+      tools: [...config.tools],
       provider: { ...config.provider, config: config.provider.config ? { ...config.provider.config } : undefined },
       model: {
         ...config.model,
+        capabilities: { ...config.model.capabilities },
         parameters: config.model.parameters ? { ...config.model.parameters } : undefined,
         requestConfig: config.model.requestConfig ? { ...config.model.requestConfig } : undefined,
         reasoning: config.model.reasoning ? {
@@ -115,7 +127,18 @@ export class SessionProcessor {
       this.emit({ type: 'start' })
 
       try {
-        const result = await this.processOneRound()
+        let result
+        try {
+          result = await this.processOneRound()
+        } catch (error) {
+          this.throwIfAborted()
+          if (!(error instanceof ToolCallProtocolError) || !this.config.model.capabilities.functionCall || !this.config.tools.length) throw error
+          // Retry only the rejected response, using the original history and tool schemas.
+          // Previous completed tool rounds must never be replayed or executed again.
+          this.state.toolCalls.clear()
+          this.onProgress?.('模型返回的工具调用格式异常，正在重新请求')
+          result = await this.processOneRound(true)
+        }
         this.throwIfAborted()
 
         if (result.finish === 'stop') {
@@ -138,7 +161,7 @@ export class SessionProcessor {
     return { finish: 'step-limit', messages: this.messages }
   }
 
-  private async processOneRound(): Promise<{
+  private async processOneRound(repairToolCall = false): Promise<{
     finish: 'stop' | 'tool-calls'
     toolCalls?: Array<{ callId: string; name: string; input: any }>
   }> {
@@ -147,7 +170,7 @@ export class SessionProcessor {
     const responseItems: Array<Record<string, unknown>> = []
     const reasoningDetails: Array<Record<string, unknown>> = []
 
-    for await (const chunk of this.llmStream()) {
+    for await (const chunk of this.llmStream(repairToolCall)) {
       if (this.state.aborted) break
 
       switch (chunk.type) {
@@ -165,7 +188,7 @@ export class SessionProcessor {
 
         case 'text':
           accumulatedText += chunk.content || ''
-          this.emit({ type: 'text-delta', delta: chunk.content || '' })
+          if (!repairToolCall) this.emit({ type: 'text-delta', delta: chunk.content || '' })
           break
 
         case 'tool-call':
@@ -177,12 +200,15 @@ export class SessionProcessor {
           this.emit({
             type: 'tool-call',
             toolCallId: chunk.toolCallId!,
+            toolExecutionId: this.toolExecutionId(chunk.toolCallId!),
             toolName: chunk.toolName!,
             input: chunk.toolInput
           })
           break
 
         case 'done':
+          if (repairToolCall && this.state.toolCalls.size === 0) throw new ToolCallProtocolError()
+          if (repairToolCall && accumulatedText) this.emit({ type: 'text-delta', delta: accumulatedText })
           this.emit({ type: 'text-done' })
 
           if (this.state.toolCalls.size > 0) {
@@ -250,6 +276,7 @@ export class SessionProcessor {
       this.emit({
         type: 'tool-start',
         toolCallId: tc.callId,
+        toolExecutionId: this.toolExecutionId(tc.callId),
         toolName: tc.name,
         input: tc.input
       })
@@ -266,6 +293,7 @@ export class SessionProcessor {
         this.emit({
           type: 'tool-result',
           toolCallId: tc.callId,
+          toolExecutionId: this.toolExecutionId(tc.callId),
           output: { output: result.output }
         })
       } catch (error) {
@@ -286,6 +314,7 @@ export class SessionProcessor {
         this.emit({
           type: 'tool-error',
           toolCallId: tc.callId,
+          toolExecutionId: this.toolExecutionId(tc.callId),
           error: errorOutput
         })
       }
@@ -360,8 +389,15 @@ export class SessionProcessor {
     throw error
   }
 
-  private async *llmStream(): AsyncGenerator<StreamChunk, void, unknown> {
+  private toolExecutionId(callId: string): string {
+    // Provider IDs may be reused on the next round. UI identity must keep both
+    // executions while model history retains the original provider IDs.
+    return `tool_${this.executionPrefix}_${this.state.stepCount}_${callId}`
+  }
+
+  private async *llmStream(repairToolCall = false): AsyncGenerator<StreamChunk, void, unknown> {
     const messages = this.modelToChatMessages(this.messages)
+    if (repairToolCall) messages.push({ role: 'system', content: TOOL_CALL_REPAIR_MESSAGE })
 
     const session = createLLMSession(
       this.config.provider,

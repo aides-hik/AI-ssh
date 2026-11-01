@@ -75,7 +75,7 @@ test('compaction does not separate a retained standalone tool result from its ca
   assert.equal(request[1].tool_calls?.[0].id, 'call_check')
   assert.equal(request[2].role, 'tool')
   assert.equal(request[2].tool_call_id, 'call_check')
-  assert.equal(request[2].content, 'OBSERVED_SERVICE_STATE: healthy')
+  assert.equal(request[2].content, '[服务器: Production A (runtime-a)]\nOBSERVED_SERVICE_STATE: healthy')
   assert.equal(request[3].role, 'user')
 })
 
@@ -98,4 +98,64 @@ test('large existing assistant summaries remain intact through repeated compacti
     assert.equal(request.filter(message => message.content === fullSummary).length, 1)
     assert.equal(request.filter(message => message.role === 'user').length, index + 2)
   }
+})
+
+function completedRound(id: string, output: string): Message {
+  return {
+    info: { id, role: 'assistant', createdAt: 1, finish: 'stop' },
+    parts: [{ type: 'tool', tool: 'read_file', callID: 'reused_call', state: {
+      status: 'completed', input: { path: `/srv/${id}` }, output
+    } }]
+  }
+}
+
+test('tool IDs reused in separate rounds keep both paired results and both compacted observations', () => {
+  const messages = [
+    createUserMessage('user', 'Read both files'),
+    completedRound('first', 'FIRST_FILE_OBSERVATION'),
+    completedRound('second', 'SECOND_FILE_OBSERVATION'),
+    createUserMessage('follow-up', 'Compare the observations')
+  ]
+  const request = toModelMessages(messages)
+  assert.deepEqual(request.filter(message => message.role === 'tool').map(message => message.content), [
+    'FIRST_FILE_OBSERVATION', 'SECOND_FILE_OBSERVATION'
+  ])
+  for (const id of ['first', 'second']) {
+    const summary = toModelMessages(compactMessages(messages, 1)).find(message => message.content?.includes('[历史执行记录摘要]'))?.content || ''
+    assert.match(summary, new RegExp(`/srv/${id}`))
+    assert.match(summary, new RegExp(`${id.toUpperCase()}_FILE_OBSERVATION`))
+  }
+})
+
+test('incomplete, duplicate and orphaned historical calls become prose instead of invalid tool transcripts', () => {
+  const pending = toolMessages()[0]
+  const duplicate = completedRound('duplicate', 'Duplicate observation')
+  duplicate.parts.push(structuredClone(duplicate.parts[0]))
+  const orphan = toolMessages()[1]
+  for (const messages of [[pending], [duplicate], [orphan], [pending, createUserMessage('interrupt', 'Stop'), orphan]]) {
+    const request = toModelMessages(messages)
+    assert.equal(request.some(message => message.tool_calls || message.role === 'tool'), false)
+    assert.ok(request.some(message => message.role === 'assistant' && message.content?.includes('[工具 ')))
+  }
+})
+
+test('plain history joins standalone results to their own call and retains command parameters', () => {
+  const messages = toolMessages()
+  const request = new ProcessorHistory().toModelMessages(messages, 'new-provider', true)
+  assert.equal(request.length, 1)
+  assert.equal(request[0].role, 'assistant')
+  assert.equal(request[0].tool_calls, undefined)
+  assert.match(request[0].content || '', /Production A \(runtime-a\)/)
+  assert.match(request[0].content || '', /check-service --json/)
+  assert.match(request[0].content || '', /OBSERVED_SERVICE_STATE: healthy/)
+  assert.doesNotMatch(request[0].content || '', /\(pending\)/)
+})
+
+test('structured tool output limits also bound a single very long line', () => {
+  const message = completedRound('long', `<file_content>\nHEAD_${'x'.repeat(60000)}_TAIL\n</file_content>`)
+  const request = new ProcessorHistory().toModelMessages([message], 'new-provider', true)
+  const summary = request[0].content || ''
+  assert.ok(summary.length < 4000, `long single-line result grew to ${summary.length} characters`)
+  assert.match(summary, /HEAD_/)
+  assert.match(summary, /_TAIL/)
 })

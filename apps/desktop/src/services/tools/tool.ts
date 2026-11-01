@@ -39,14 +39,17 @@ export function define(id: string, init: InitFunction): ToolInfo {
       const toolInfo = await init()
       const execute = toolInfo.execute
       toolInfo.execute = async (args, ctx) => {
+        ctx.abort.throwIfAborted()
+        let parameters: unknown
         try {
-          toolInfo.parameters.parse(args)
+          parameters = toolInfo.parameters.parse(args)
         } catch (error) {
           throw new Error(`The ${id} tool was called with invalid arguments: ${error}`, {
             cause: error
           })
         }
-        return execute(args, ctx)
+        ctx.abort.throwIfAborted()
+        return execute(parameters, ctx)
       }
       return toolInfo
     }

@@ -9,7 +9,7 @@ const props = withDefaults(defineProps<{
   targets: readonly HostTarget[]
   zh?: boolean
 }>(), { zh: true })
-const emit = defineEmits<{ approve: []; reject: [] }>()
+const emit = defineEmits<{ approve: []; reject: []; stop: [] }>()
 const titleId = `deployment-approval-${useId()}`
 const descriptionId = `${titleId}-description`
 const cancelButton = ref<HTMLButtonElement>()
@@ -38,6 +38,12 @@ function decide(approved: boolean) {
   settled.value = true
   if (approved) emit('approve')
   else emit('reject')
+}
+
+function stopRequest() {
+  if (settled.value) return
+  settled.value = true
+  emit('stop')
 }
 
 const focusCancel = () => nextTick(() => cancelButton.value?.focus({ preventScroll: true }))
@@ -119,7 +125,8 @@ watch(() => props.stage, () => {
       </ol>
       <footer class="oc-deployment-approval-actions">
         <span class="oc-deployment-approval-scope">{{ zh ? '仅确认本阶段' : 'This stage only' }}</span>
-        <button ref="cancelButton" type="button" class="oc-deployment-approval-cancel" :disabled="settled" @click="decide(false)">{{ zh ? '取消' : 'Cancel' }}</button>
+        <button type="button" class="oc-deployment-approval-stop" :disabled="settled" @click="stopRequest"><i class="bi bi-stop-fill" aria-hidden="true"></i>{{ zh ? '停止本次请求' : 'Stop this request' }}</button>
+        <button ref="cancelButton" type="button" class="oc-deployment-approval-cancel" :disabled="settled" @click="decide(false)">{{ zh ? '取消本阶段' : 'Cancel stage' }}</button>
         <button type="button" class="oc-deployment-approval-confirm" :disabled="settled" @click="decide(true)">{{ zh ? '确认本阶段' : 'Approve stage' }}<i class="bi bi-arrow-right-short" aria-hidden="true"></i></button>
       </footer>
     </div>
@@ -173,9 +180,11 @@ watch(() => props.stage, () => {
 .oc-deployment-approval-scope { flex: 1; min-width: 80px; color: var(--vscode-fg-muted); font-size: var(--prism-font-10); }
 .oc-deployment-approval-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 3px; min-height: 32px; padding: 6px 10px; border: 1px solid var(--vscode-border); border-radius: 9px; font: 500 var(--prism-font-11)/1.5 var(--prism-font, sans-serif); cursor: pointer; }
 .oc-deployment-approval-cancel { background: transparent; color: var(--vscode-fg); }
+.oc-deployment-approval-stop { background: transparent; color: var(--vscode-error, #d45b5b); }
 .oc-deployment-approval-confirm { border-color: transparent !important; background: var(--vscode-accent); color: var(--vscode-button-foreground, white); }
 .oc-deployment-approval-actions button:disabled { cursor: default; opacity: 0.55; }
 .oc-deployment-approval-cancel:hover:not(:disabled) { background: var(--vscode-list-hoverBackground); }
+.oc-deployment-approval-stop:hover:not(:disabled) { background: color-mix(in srgb, var(--vscode-error, #d45b5b) 8%, transparent); }
 .oc-deployment-approval-confirm:hover:not(:disabled) { background: var(--vscode-accent-hover, var(--vscode-accent)); }
 .oc-deployment-approval-actions button:focus-visible,.oc-deployment-approval-command summary:focus-visible { outline: 2px solid var(--vscode-accent); outline-offset: 2px; }
 @media (max-height: 680px) {

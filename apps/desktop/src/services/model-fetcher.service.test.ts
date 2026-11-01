@@ -65,6 +65,26 @@ test('DeepSeek model discovery retains reasoning levels and accepts legacy model
   assert.equal(result.models?.[3].reasoning, false)
 })
 
+test('DeepSeek V4.1 Flash discovery recognizes verified tool support while preserving explicit metadata', async context => {
+  for (const [metadata, expected] of [
+    [{}, true],
+    [{ function_calling: false }, false],
+    [{ supported_parameters: [] }, false],
+    [{ supported_parameters: ['tools'] }, true]
+  ] as const) {
+    mockModels(context, [{ id: 'deepseek-v4.1-flash', ...metadata }])
+    const result = await fetchDeepSeekModels('fixture-key', 'https://fixture.invalid/v1')
+    assert.equal(result.success, true)
+    assert.equal(result.models?.[0].capabilities.functionCall, expected)
+  }
+  mockModels(context, [
+    { id: 'deepseek-v4.1-flash-unverified' },
+    { id: 'deepseek-v4.1-pro' }
+  ])
+  const variants = await fetchDeepSeekModels('fixture-key', 'https://fixture.invalid/v1')
+  assert.deepEqual(variants.models?.map(model => model.capabilities.functionCall), [false, false])
+})
+
 test('compatible discovery selects reasoning metadata by provider or exact official host', async context => {
   mockModels(context, [
     {

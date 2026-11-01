@@ -28,7 +28,11 @@ function cleanMessages(value: unknown): Message[] {
         status: state.status === 'completed' || state.status === 'error' ? state.status : 'aborted',
         ...(record(state.input) ? { input: state.input } : {}),
         ...(typeof state.output === 'string' ? { output: state.output } : {}),
-        ...(typeof state.error === 'string' ? { error: state.error } : {})
+        ...(typeof state.error === 'string' ? { error: state.error } : {}),
+        ...(record(state.metadata) && typeof state.metadata.targetId === 'string' ? { metadata: {
+          targetId: state.metadata.targetId,
+          ...(typeof state.metadata.targetName === 'string' ? { targetName: state.metadata.targetName } : {})
+        } } : {})
       } }]
     })
     const targets = Array.isArray(info.targets) ? info.targets.flatMap((target: unknown) => record(target) && typeof target.id === 'string' && typeof target.name === 'string' && typeof target.host === 'string'

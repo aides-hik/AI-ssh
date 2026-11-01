@@ -5,6 +5,7 @@
 - [项目介绍](../README.md)
 - [启动、验证与发布规范](../AGENTS.md)
 - [更新日志](../CHANGELOG.md)
+- [1.9.9 升级说明](./releases/1.9.9.md)：AI 工具协议、审批停止及模型配置检查。
 - [1.9.8 升级说明](./releases/1.9.8.md)：桌面修复、自托管服务端迁移及重新登录说明。
 - [PostgreSQL 迁移与已有数据库接入](./postgresql-migrations.md)：正式迁移目录、已有数据库 baseline 核对和登录会话兼容性。
 - [重构记录](../重构记录.md)

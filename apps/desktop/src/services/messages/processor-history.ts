@@ -1,5 +1,5 @@
 import { toModelMessages as convertMessages, type ModelMessage } from './convert'
-import type { Message, ToolPart } from './message'
+import type { Message } from './message'
 
 const MAX_ASSISTANT_TURNS = 10
 const MAX_JSON_CHARACTERS = 256000
@@ -41,11 +41,12 @@ export class ProcessorHistory {
     const coveredToolIds = new Set<string>()
     let visibleMessages: Message[] = []
     const flushVisible = () => {
-      result.push(...convertMessages(visibleMessages))
+      result.push(...convertMessages(visibleMessages, !requireOpaqueState))
       visibleMessages = []
     }
 
     for (const message of messages) {
+      if (message.info.role !== 'tool') coveredToolIds.clear()
       const cached =
         message.info.role === 'assistant' ? this.#turns.get(message.info.id) : undefined
       if (cached) {
@@ -55,30 +56,11 @@ export class ProcessorHistory {
         for (const raw of cached.messages) {
           if (raw.role === 'tool' && raw.tool_call_id) coveredToolIds.add(raw.tool_call_id)
         }
-      } else if (
-        requireOpaqueState &&
-        (message.info.role === 'assistant' || message.info.role === 'tool')
-      ) {
-        flushVisible()
-        const parts = message.parts.filter((part): part is ToolPart => part.type === 'tool')
-        const summary = plainAssistantSummary({
-          ...message,
-          parts: message.parts.filter(
-            part =>
-              message.info.role !== 'tool' ||
-              part.type !== 'tool' ||
-              !coveredToolIds.has(part.callID)
-          )
-        })
-        for (const part of parts) coveredToolIds.add(part.callID)
-        if (summary) result.push(summary)
       } else {
-        if (
-          message.info.role === 'tool' &&
-          message.parts.some(part => part.type === 'tool' && coveredToolIds.has(part.callID))
-        )
-          continue
-        visibleMessages.push(message)
+        visibleMessages.push(message.info.role === 'tool' ? {
+          ...message,
+          parts: message.parts.filter(part => part.type !== 'tool' || !coveredToolIds.has(part.callID))
+        } : message)
       }
     }
     flushVisible()
@@ -131,7 +113,10 @@ function isCompletedTurn(messages: ModelMessage[]): boolean {
   for (const message of messages) {
     if (message.role === 'assistant') {
       if (pendingToolIds.size) return false
-      for (const call of message.tool_calls || []) pendingToolIds.add(call.id)
+      for (const call of message.tool_calls || []) {
+        if (!call.id || !call.function?.name || pendingToolIds.has(call.id)) return false
+        pendingToolIds.add(call.id)
+      }
     } else if (message.role === 'tool') {
       if (!message.tool_call_id || !pendingToolIds.delete(message.tool_call_id)) return false
     } else {
@@ -139,24 +124,4 @@ function isCompletedTurn(messages: ModelMessage[]): boolean {
     }
   }
   return pendingToolIds.size === 0
-}
-
-function plainAssistantSummary(message: Message): ModelMessage | null {
-  const converted = convertMessages([message])
-  const summaries = converted
-    .filter(part => part.role === 'assistant' && part.content)
-    .map(part => part.content as string)
-  const results = new Map(
-    converted
-      .filter(part => part.role === 'tool')
-      .map(part => [part.tool_call_id, part.content || ''])
-  )
-  for (const part of message.parts) {
-    if (part.type !== 'tool') continue
-    const output = results.get(part.callID)
-    const status = output ? '' : ` (${part.state.status})`
-    const target = part.state.metadata?.targetId ? ` / ${part.state.metadata.targetName} (${part.state.metadata.targetId})` : ''
-    summaries.push(`[工具 ${part.tool}${target}${status}]${output ? `\n${output}` : ''}`)
-  }
-  return summaries.length ? { role: 'assistant', content: summaries.join('\n\n') } : null
 }
