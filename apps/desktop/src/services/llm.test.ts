@@ -238,6 +238,41 @@ test('Responses-only models use /responses even with the provider default effort
   assert.equal(chunks.find(chunk => chunk.type === 'text')?.content, 'answer')
 })
 
+for (const fixture of [
+  { name: 'custom alias override', providerId: 'custom', modelId: 'deployment-alias',
+    override: { protocol: 'openai', supportedEfforts: ['low', 'high'] }, selection: 'high', effort: 'high' },
+  { name: 'discovered Ollama levels', providerId: 'ollama', modelId: 'local-effort-model',
+    reasoning: { protocol: 'ollama', supportedEfforts: ['low', 'medium', 'high'], mandatory: true }, selection: 'high', effort: 'high' },
+  { name: 'discovered Ollama toggle on', providerId: 'ollama', modelId: 'local-toggle-model',
+    reasoning: { protocol: 'ollama', supportsToggle: true }, selection: 'enabled', effort: 'medium' },
+  { name: 'discovered Ollama toggle off', providerId: 'ollama', modelId: 'local-toggle-model',
+    reasoning: { protocol: 'ollama', supportsToggle: true }, selection: 'none', effort: 'none' },
+  { name: 'ordinary model', providerId: 'custom', modelId: 'ordinary-model', selection: 'high', effort: undefined },
+  { name: 'explicitly disabled override', providerId: 'custom', modelId: 'gpt-5', override: false, selection: 'high', effort: undefined },
+  { name: 'explicitly unsupported model', providerId: 'custom', modelId: 'gpt-5', reasoning: false, selection: 'high', effort: undefined }
+] satisfies Array<{ name: string; providerId: string; modelId: string; reasoning?: AIModel['reasoning']; override?: AIModel['reasoningOverride']; selection: ReasoningSelection; effort: string | undefined }>) {
+  test(`terminal HTTP body preserves ${fixture.name}`, async context => {
+    let request: Record<string, unknown> = {}
+    let endpoint: unknown
+    context.mock.method(globalThis, 'fetch', async (url: unknown, init: RequestInit) => {
+      endpoint = url
+      request = JSON.parse(String(init.body))
+      return streamResponse([{ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] }])
+    })
+    const current: AIModel = {
+      ...model(fixture.modelId),
+      reasoning: 'reasoning' in fixture ? fixture.reasoning : undefined,
+      reasoningOverride: 'override' in fixture ? fixture.override : undefined
+    }
+    await Array.fromAsync(createLLMSession(provider(fixture.providerId), current, [], '', undefined, undefined, undefined, fixture.selection).stream([]))
+    assert.equal(endpoint, 'https://fixture.invalid/v1/chat/completions')
+    assert.equal(request.reasoning_effort, fixture.effort)
+    for (const key of ['reasoning', 'thinking', 'think', 'enable_thinking', 'thinking_budget', 'output_config']) {
+      assert.equal(request[key], undefined, `${key} must not leak into this compatibility request`)
+    }
+  })
+}
+
 test('terminal generation uses model defaults, output limits and excludes tools for text-only models', async context => {
   let request: Record<string, unknown> = {}
   context.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {

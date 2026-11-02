@@ -23,7 +23,7 @@ export interface AIProvider {
 export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 export interface ModelReasoningConfig {
-  protocol: 'openai' | 'openrouter' | 'deepseek' | 'qwen' | 'gemini' | 'anthropic'
+  protocol: 'openai' | 'openrouter' | 'deepseek' | 'qwen' | 'gemini' | 'anthropic' | 'ollama'
   supportedEfforts?: ReasoningEffort[]
   supportsToggle?: boolean
   mandatory?: boolean
@@ -73,6 +73,8 @@ export interface AIModel {
   isCustom?: boolean // 是否为用户手动添加的模型
   // Optional capabilities reported by the model service; false explicitly disables adjustment.
   reasoning?: ModelReasoningConfig | false
+  // User-declared capabilities for deployments/aliases whose API omits metadata. Missing means automatic.
+  reasoningOverride?: ModelReasoningConfig | false
   parameters?: ModelParameterCapabilities
   requestConfig?: ModelRequestConfig
 }

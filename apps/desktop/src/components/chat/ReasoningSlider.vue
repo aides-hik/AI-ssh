@@ -135,8 +135,8 @@ const hint = computed(() => {
         ? '此模型不支持调整思考程度。'
         : 'This model does not support reasoning adjustment.'
     return chinese.value
-      ? '此模型未提供可用档位，使用默认设置。可刷新模型列表获取能力。'
-      : 'No supported levels are available. Model defaults apply; refresh the model list to check capabilities.'
+      ? '尚未识别此模型的思考能力。可刷新模型列表，或在设置 → AI 服务商 → 此模型参数中手动配置。'
+      : 'Reasoning capabilities are not recognized. Refresh the model list or configure this model’s parameters in Settings → AI Providers.'
   }
   if (selected.value === 'default')
     return chinese.value ? '遵循模型服务的默认设置。' : 'Use the model service’s default settings.'

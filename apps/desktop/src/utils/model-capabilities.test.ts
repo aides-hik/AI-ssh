@@ -57,6 +57,46 @@ test('Ollama options stay in their native container', () => {
   assert.deepEqual(buildModelParameterBody(ollama, model('local'), { temperature: 0.2, maxTokens: 1000, topP: 0.7 }), { options: { temperature: 0.2, num_predict: 1000, top_p: 0.7 } })
 })
 
+test('declared Ollama reasoning uses native think and compatibility reasoning_effort on the correct transports', () => {
+  const ollama: AIProvider = { ...provider, id: 'local-instance', endpoint: 'http://127.0.0.1:11434', config: { runtimeProviderId: 'ollama' } }
+  const local = model('deployment', { reasoning: { protocol: 'ollama', supportedEfforts: ['low', 'medium', 'high'], mandatory: true } })
+  assert.deepEqual(buildModelParameterBody(ollama, local, { reasoningSelection: 'high', temperature: 0.2, maxTokens: 1000 }),
+    { think: 'high', options: { temperature: 0.2, num_predict: 1000 } })
+  assert.deepEqual(buildModelParameterBody(ollama, local, { apiStyle: 'chat-completions', reasoningSelection: 'low', topP: 0.7 }),
+    { reasoning_effort: 'low', top_p: 0.7 })
+  assert.deepEqual(buildModelParameterBody(ollama, local, { reasoningSelection: 'default' }), {})
+  assert.deepEqual(buildModelParameterBody(ollama, local, { reasoningSelection: 'none' }), {})
+  local.reasoning = { protocol: 'ollama', supportsToggle: true }
+  assert.deepEqual(buildModelParameterBody(ollama, local, { reasoningSelection: 'enabled' }), { think: true })
+  assert.deepEqual(buildModelParameterBody(ollama, local, { reasoningSelection: 'none' }), { think: false })
+  assert.deepEqual(buildModelParameterBody(ollama, local, { apiStyle: 'chat-completions', reasoningSelection: 'enabled' }), { reasoning_effort: 'medium' })
+  assert.deepEqual(buildModelParameterBody(ollama, local, { apiStyle: 'chat-completions', reasoningSelection: 'none' }), { reasoning_effort: 'none' })
+  local.reasoningOverride = false
+  assert.deepEqual(buildModelParameterBody(ollama, local, { reasoningSelection: 'high' }), {})
+})
+
+test('explicit deployment overrides survive parameter filtering without enabling other unknown models', () => {
+  const deployed = model('private-alias', { reasoningOverride: { protocol: 'openai', supportedEfforts: ['low', 'high'] } })
+  assert.deepEqual(buildModelParameterBody(provider, deployed, { reasoningSelection: 'high' }), { reasoning_effort: 'high' })
+  assert.deepEqual(buildModelParameterBody(provider, deployed, { reasoningSelection: 'medium' }), {})
+  assert.deepEqual(buildModelParameterBody(provider, model('private-alias'), { reasoningSelection: 'high' }), {})
+  const disabled = model('gpt-5.2', { reasoningOverride: false })
+  assert.deepEqual(buildModelParameterBody(provider, disabled, { reasoningSelection: 'high' }), {})
+})
+
+test('native requests never silently expose an incompatible reasoning override or send invalid Gemini fields', () => {
+  const google = { ...provider, id: 'google' }
+  const deployed = model('native-alias', { reasoningOverride: { protocol: 'openai', supportedEfforts: ['high'] } })
+  assert.deepEqual(getModelCapabilities(google, deployed).reasoning.options, ['default'])
+  assert.deepEqual(buildModelParameterBody(google, deployed, { reasoningSelection: 'high' }), {})
+  deployed.reasoningOverride = { protocol: 'gemini', supportedEfforts: ['none', 'low', 'high', 'max'] }
+  assert.deepEqual(buildModelParameterBody(google, deployed, { reasoningSelection: 'max' }), {})
+  assert.deepEqual(buildModelParameterBody(google, deployed, { reasoningSelection: 'none' }), {})
+  assert.deepEqual(buildModelParameterBody(google, deployed, { reasoningSelection: 'high' }), { generationConfig: { thinkingConfig: { thinkingLevel: 'high' } } })
+  deployed.id = 'google/gemini-2.5-flash'
+  assert.deepEqual(buildModelParameterBody(google, deployed, { reasoningSelection: 'none' }), { generationConfig: { thinkingConfig: { thinkingBudget: 0 } } })
+})
+
 test('verified non-OpenAI effort models keep their documented sampling and token fields', () => {
   for (const [providerId, modelId] of [
     ['groq', 'openai/gpt-oss-120b'], ['zhipu', 'glm-5.3-flash'], ['zhipu', 'glm-5.3-flashx'], ['upstage', 'solar-pro4']

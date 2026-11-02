@@ -945,7 +945,11 @@ async function sendMessageWithTools(content: string) {
     reasoning: props.currentModel.reasoning ? {
       ...props.currentModel.reasoning,
       supportedEfforts: props.currentModel.reasoning.supportedEfforts ? [...props.currentModel.reasoning.supportedEfforts] : undefined
-    } : props.currentModel.reasoning
+    } : props.currentModel.reasoning,
+    reasoningOverride: props.currentModel.reasoningOverride ? {
+      ...props.currentModel.reasoningOverride,
+      supportedEfforts: props.currentModel.reasoningOverride.supportedEfforts ? [...props.currentModel.reasoningOverride.supportedEfforts] : undefined
+    } : props.currentModel.reasoningOverride
   }
   const requestReasoning = reasoningSelection.value
   const requestTargets = snapshotRequestTargets()

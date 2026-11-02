@@ -906,6 +906,8 @@ test('tool requests retain the clicked model and effort across asynchronous sett
   initialProvider.config = { temperature: 0.2 }
   initialModel.requestConfig = { maxTokens: 300 }
   initialModel.parameters = { maxOutputTokens: 800 }
+  initialModel.reasoningOverride = { protocol: 'openai', supportedEfforts: ['low', 'high'] }
+  const initialOverride = initialModel.reasoningOverride
   const pending = send('Initial request')
   assert.equal(state.isGenerating.value, true)
   assert.equal(state.configs.length, 0, 'settings preparation must still be pending')
@@ -917,6 +919,9 @@ test('tool requests retain the clicked model and effort across asynchronous sett
   initialModel.parameters.maxOutputTokens = 1600
   assert(initialModel.reasoning)
   initialModel.reasoning.supportedEfforts?.splice(0, 2, 'none')
+  initialOverride.supportedEfforts?.splice(0, 2, 'none')
+  initialOverride.protocol = 'deepseek'
+  initialModel.reasoningOverride = false
   state.props.currentProvider = { ...initialProvider, id: 'different-provider', endpoint: 'https://different.invalid/v1' }
   state.props.currentModel = { ...initialModel, id: 'different-model' }
   state.props.connectionId = 'different-ssh'
@@ -939,6 +944,9 @@ test('tool requests retain the clicked model and effort across asynchronous sett
   assert.equal(config.model.requestConfig?.maxTokens, 300)
   assert.equal(config.model.parameters?.maxOutputTokens, 800)
   assert.deepEqual(config.model.reasoning && config.model.reasoning.supportedEfforts, ['low', 'high'])
+  assert.deepEqual(config.model.reasoningOverride, { protocol: 'openai', supportedEfforts: ['low', 'high'] })
+  assert.notEqual(config.model.reasoningOverride, initialOverride)
+  assert.notEqual(config.model.reasoningOverride && config.model.reasoningOverride.supportedEfforts, initialOverride.supportedEfforts)
   assert.equal(config.reasoning, 'high')
   assert.equal(config.connectionId, 'initial-ssh')
   assert.equal(config.serverEnvDocId, 'initial-env')
@@ -957,6 +965,18 @@ test('tool requests retain the clicked model and effort across asynchronous sett
   ])
   assert.equal(state.isGenerating.value, false)
   assert.equal(state.abortController.value, null)
+})
+
+test('a disabled reasoning override stays disabled while asynchronous settings are loading', async () => {
+  const settings = Promise.withResolvers<RequestSettings>()
+  const { state, send } = await loadToolSendFixture(() => settings.promise)
+  state.props.currentModel.reasoningOverride = false
+  const pending = send('Keep reasoning disabled for this request')
+  state.props.currentModel.reasoningOverride = { protocol: 'openai', supportedEfforts: ['high'] }
+  settings.resolve({ aiProviders: [{ id: 'initial-provider', apiKey: 'initial-key' }] })
+  await pending
+  assert.equal(state.configs.length, 1)
+  assert.equal(state.configs[0].model.reasoningOverride, false)
 })
 
 test('a new conversation sends only its own user request and clears opaque processor context', async () => {

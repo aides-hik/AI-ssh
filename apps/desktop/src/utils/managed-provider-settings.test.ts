@@ -75,3 +75,22 @@ test('model capability metadata and user generation defaults survive a settings 
   assert.deepEqual(saved.models[0].parameters, provider.models[0].parameters)
   assert.deepEqual(saved.models[0].requestConfig, provider.models[0].requestConfig)
 })
+
+test('manual reasoning configuration survives unmanaged and managed saves independently of service metadata', () => {
+  const overrides: AIModel['reasoningOverride'][] = [{ protocol: 'openai', supportedEfforts: ['high'] }, false, undefined]
+  for (const managedByApp of [false, true]) {
+    for (const override of overrides) {
+      const provider = providerWithReasoning(false)
+      provider.config = { managedByApp }
+      provider.models[0].reasoningOverride = override
+      provider.models[0].requestConfig = { maxTokens: 1200 }
+      const latest = structuredClone(provider)
+      latest.models[0].reasoning = { protocol: 'openrouter', supportedEfforts: ['low', 'high'] }
+      latest.models[0].reasoningOverride = false
+      const saved = JSON.parse(JSON.stringify(mergeProviderForSave(provider, latest)))
+      assert.deepEqual(saved.models[0].reasoningOverride, override)
+      assert.deepEqual(saved.models[0].reasoning, managedByApp ? latest.models[0].reasoning : false)
+      assert.deepEqual(saved.models[0].requestConfig, { maxTokens: 1200 })
+    }
+  }
+})

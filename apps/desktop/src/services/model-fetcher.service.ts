@@ -27,14 +27,14 @@ function knownTools(id: string): boolean {
   return /^(?:gpt-4o(?:-mini)?|gpt-4-turbo|gpt-3\.5-turbo|o3(?:-mini)?|o4-mini|gpt-5(?:\.[1-5])?(?:-(?:mini|nano|codex(?:-mini|-max)?))?|gpt-5\.(?:2|4|5)-pro|gpt-5\.6(?:-(?:sol|terra|luna))?|gpt-6(?:\.1)?-(?:astra|sol|luna)|deepseek-chat|deepseek-flash|deepseek-v4-(?:pro|flash|flash-vision-exp))(?:-\d{4}-?\d{2}-?\d{2})?$/.test(value)
 }
 
-function metadataProtocol(providerId: string, endpoint: string): 'openrouter' | 'deepseek' | undefined {
+function metadataProtocol(providerId: string, endpoint: string): 'openai' | 'openrouter' | 'deepseek' {
   if (providerId === 'openrouter' || providerId === 'deepseek') return providerId
   try {
     const host = new URL(endpoint).hostname.toLowerCase()
     if (host === 'openrouter.ai') return 'openrouter'
     if (host === 'api.deepseek.com') return 'deepseek'
   } catch { /* Custom endpoint parsing is left to fetch. */ }
-  return undefined
+  return 'openai'
 }
 
 function arrayField(data: APIRecord, field: string): APIRecord[] {
@@ -71,11 +71,11 @@ function parsePrice(record: APIRecord): AIModel['price'] {
     ? { input: input * 1000000, output: output * 1000000 } : undefined
 }
 
-function compatibleModel(providerId: string, record: APIRecord, endpoint: string): AIModel | null {
+function compatibleModel(providerId: string, record: APIRecord, endpoint: string, runtimeProviderId = providerId): AIModel | null {
   if (typeof record.id !== 'string' || !record.id.trim()) return null
   const id = record.id
-  const known = catalogue(providerId, id)
-  const protocol = metadataProtocol(providerId, endpoint)
+  const known = catalogue(runtimeProviderId, id)
+  const protocol = metadataProtocol(runtimeProviderId, endpoint)
   const supported: string[] | undefined = Array.isArray(record.supported_parameters) ? record.supported_parameters : undefined
   const input: string[] | undefined = Array.isArray(record.architecture?.input_modalities) ? record.architecture.input_modalities : undefined
   const output: string[] | undefined = Array.isArray(record.architecture?.output_modalities) ? record.architecture.output_modalities : undefined
@@ -101,7 +101,7 @@ function compatibleModel(providerId: string, record: APIRecord, endpoint: string
       functionCall
     },
     price: parsePrice(record) ?? known?.price, parameters,
-    reasoning: protocol ? reasoningMetadataFromAPI(record, protocol) ?? known?.reasoning : known?.reasoning
+    reasoning: reasoningMetadataFromAPI(record, protocol) ?? known?.reasoning
   }
 }
 
@@ -185,11 +185,11 @@ export function fetchGoogleModels(apiKey: string, endpoint = 'https://generative
   })
 }
 
-export function fetchOpenAICompatibleModels(providerId: string, apiKey: string, endpoint: string): Promise<ModelFetchResult> {
+export function fetchOpenAICompatibleModels(providerId: string, apiKey: string, endpoint: string, runtimeProviderId = providerId): Promise<ModelFetchResult> {
   return result(async () => {
     const base = normalizeAIEndpoint(endpoint)
     const data = await fetchJSON(`${base}/models`, apiKey)
-    return arrayField(data, 'data').map(record => compatibleModel(providerId, record, base)).filter((model): model is AIModel => model !== null)
+    return arrayField(data, 'data').map(record => compatibleModel(providerId, record, base, runtimeProviderId)).filter((model): model is AIModel => model !== null)
   })
 }
 
@@ -199,6 +199,15 @@ export function fetchDeepSeekModels(apiKey: string, endpoint = 'https://api.deep
 
 export function fetchOpenRouterModels(apiKey: string, endpoint = 'https://openrouter.ai/api/v1'): Promise<ModelFetchResult> {
   return fetchOpenAICompatibleModels('openrouter', apiKey, endpoint)
+}
+
+function legacyOllamaReasoning(id: string, details: APIRecord): ModelReasoningConfig | undefined {
+  if (Object.hasOwn(details, 'thinking') || !Array.isArray(details.capabilities) || !details.capabilities.includes('thinking')) return undefined
+  // Older /show responses expose only the capability. GPT-OSS has documented named
+  // levels; other explicitly thinking-capable models retain the legacy boolean control.
+  return /^(?:library\/)?gpt-oss(?::[^/:\s]+)?$/i.test(id)
+    ? { protocol: 'ollama', supportedEfforts: ['low', 'medium', 'high'], mandatory: true }
+    : { protocol: 'ollama', supportsToggle: true, mandatory: false }
 }
 
 export function fetchOllamaModels(endpoint = 'http://127.0.0.1:11434', apiKey = ''): Promise<ModelFetchResult> {
@@ -222,13 +231,16 @@ export function fetchOllamaModels(endpoint = 'http://127.0.0.1:11434', apiKey = 
             body: JSON.stringify({ model: model.id }), signal: AbortSignal.timeout(5000)
           })
           if (!response.ok) continue
-          const details = await response.json()
-          if (Array.isArray(details.capabilities)) {
-            model.capabilities.functionCall = details.capabilities.includes('tools')
-            model.capabilities.vision = details.capabilities.includes('vision')
-            model.capabilities.text = details.capabilities.includes('completion')
+          const details: unknown = await response.json()
+          if (!details || typeof details !== 'object' || Array.isArray(details)) continue
+          const metadata = details as APIRecord
+          if (Array.isArray(metadata.capabilities)) {
+            model.capabilities.functionCall = metadata.capabilities.includes('tools')
+            model.capabilities.vision = metadata.capabilities.includes('vision')
+            model.capabilities.text = metadata.capabilities.includes('completion')
           }
-          const info = details.model_info
+          model.reasoning = reasoningMetadataFromAPI(metadata, 'ollama') ?? legacyOllamaReasoning(model.id, metadata)
+          const info = metadata.model_info
           if (info && typeof info === 'object') {
             const key = typeof info['general.architecture'] === 'string' ? `${info['general.architecture']}.context_length` : ''
             model.contextWindow = positive(info[key]) ?? 0
@@ -241,14 +253,19 @@ export function fetchOllamaModels(endpoint = 'http://127.0.0.1:11434', apiKey = 
 }
 
 export async function fetchModelsForProvider(providerId: string, apiKey: string, endpoint?: string, runtimeProviderId = providerId): Promise<ModelFetchResult> {
-  switch (runtimeProviderId) {
-    case 'openai': return fetchOpenAIModels(apiKey, endpoint)
-    case 'anthropic': return fetchAnthropicModels(apiKey, endpoint)
-    case 'google': return fetchGoogleModels(apiKey, endpoint)
-    case 'deepseek': return fetchDeepSeekModels(apiKey, endpoint)
-    case 'openrouter': return fetchOpenRouterModels(apiKey, endpoint)
-    case 'ollama': return fetchOllamaModels(endpoint, apiKey)
-    case 'minimax': return { success: false, error: 'MiniMax 未提供公开的模型列表接口，请使用已核对的预设或手动添加模型' }
-    default: return endpoint ? fetchOpenAICompatibleModels(providerId, apiKey, endpoint) : { success: false, error: '请先配置服务端点' }
+  const discover = (): ModelFetchResult | Promise<ModelFetchResult> => {
+    switch (runtimeProviderId) {
+      case 'openai': return fetchOpenAIModels(apiKey, endpoint)
+      case 'anthropic': return fetchAnthropicModels(apiKey, endpoint)
+      case 'google': return fetchGoogleModels(apiKey, endpoint)
+      case 'deepseek': return fetchDeepSeekModels(apiKey, endpoint)
+      case 'openrouter': return fetchOpenRouterModels(apiKey, endpoint)
+      case 'ollama': return fetchOllamaModels(endpoint, apiKey)
+      case 'minimax': return { success: false, error: 'MiniMax 未提供公开的模型列表接口，请使用已核对的预设或手动添加模型' }
+      default: return endpoint ? fetchOpenAICompatibleModels(providerId, apiKey, endpoint, runtimeProviderId) : { success: false, error: '请先配置服务端点' }
+    }
   }
+  const fetched = await discover()
+  // The runtime selects the API and catalogue; the configured instance owns its models.
+  return fetched.models ? { ...fetched, models: fetched.models.map(model => ({ ...model, providerId })) } : fetched
 }

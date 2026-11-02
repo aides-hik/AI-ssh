@@ -1,5 +1,6 @@
 import type { AIModel, AIProvider, ModelAPIStyle, ModelRequestConfig } from '../types/ai-providers.types'
 import { buildReasoningRequest, getReasoningCapability, normalizeReasoningSelection, type ReasoningCapability, type ReasoningSelection } from './model-reasoning'
+import { getDeclaredModelAPIStyle } from './model-api-style'
 
 export interface ModelCapabilities {
   apiStyle: ModelAPIStyle
@@ -42,15 +43,7 @@ export function normalizeGoogleAPIBase(endpoint: string): string {
 
 /** Model metadata overrides transport inference. Custom deployments keep their existing base URL. */
 export function getModelAPIStyle(provider: AIProvider, model: AIModel): ModelAPIStyle {
-  if (model.parameters?.apiStyle) return model.parameters.apiStyle
-  const runtime = getRuntimeProviderId(provider)
-  const base = normalizeAIEndpoint(provider.endpoint)
-  let host = ''
-  try { host = new URL(base).hostname.toLowerCase() } catch { /* A custom URL is validated by fetch. */ }
-  if (runtime === 'anthropic' || host === 'api.anthropic.com') return 'anthropic'
-  if (runtime === 'google' && !/\/openai(?:\/v1)?$/i.test(base)) return 'gemini'
-  if (runtime === 'ollama' && !/\/v1$/i.test(base)) return 'ollama'
-  return getReasoningCapability(provider, model).protocol
+  return getDeclaredModelAPIStyle(provider, model) ?? getReasoningCapability(provider, model).protocol
 }
 
 export function getModelCapabilities(provider: AIProvider, model: AIModel, selection?: ReasoningSelection): ModelCapabilities {
@@ -106,6 +99,10 @@ export function buildModelParameterBody(provider: AIProvider, model: AIModel, op
   if (style !== 'anthropic' && capability.reasoning.adapter === 'anthropic') body = {}
   if (capability.reasoning.adapter === 'openai' && style === 'responses' && selection !== 'default') body = { reasoning: { effort: selection } }
   if (capability.reasoning.adapter === 'openai' && style === 'chat-completions' && selection !== 'default') body = { reasoning_effort: selection }
+  if (capability.reasoning.adapter === 'ollama') {
+    body = style === 'chat-completions' && selection !== 'default'
+      ? { reasoning_effort: selection === 'enabled' ? 'medium' : selection } : {}
+  }
   const temperature = capability.supportsTemperature && settings.temperature !== undefined
     ? Math.max(capability.temperatureRange[0], Math.min(capability.temperatureRange[1], settings.temperature)) : undefined
   const topP = capability.supportsTopP && settings.topP !== undefined && settings.topP > 0 ? Math.min(1, settings.topP) : undefined
@@ -117,7 +114,7 @@ export function buildModelParameterBody(provider: AIProvider, model: AIModel, op
     if (topP !== undefined) generationConfig.topP = topP
     if (maxTokens !== undefined) generationConfig.maxOutputTokens = maxTokens
     if (capability.reasoning.adapter === 'gemini' && selection !== 'default') {
-      const isBudget = /^(?:models\/)?gemini-2\.5-/.test(model.id)
+      const isBudget = /^gemini-2\.5-/.test(model.id.trim().toLowerCase().replace(/^(?:google|models)\//, ''))
       generationConfig.thinkingConfig = isBudget
         ? { thinkingBudget: { none: 0, minimal: 1024, low: 1024, medium: 8192, high: 24576 }[selection as 'low'] }
         : { thinkingLevel: selection }
@@ -129,7 +126,11 @@ export function buildModelParameterBody(provider: AIProvider, model: AIModel, op
     if (temperature !== undefined) ollamaOptions.temperature = temperature
     if (topP !== undefined) ollamaOptions.top_p = topP
     if (maxTokens !== undefined) ollamaOptions.num_predict = maxTokens
-    return Object.keys(ollamaOptions).length ? { options: ollamaOptions } : {}
+    return {
+      ...(capability.reasoning.adapter === 'ollama' && selection !== 'default'
+        ? { think: selection === 'none' ? false : selection === 'enabled' ? true : selection } : {}),
+      ...(Object.keys(ollamaOptions).length ? { options: ollamaOptions } : {})
+    }
   }
   if (temperature !== undefined) body.temperature = temperature
   // Claude disallows configuring temperature and top_p together on newer model generations.

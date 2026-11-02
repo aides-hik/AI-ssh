@@ -16,6 +16,7 @@ export function mergeProviderForSave(provider: AIProvider, latestProvider?: AIPr
     return {
       ...(latestModel || model),
       requestConfig: model.requestConfig,
+      reasoningOverride: model.reasoningOverride,
       enabled: model.enabled !== false
     }
   })

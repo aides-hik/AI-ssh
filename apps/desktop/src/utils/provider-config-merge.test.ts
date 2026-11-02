@@ -40,6 +40,22 @@ test('custom endpoint and a manual model matching a legacy ID retain their metad
   assert.ok(custom.models.some(item => item.id === 'gpt-4' && item.isCustom))
 })
 
+test('catalog updates retain per-model reasoning overrides without replacing fresh capability metadata', () => {
+  const reasoning = { protocol: 'openai' as const, supportedEfforts: ['low', 'high'] as const }
+  const current = makeModel('current-chat', { reasoning: { ...reasoning, supportedEfforts: [...reasoning.supportedEfforts] } })
+  const override = { protocol: 'openai' as const, supportedEfforts: ['high' as const] }
+  for (const value of [override, false, undefined] as const) {
+    const stored = makeModel('current-chat', { reasoning: false, reasoningOverride: value })
+    const result = mergeSavedProviderWithDefault(preset({ models: [current] }), saved({ models: [stored] }))
+    const mergedOverride: AIModel['reasoningOverride'] = (result.models[0] as AIModel).reasoningOverride
+    if (value && mergedOverride) assert.notEqual(mergedOverride.supportedEfforts, value.supportedEfforts)
+    assert.deepEqual(result.models[0].reasoning, current.reasoning)
+    assert.deepEqual(result.models[0].reasoningOverride, value)
+    const roundTrip = JSON.parse(JSON.stringify(result))
+    assert.deepEqual(roundTrip.models[0].reasoningOverride, value)
+  }
+})
+
 test('empty and entirely disabled model lists remain disabled across catalog updates', () => {
   assert.deepEqual(mergeSavedProviderWithDefault(preset(), saved({ models: [] })).models, [])
   const disabled = mergeSavedProviderWithDefault(preset(), saved({ models: [makeModel('gpt-4', { enabled: false })] }))

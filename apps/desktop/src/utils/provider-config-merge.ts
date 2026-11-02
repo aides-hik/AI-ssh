@@ -37,7 +37,11 @@ function mergeProviderModels(defaultProvider: ProviderConfig, savedProvider: Sav
     if (saved?.isCustom) return structuredClone(saved)
     return {
       ...structuredClone(model),
-      ...(saved ? { enabled: saved.enabled, requestConfig: saved.requestConfig } : allDisabled ? { enabled: false } : {})
+      ...(saved ? {
+        enabled: saved.enabled,
+        requestConfig: saved.requestConfig,
+        reasoningOverride: structuredClone(saved.reasoningOverride)
+      } : allDisabled ? { enabled: false } : {})
     }
   })
   const extras = savedProvider.models.filter(model =>

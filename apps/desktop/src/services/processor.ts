@@ -87,7 +87,11 @@ export class SessionProcessor {
         reasoning: config.model.reasoning ? {
           ...config.model.reasoning,
           supportedEfforts: config.model.reasoning.supportedEfforts ? [...config.model.reasoning.supportedEfforts] : undefined
-        } : config.model.reasoning
+        } : config.model.reasoning,
+        reasoningOverride: config.model.reasoningOverride ? {
+          ...config.model.reasoningOverride,
+          supportedEfforts: config.model.reasoningOverride.supportedEfforts ? [...config.model.reasoningOverride.supportedEfforts] : undefined
+        } : config.model.reasoningOverride
       },
       reasoning: config.reasoning ?? config.model.requestConfig?.reasoning ?? 'default'
     }

@@ -15,6 +15,13 @@
       </button>
     </header>
     <p v-if="model.description" class="model-description">{{ model.description }}</p>
+    <ModelReasoningOverride
+      :id="id"
+      :provider="provider"
+      :model="model"
+      :disabled="disabled"
+      @change="value => emit('reasoning-override', value)"
+    />
     <div v-if="capabilities.reasoning.options.length > 1" class="reasoning-setting">
       <div class="parameter-label">
         <label :for="`${id}-reasoning`">{{ copy.reasoning }}</label
@@ -183,6 +190,7 @@ import type { AIModel, AIProvider, ModelRequestConfig } from '@/types/ai-provide
 import { getModelCapabilities } from '@/utils/model-capabilities'
 import { normalizeReasoningSelection, type ReasoningSelection } from '@/utils/model-reasoning'
 import { useInlineValidation } from '@/composables/useInlineValidation'
+import ModelReasoningOverride from './ModelReasoningOverride.vue'
 
 const props = defineProps<{
   id: string
@@ -190,7 +198,10 @@ const props = defineProps<{
   model: AIModel
   disabled?: boolean
 }>()
-const emit = defineEmits<{ change: [config: ModelRequestConfig | undefined] }>()
+const emit = defineEmits<{
+  change: [config: ModelRequestConfig | undefined]
+  'reasoning-override': [value: AIModel['reasoningOverride']]
+}>()
 const reasoningInput = ref<HTMLInputElement>()
 const maxTokensInput = ref<HTMLInputElement>()
 const { errors: fieldErrors, validateField, revalidateInput, clearErrors } = useInlineValidation()
@@ -204,14 +215,14 @@ const chinese = computed(() => locale.value.startsWith('zh'))
 const copy = computed(() =>
   chinese.value
     ? {
-        reset: '恢复默认',
+        reset: '恢复默认参数',
         reasoning: '思考程度',
         default: '默认',
         budgetHint: '各档位对应此模型支持的思考预算。',
         toggleHint: '此模型支持切换思考模式，不提供强度档位。',
         alwaysThinking: '此模型始终开启思考。',
         reasoningHint: '只显示此模型支持的档位，默认由服务商决定。',
-        unknownReasoning: '尚无此模型的思考能力资料，保留服务默认。',
+        unknownReasoning: '尚无此模型的思考能力资料。若服务支持，可在上方手动配置；否则保留服务默认。',
         noReasoning: '此模型或接口不提供可调节的思考程度。',
         maxTokens: '最大输出 token',
         limit: '上限',
@@ -223,7 +234,7 @@ const copy = computed(() =>
         defaultHint: '留空使用默认值。终端中的思考滑块可以临时覆盖这里的思考设置。'
       }
     : {
-        reset: 'Reset defaults',
+        reset: 'Reset parameter defaults',
         reasoning: 'Reasoning effort',
         default: 'Default',
         budgetHint: 'Each level maps to a thinking budget supported by this model.',
@@ -231,7 +242,7 @@ const copy = computed(() =>
         alwaysThinking: 'Thinking is always enabled for this model.',
         reasoningHint: 'Only supported levels are shown. Default delegates to the service.',
         unknownReasoning:
-          'Reasoning capabilities are not verified; the service default is preserved.',
+          'Reasoning capabilities are not verified. Configure them above if supported; otherwise the service default is preserved.',
         noReasoning: 'This model or API does not expose adjustable reasoning.',
         maxTokens: 'Maximum output tokens',
         limit: 'Limit',
@@ -272,6 +283,7 @@ function reasoningLabel(value: ReasoningSelection) {
   return labels[value][chinese.value ? 0 : 1]
 }
 function changeReasoning(event: Event) {
+  if (props.disabled) return
   const value =
     capabilities.value.reasoning.options[Number((event.target as HTMLInputElement).value)] ||
     'default'

@@ -376,6 +376,7 @@
                         :model="model"
                         :disabled="isUnsupported(selected)"
                         @change="requestConfig => patchModel(model.id, { requestConfig })"
+                        @reasoning-override="reasoningOverride => patchModel(model.id, { reasoningOverride })"
                       />
                     </div>
                   </Transition>

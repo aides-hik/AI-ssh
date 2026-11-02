@@ -4,9 +4,14 @@ import {
   fetchDeepSeekModels,
   fetchOpenAICompatibleModels,
   fetchOpenAIModels,
-  fetchOpenRouterModels
-  , fetchAnthropicModels, fetchGoogleModels, fetchModelsForProvider, fetchOllamaModels
+  fetchOpenRouterModels,
+  fetchAnthropicModels,
+  fetchGoogleModels,
+  fetchModelsForProvider,
+  fetchOllamaModels
 } from './model-fetcher.service.ts'
+import { DEFAULT_PROVIDERS } from '../types/ai-providers'
+import type { ModelReasoningConfig } from '../types/ai-providers.types'
 
 function mockModels(context: TestContext, models: unknown[]) {
   return context.mock.method(
@@ -117,7 +122,9 @@ test('compatible discovery selects reasoning metadata by provider or exact offic
   ]) {
     const result = await fetchOpenAICompatibleModels('custom', 'test-key', endpoint)
     assert.equal(result.success, true)
-    assert.equal(result.models?.[0].reasoning, undefined)
+    assert.deepEqual(result.models?.[0].reasoning, {
+      protocol: 'openai', supportedEfforts: ['low', 'high'], mandatory: false
+    })
   }
 })
 
@@ -138,6 +145,38 @@ test('legacy compatible discovery does not invent reasoning metadata', async con
     result.models?.map(model => model.capabilities.functionCall),
     [true, true, false]
   )
+})
+
+test('custom aliases retain declared OpenAI reasoning metadata and explicit rejection without guessing missing declarations', async context => {
+  mockModels(context, [
+    { id: 'deployment-alias', reasoning: { supported_efforts: ['high', 'invalid', 'low', 'high'], mandatory: true } },
+    { id: 'disabled-alias', reasoning: false },
+    { id: 'empty-levels', reasoning: { supported_efforts: [] } },
+    { id: 'unknown-alias' },
+    { id: 'incomplete-alias', reasoning: {} },
+    { id: 'null-levels', reasoning: { supported_efforts: null } },
+    { id: 'gpt-5.6', reasoning: false }
+  ])
+  const fetched = await fetchModelsForProvider('custom-instance-a', '', 'https://proxy.invalid/v1', 'custom-openai')
+  assert.equal(fetched.success, true)
+  assert.deepEqual(fetched.models?.map(model => model.reasoning), [
+    { protocol: 'openai', supportedEfforts: ['low', 'high'], mandatory: true },
+    false, false, undefined, undefined, undefined, false
+  ])
+  assert(fetched.models?.every(model => model.providerId === 'custom-instance-a'))
+})
+
+test('compatible instances use their runtime catalogue without replacing their configured identity', async context => {
+  const known = DEFAULT_PROVIDERS.find(provider => provider.id === 'openai')?.models[0]
+  assert(known)
+  mockModels(context, [{ id: known.id }])
+  const fetched = await fetchOpenAICompatibleModels('openai-instance-a', '', 'https://proxy.invalid/v1', 'openai')
+  assert.equal(fetched.success, true)
+  assert.equal(fetched.models?.[0].providerId, 'openai-instance-a')
+  assert.equal(fetched.models?.[0].name, known.name)
+  assert.equal(fetched.models?.[0].contextWindow, known.contextWindow)
+  assert.deepEqual(fetched.models?.[0].parameters, known.parameters || {})
+  assert.equal(known.providerId, 'openai')
 })
 
 test('OpenAI discovery includes o3 and o4 reasoning text models with tools', async context => {
@@ -237,6 +276,87 @@ test('Ollama and custom compatibility providers can discover models without fixe
   const custom = await fetchModelsForProvider('custom-123', 'fixture-key', 'https://fixture.invalid/v1/')
   assert.equal(custom.models?.[0].providerId, 'custom-123')
   assert.deepEqual(calls, ['http://127.0.0.1:11434/api/tags', 'http://127.0.0.1:11434/api/show', 'https://fixture.invalid/v1/models'])
+})
+
+test('Ollama show discovery preserves named levels, boolean controls and explicit unsupported declarations', async context => {
+  const cases: Array<{ id: string; details: Record<string, unknown>; reasoning: ModelReasoningConfig | false | undefined }> = [
+    { id: 'level-alias', details: { thinking: { values: ['high', 'low', 'high', 'invented', 1] } },
+      reasoning: { protocol: 'ollama', supportedEfforts: ['low', 'high'], supportsToggle: false, mandatory: true } },
+    { id: 'toggle-alias', details: { thinking: { values: [true, false] } },
+      reasoning: { protocol: 'ollama', supportsToggle: true, mandatory: false } },
+    { id: 'always-thinking', details: { thinking: { values: [true] } },
+      reasoning: { protocol: 'ollama', supportsToggle: true, mandatory: true } },
+    { id: 'levels-and-off', details: { thinking: { values: ['medium', false, 'high'] } },
+      reasoning: { protocol: 'ollama', supportedEfforts: ['medium', 'high'], supportsToggle: true, mandatory: false } },
+    { id: 'disabled-thinking', details: { capabilities: ['completion', 'thinking'], thinking: { values: [false] } }, reasoning: false },
+    { id: 'empty-thinking', details: { capabilities: ['completion', 'thinking'], thinking: { values: [] } }, reasoning: false },
+    { id: 'unknown-thinking', details: {}, reasoning: undefined },
+    { id: 'incomplete-thinking', details: { capabilities: ['completion', 'thinking'], thinking: {} }, reasoning: undefined },
+    { id: 'invalid-thinking', details: { capabilities: ['completion', 'thinking'], thinking: { values: ['false', 'turbo', 1] } }, reasoning: undefined }
+  ]
+  const requests: string[] = []
+  context.mock.method(globalThis, 'fetch', async (url: RequestInfo | URL, init?: RequestInit) => {
+    requests.push(String(url))
+    if (String(url).endsWith('/api/tags')) return Response.json({ models: cases.map(item => ({ name: item.id })) })
+    assert.equal(init?.method, 'POST')
+    assert.equal((init?.headers as Record<string, string>).Authorization, 'Bearer fixture-key')
+    const { model } = JSON.parse(String(init?.body))
+    const item = cases.find(item => item.id === model)
+    assert(item)
+    return Response.json(item.details)
+  })
+  const fetched = await fetchOllamaModels('http://127.0.0.1:11434/v1/', 'fixture-key')
+  assert.equal(fetched.success, true)
+  assert.deepEqual(fetched.models?.map(model => model.reasoning), cases.map(item => item.reasoning))
+  assert(fetched.models?.every(model => model.parameters?.apiStyle === 'ollama'))
+  assert.equal(requests.length, cases.length + 1)
+  assert(requests.every(url => !url.includes('fixture-key')))
+})
+
+test('legacy Ollama thinking capabilities use only verified exact-family levels and otherwise a boolean control', async context => {
+  const ids = ['gpt-oss', 'gpt-oss:20b', 'library/gpt-oss:120b', 'own-gpt-oss:20b', 'gpt-oss-unverified:20b', 'qwen3:8b', 'gpt-oss:unknown-no-metadata']
+  context.mock.method(globalThis, 'fetch', async (url: RequestInfo | URL, init?: RequestInit) => {
+    if (String(url).endsWith('/api/tags')) return Response.json({ models: ids.map(name => ({ name })) })
+    const { model } = JSON.parse(String(init?.body))
+    return Response.json({ capabilities: model === ids.at(-1) ? ['completion'] : ['completion', 'thinking'] })
+  })
+  const fetched = await fetchOllamaModels()
+  assert.equal(fetched.success, true)
+  const levels = { protocol: 'ollama', supportedEfforts: ['low', 'medium', 'high'], mandatory: true }
+  const toggle = { protocol: 'ollama', supportsToggle: true, mandatory: false }
+  assert.deepEqual(fetched.models?.map(model => model.reasoning), [levels, levels, levels, toggle, toggle, toggle, undefined])
+})
+
+test('an old or unavailable Ollama show endpoint preserves the installed list without fabricating reasoning controls', async context => {
+  for (const response of [() => new Response(null, { status: 404 }), () => Response.json(null), () => Response.json([]), () => { throw new Error('show unavailable') }]) {
+    context.mock.method(globalThis, 'fetch', async (url: RequestInfo | URL) => String(url).endsWith('/api/tags')
+      ? Response.json({ models: [{ name: 'gpt-oss:20b' }] }) : response())
+    const fetched = await fetchOllamaModels()
+    assert.equal(fetched.success, true)
+    assert.equal(fetched.models?.[0].id, 'gpt-oss:20b')
+    assert.equal(fetched.models?.[0].reasoning, undefined)
+  }
+})
+
+test('native runtime discovery retains separate provider instance identities across all supported protocols', async context => {
+  for (const runtime of ['openai', 'anthropic', 'google', 'deepseek', 'openrouter', 'ollama']) {
+    context.mock.method(globalThis, 'fetch', async (url: RequestInfo | URL) => {
+      if (String(url).endsWith('/api/tags')) return Response.json({ models: [{ name: 'alias:latest' }] })
+      if (String(url).endsWith('/api/show')) return Response.json({ thinking: { values: [true, false] } })
+      if (runtime === 'anthropic') return Response.json({ data: [{ id: 'claude-alias' }] })
+      if (runtime === 'google') return Response.json({ models: [{ name: 'models/gemini-alias', supportedGenerationMethods: ['generateContent'] }] })
+      return Response.json({ data: [{ id: 'gpt-5.6', reasoning: { supported_efforts: ['low', 'high'] }, effort: { supported_levels: ['high'] } }] })
+    })
+    for (const instance of ['instance-a', 'instance-b']) {
+      const fetched = await fetchModelsForProvider(instance, '', 'http://127.0.0.1:11434/v1', runtime)
+      assert.equal(fetched.success, true, runtime)
+      assert.equal(fetched.models?.length, 1, runtime)
+      assert.equal(fetched.models?.[0].providerId, instance, runtime)
+      if (runtime === 'openai' || runtime === 'deepseek' || runtime === 'openrouter' || runtime === 'ollama') {
+        assert.equal(fetched.models?.[0].reasoning && fetched.models[0].reasoning.protocol, runtime)
+      }
+    }
+  }
 })
 
 test('malformed and looping API payloads are surfaced as failures instead of a fabricated list', async context => {

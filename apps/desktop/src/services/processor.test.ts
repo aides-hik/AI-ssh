@@ -70,6 +70,37 @@ test('all tool rounds keep the model, provider and reasoning selected when the t
   }
 })
 
+for (const enabled of [true, false]) {
+  test(`tool rounds snapshot an ${enabled ? 'explicit effort profile' : 'explicitly disabled reasoning override'}`, async context => {
+    const requests: Array<Record<string, unknown>> = []
+    context.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+      requests.push(JSON.parse(String(init.body)))
+      return requests.length === 1 ? asResponse([{ choices: [{ delta: { tool_calls: [call()] }, finish_reason: 'tool_calls' }] }]) : complete()
+    })
+    const current = model(enabled ? 'custom-deployment' : 'gpt-5')
+    current.reasoningOverride = enabled ? { protocol: 'openai', supportedEfforts: ['low', 'high'] } : false
+    const originalOverride = current.reasoningOverride
+    await new SessionProcessor({
+      provider: provider('custom'), model: current, reasoning: 'high',
+      messages: [{ role: 'user', content: 'inspect' }], tools: [tool('read_file')],
+      onToolExecute: async () => {
+        if (originalOverride) {
+          originalOverride.supportedEfforts?.splice(0, 2, 'none')
+          originalOverride.protocol = 'deepseek'
+        }
+        current.reasoningOverride = enabled ? false : { protocol: 'openai', supportedEfforts: ['high'] }
+        return { output: 'fixture contents' }
+      }
+    }).process()
+    assert.equal(requests.length, 2)
+    for (const request of requests) {
+      assert.equal(request.reasoning_effort, enabled ? 'high' : undefined)
+      assert.equal(request.thinking, undefined)
+      assert.equal(request.reasoning, undefined)
+    }
+  })
+}
+
 test('DeepSeek thinking content is replayed with tool calls without exposing it as answer text', async context => {
   const requests: Array<Record<string, unknown>> = []
   const visible: string[] = []

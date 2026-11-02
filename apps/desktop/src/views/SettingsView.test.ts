@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import { ref, computed, watch, effectScope } from 'vue'
 import type { UpdateClientState } from '../services/update-client'
+import type { AIModel, AIProvider } from '../types/ai-providers.types'
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const settingsViewPath = join(currentDir, 'SettingsView.vue')
@@ -132,4 +133,78 @@ test('a shared update started from another view clears stale settings action fee
   ui.updaterActionError.value = 'old version failure'
   ui.updaterState.value.availableVersion = '2'
   assert.equal(ui.updaterActionError.value, '')
+})
+
+function reasoningProvider(): AIProvider {
+  return {
+    id: 'custom', name: 'Custom', description: '', website: '', icon: '', apiKey: 'fixture-only',
+    endpoint: 'https://fixture.invalid/v1', enabled: true, isDefault: false,
+    models: [{
+      id: 'alias', name: 'Alias', providerId: 'custom', contextWindow: 8192,
+      capabilities: { text: true, image: false, vision: false, functionCall: true }, enabled: true,
+      reasoning: { protocol: 'openai', supportedEfforts: ['low'] },
+      reasoningOverride: { protocol: 'openai', supportedEfforts: ['high'] },
+      requestConfig: { maxTokens: 1500, reasoning: 'high' }
+    }]
+  }
+}
+
+async function extractDeclarations(filename: string, names: string[]) {
+  const source = await readFile(filename, 'utf8')
+  const script = source.match(/<script setup[^>]*>([\s\S]*?)<\/script>/)?.[1]
+  assert(script)
+  const parsed = ts.createSourceFile('settings.ts', script, ts.ScriptTarget.Latest, true)
+  const statements = names.map(name => {
+    const statement = parsed.statements.find(item => ts.isFunctionDeclaration(item) && item.name?.text === name ||
+      ts.isVariableStatement(item) && item.declarationList.declarations.some(declaration => declaration.name.getText(parsed) === name))
+    assert(statement, `Missing declaration ${name}`)
+    return statement.getText(parsed)
+  })
+  return ts.transpileModule(statements.join('\n'), { compilerOptions: {
+    target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS
+  } }).outputText
+}
+
+test('refreshing model metadata preserves manual reasoning capability and request defaults', async () => {
+  const javascript = await extractDeclarations(settingsViewPath, ['refreshModelList'])
+  const current = reasoningProvider()
+  const expectedRequest = structuredClone(current.models[0].requestConfig)
+  const providers = ref([current])
+  const fetched: AIModel = { ...current.models[0], reasoning: { protocol: 'openai', supportedEfforts: ['low', 'medium'] }, reasoningOverride: false, requestConfig: undefined }
+  let saves = 0
+  const refresh = new Function('fetchingModels', 'getRuntimeProviderId', 'showNotification', 'fetchModelsForProvider', 'aiProviders', 'saveAIProviderConfigs',
+    `${javascript}\nreturn refreshModelList`)(
+      ref({}), (provider: AIProvider) => provider.id, () => {}, async () => ({ success: true, models: [fetched] }),
+      providers, async () => { saves++; return true }
+    ) as (provider: AIProvider) => Promise<void>
+  const overrides: AIModel['reasoningOverride'][] = [{ protocol: 'openai', supportedEfforts: ['high'] }, false, undefined]
+  for (const override of overrides) {
+    providers.value[0].models[0].reasoningOverride = override
+    await refresh(providers.value[0])
+    const savedModel = providers.value[0].models[0]
+    assert.deepEqual(savedModel.reasoning, fetched.reasoning)
+    assert.deepEqual(savedModel.reasoningOverride, override)
+    assert.deepEqual(savedModel.requestConfig, expectedRequest)
+    assert.equal(savedModel.enabled, true)
+  }
+  assert.equal(saves, 3)
+})
+
+test('the model override event changes only the selected model and automatic mode leaves API metadata intact', async () => {
+  const javascript = await extractDeclarations(providerSettingsPath, ['patchProvider', 'patchModel'])
+  const current = reasoningProvider()
+  const other = { ...reasoningProvider(), id: 'other' }
+  const providers = ref([current, other])
+  const selectedId = ref('custom')
+  const selected = computed(() => providers.value.find(provider => provider.id === selectedId.value))
+  const patch = new Function('providers', 'selectedId', 'selected', `${javascript}\nreturn patchModel`)(providers, selectedId, selected) as (id: string, patch: Partial<AIModel>) => void
+  patch('alias', { reasoningOverride: false })
+  assert.equal(providers.value[0].models[0].reasoningOverride, false)
+  assert.deepEqual(providers.value[1].models[0].reasoningOverride, other.models[0].reasoningOverride)
+  patch('alias', { reasoningOverride: undefined })
+  assert.equal(providers.value[0].models[0].reasoningOverride, undefined)
+  assert.deepEqual(providers.value[0].models[0].reasoning, current.models[0].reasoning)
+  assert.deepEqual(providers.value[0].models[0].requestConfig, current.models[0].requestConfig)
+  const source = await readFile(providerSettingsPath, 'utf8')
+  assert.match(source, /@reasoning-override="reasoningOverride => patchModel\(model\.id, \{ reasoningOverride \}\)"/)
 })

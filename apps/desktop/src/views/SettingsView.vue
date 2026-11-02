@@ -1387,6 +1387,7 @@ const refreshModelList = async (provider: AIProvider) => {
           isCustom: existing?.isCustom,
           parameters: fetchedModel.parameters ?? existing?.parameters,
           reasoning: fetchedModel.reasoning ?? existing?.reasoning,
+          reasoningOverride: existing?.reasoningOverride,
           requestConfig: existing?.requestConfig
         }
       })

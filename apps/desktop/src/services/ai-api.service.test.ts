@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { chatCompletion, type StreamChunk } from './ai-api.service'
 import type { AIProvider, AIModel } from '../types/ai-providers'
 import { testProviderConnection } from './ai-test.service'
+import type { ReasoningSelection } from '../utils/model-reasoning'
 
 const text = '跨帧中文✅'
 const model: AIModel = {
@@ -190,3 +191,43 @@ test('MiniMax connection tests use the configured OpenAI-compatible path and mod
   assert.equal(capturedBody.max_tokens, 64)
   assert.equal(capturedBody.reasoning_effort, 'low')
 })
+
+for (const fixture of [
+  { name: 'custom alias override', providerId: 'custom', modelId: 'deployment-alias',
+    override: { protocol: 'openai', supportedEfforts: ['low', 'high'] }, selection: 'high', effort: 'high', think: undefined },
+  { name: 'discovered Ollama levels', providerId: 'ollama', modelId: 'local-effort-model',
+    reasoning: { protocol: 'ollama', supportedEfforts: ['low', 'medium', 'high'], mandatory: true }, selection: 'high', effort: undefined, think: 'high' },
+  { name: 'discovered Ollama toggle on', providerId: 'ollama', modelId: 'local-toggle-model',
+    reasoning: { protocol: 'ollama', supportsToggle: true }, selection: 'enabled', effort: undefined, think: true },
+  { name: 'discovered Ollama toggle off', providerId: 'ollama', modelId: 'local-toggle-model',
+    reasoning: { protocol: 'ollama', supportsToggle: true }, selection: 'none', effort: undefined, think: false },
+  { name: 'ordinary model', providerId: 'custom', modelId: 'ordinary-model', selection: 'high', effort: undefined, think: undefined },
+  { name: 'explicitly disabled override', providerId: 'custom', modelId: 'gpt-5', override: false, selection: 'high', effort: undefined, think: undefined },
+  { name: 'explicitly unsupported model', providerId: 'custom', modelId: 'gpt-5', reasoning: false, selection: 'high', effort: undefined, think: undefined },
+  { name: 'ordinary Ollama model', providerId: 'ollama', modelId: 'local-ordinary-model', selection: 'high', effort: undefined, think: undefined }
+] satisfies Array<{ name: string; providerId: string; modelId: string; reasoning?: AIModel['reasoning']; override?: AIModel['reasoningOverride']; selection: ReasoningSelection; effort: string | undefined; think: string | boolean | undefined }>) {
+  test(`chat HTTP body preserves ${fixture.name}`, async context => {
+    let request: Record<string, unknown> = {}
+    let endpoint = ''
+    context.mock.method(globalThis, 'fetch', async (url: RequestInfo | URL, init?: RequestInit) => {
+      endpoint = String(url)
+      request = JSON.parse(String(init?.body))
+      return Response.json({ model: fixture.modelId, message: { content: 'OK' }, choices: [{ message: { content: 'OK' } }] })
+    })
+    const native = fixture.providerId === 'ollama'
+    const current: AIModel = {
+      ...model, id: fixture.modelId,
+      reasoning: 'reasoning' in fixture ? fixture.reasoning : undefined,
+      reasoningOverride: 'override' in fixture ? fixture.override : undefined
+    }
+    const provider = { id: fixture.providerId, endpoint: `https://fixture.invalid${native ? '' : '/v1'}`, apiKey: '' } as AIProvider
+    const response = await chatCompletion(provider, current, { messages: [{ role: 'user', content: 'Hi' }], reasoningSelection: fixture.selection })
+    assert.equal(response.content, 'OK')
+    assert.equal(endpoint, `https://fixture.invalid${native ? '/api/chat' : '/v1/chat/completions'}`)
+    assert.equal(request.reasoning_effort, fixture.effort)
+    assert.equal(request.think, fixture.think)
+    for (const key of ['reasoning', 'thinking', 'enable_thinking', 'thinking_budget', 'output_config']) {
+      assert.equal(request[key], undefined, `${key} must not leak into this transport`)
+    }
+  })
+}

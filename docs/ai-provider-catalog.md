@@ -65,6 +65,12 @@ Claude Haiku 在部分强度下另有关闭思考能力，Sonnet 有分段思考
 - StepFun：[Step 3.7 Flash](https://platform.stepfun.ai/docs/en/guides/models/step-3.7-flash)。中国站使用 `https://api.stepfun.com/v1`，国际站使用 `https://api.stepfun.ai/v1`，两站密钥不能混用。
 - Upstage：[现行模型与版本历史](https://console.upstage.ai/docs/models/history)、[思考参数](https://console.upstage.ai/docs/capabilities/generate/reasoning)、[采样参数](https://console.upstage.ai/api/chat)。旧 Solar Pro 2/3、Solar Mini 将于 2026-10-30 退役；不再预置。
 
+## 思考程度配置
+
+客户端优先使用模型返回的能力资料和已适配的模型目录。自定义兼容接口返回的 `reasoning.supported_efforts` 会保留为实际可选档位；Ollama 刷新模型时读取 `/api/show` 的 `thinking.values`，分别处理强度档位和思考开关。缺少资料表示尚未识别，不代表模型一定不支持调整。参见 [OpenRouter 思考能力元数据](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens#discovering-per-model-reasoning-options)、[Ollama 思考控制](https://docs.ollama.com/capabilities/thinking)及其 [OpenAI 兼容参数](https://docs.ollama.com/api/openai-compatibility)。
+
+自定义模型名称或中转别名仍只有“默认”时，在“设置 → AI 服务商”展开该模型的“参数”，将“思考能力”改为“手动配置”，选择服务实际使用的参数格式，勾选其支持的档位或开关，再点击“应用思考能力”。聊天中的思考滑块会使用这些能力。手动配置只属于当前模型，刷新模型列表和重启后保留；切回“自动识别”会恢复服务资料。选择“不提供调整”可停止发送额外思考参数。
+
 ## 需要动态配置的 25 个入口
 
 | 服务商 ID | 配置依据 |

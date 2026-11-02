@@ -171,3 +171,102 @@ test('per-provider model preferences survive reload and stale unsupported levels
   assert.equal(normalizeReasoningSelection(getReasoningCapability(provider, model('gpt-5')), saved[key]), 'default')
   for (const raw of ['{', 'null', '[]', '3']) assert.deepEqual(readReasoningPreferences(raw), {})
 })
+
+test('deployment reasoning overrides enable aliases, take precedence, and restore automatic capabilities', () => {
+  const deployed = model('private-deployment', {
+    reasoning: false,
+    reasoningOverride: { protocol: 'openai', supportedEfforts: ['low', 'high'] }
+  })
+  assert.deepEqual(getReasoningCapability(provider, deployed).options, ['default', 'low', 'high'])
+  assert.deepEqual(buildReasoningRequest(provider, deployed, 'high').body, { reasoning_effort: 'high' })
+  assert.deepEqual(buildReasoningRequest(provider, deployed, 'medium').body, {})
+  deployed.reasoningOverride = false
+  assert.deepEqual(getReasoningCapability(provider, deployed).options, ['default'])
+  assert.deepEqual(buildReasoningRequest(provider, deployed, 'high').body, {})
+  deployed.reasoning = { protocol: 'openai', supportedEfforts: ['medium'] }
+  delete deployed.reasoningOverride
+  assert.deepEqual(getReasoningCapability(provider, deployed).options, ['default', 'medium'])
+  assert.deepEqual(buildReasoningRequest(provider, deployed, 'medium').body, { reasoning_effort: 'medium' })
+})
+
+test('provider instances resolve their actual vendor without depending on instance IDs or proxy hosts', () => {
+  const instance = (runtimeProviderId: string): AIProvider => ({ ...provider, id: `${runtimeProviderId}-instance`, config: { runtimeProviderId } })
+  assert.deepEqual(buildReasoningRequest(instance('deepseek'), model('deepseek-v4-pro'), 'high').body,
+    { thinking: { type: 'enabled' }, reasoning_effort: 'high' })
+  assert.deepEqual(buildReasoningRequest(instance('qwen'), model('qwen-plus'), 'none').body, { enable_thinking: false })
+  const routed = model('private-route', { reasoning: { protocol: 'openai', supportedEfforts: ['low', 'high'] } })
+  assert.deepEqual(buildReasoningRequest(instance('openrouter'), routed, 'high').body, { reasoning: { effort: 'high' } })
+})
+
+test('compatible model discovery parses explicit effort metadata while missing declarations remain unknown', () => {
+  assert.deepEqual(reasoningMetadataFromAPI({ reasoning: { supported_efforts: ['high', 'low', 'invalid', 'high'], mandatory: true } }, 'openai'),
+    { protocol: 'openai', supportedEfforts: ['low', 'high'], mandatory: true })
+  for (const protocol of ['openai', 'openrouter', 'deepseek', 'ollama'] as const) {
+    for (const payload of [{}, [], null, { reasoning: {}, effort: {}, thinking: {} }, { reasoning: true }, { reasoning: { supported_efforts: 3 } }]) {
+      assert.equal(reasoningMetadataFromAPI(payload, protocol), undefined, `${protocol}: ${JSON.stringify(payload)}`)
+    }
+  }
+  assert.equal(reasoningMetadataFromAPI({ reasoning: false }, 'openai'), false)
+  assert.equal(reasoningMetadataFromAPI({ reasoning: { supported_efforts: [] } }, 'openai'), false)
+})
+
+test('Ollama metadata selects exact declared controls rather than inheriting a remote model protocol', () => {
+  const ollama: AIProvider = { ...provider, id: 'ollama-instance', config: { runtimeProviderId: 'ollama' } }
+  const levels = reasoningMetadataFromAPI({ thinking: { values: ['high', 'low', 'high', 'medium'], default: 'medium' } }, 'ollama')
+  assert.deepEqual(levels, { protocol: 'ollama', supportedEfforts: ['low', 'medium', 'high'], supportsToggle: false, mandatory: true })
+  assert.ok(levels)
+  const local = model('local-alias', { reasoning: levels })
+  assert.deepEqual(getReasoningCapability(ollama, local).options, ['default', 'low', 'medium', 'high'])
+  assert.deepEqual(buildReasoningRequest(ollama, local, 'high').body, { think: 'high' })
+  assert.deepEqual(buildReasoningRequest(ollama, local, 'none').body, {})
+  const toggle = reasoningMetadataFromAPI({ thinking: { values: [true, false], default: true } }, 'ollama')
+  assert.deepEqual(toggle, { protocol: 'ollama', supportsToggle: true, mandatory: false })
+  assert.ok(toggle)
+  local.reasoning = toggle
+  assert.deepEqual(getReasoningCapability(ollama, local).options, ['none', 'enabled'])
+  assert.deepEqual(buildReasoningRequest(ollama, local, 'enabled').body, { think: true })
+  assert.deepEqual(buildReasoningRequest(ollama, local, 'none').body, { think: false })
+  assert.equal(reasoningMetadataFromAPI({ thinking: { values: [false] } }, 'ollama'), false)
+  assert.equal(reasoningMetadataFromAPI({ thinking: { values: ['unrecognized'] } }, 'ollama'), undefined)
+  assert.deepEqual(getReasoningCapability(ollama, model('gpt-6-astra')).options, ['default'])
+})
+
+test('Ollama mixed metadata and mandatory reasoning do not invent an unsupported off state', () => {
+  const mixed = reasoningMetadataFromAPI({ thinking: { values: [false, 'low', 'high'] } }, 'ollama')
+  assert.ok(mixed)
+  assert.deepEqual(getReasoningCapability(provider, model('local', { reasoning: mixed })).options, ['default', 'none', 'low', 'high'])
+  const always = reasoningMetadataFromAPI({ thinking: { values: [true] } }, 'ollama')
+  assert.ok(always)
+  assert.deepEqual(getReasoningCapability(provider, model('local', { reasoning: always })).options, ['enabled'])
+  assert.deepEqual(buildReasoningRequest(provider, model('local', { reasoning: always }), 'none').body, { think: true })
+})
+
+test('GPT-OSS compatible deployments expose their supported effort subset without removing sampling', () => {
+  assert.deepEqual(getReasoningCapability(provider, model('openai/gpt-oss-120b')).options, ['default', 'low', 'medium', 'high'])
+  assert.deepEqual(buildReasoningRequest(provider, model('gpt-oss-20b'), 'low'), { body: { reasoning_effort: 'low' }, protocol: 'chat-completions', omitTemperature: false })
+})
+
+test('saved reasoning formats incompatible with the current native transport cannot expose ineffective controls', () => {
+  for (const [style, protocol] of [
+    ['gemini', 'openai'], ['ollama', 'openai'], ['anthropic', 'openai'],
+    ['responses', 'deepseek'], ['responses', 'qwen'], ['responses', 'gemini'], ['responses', 'ollama'],
+    ['chat-completions', 'anthropic']
+  ] as const) {
+    const deployed = model('alias', { parameters: { apiStyle: style }, reasoningOverride: { protocol, supportedEfforts: ['low', 'high'] } })
+    const capability = getReasoningCapability(provider, deployed)
+    assert.deepEqual(capability.options, ['default'], `${style}: ${protocol}`)
+    assert.equal(capability.reason, 'interface', `${style}: ${protocol}`)
+    assert.deepEqual(buildReasoningRequest(provider, deployed, 'high').body, {})
+  }
+})
+
+test('Gemini manual effort declarations are constrained by the native request field', () => {
+  const google = { ...provider, id: 'google' }
+  const declaration = { protocol: 'gemini' as const, supportedEfforts: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const }
+  const deployed = model('native-alias', { reasoningOverride: { ...declaration, supportedEfforts: [...declaration.supportedEfforts] } })
+  assert.deepEqual(getReasoningCapability(google, deployed).options, ['default', 'minimal', 'low', 'medium', 'high'])
+  assert.deepEqual(buildReasoningRequest(google, deployed, 'max').body, {})
+  assert.deepEqual(buildReasoningRequest(google, deployed, 'none').body, {})
+  deployed.id = 'google/gemini-2.5-flash'
+  assert.deepEqual(getReasoningCapability(google, deployed).options, ['default', 'none', 'minimal', 'low', 'medium', 'high'])
+})

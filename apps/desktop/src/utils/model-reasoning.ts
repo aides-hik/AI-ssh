@@ -1,4 +1,5 @@
 import type { AIModel, AIProvider, ModelReasoningConfig, ReasoningEffort } from '../types/ai-providers.types'
+import { getDeclaredModelAPIStyle } from './model-api-style'
 
 export type ReasoningSelection = 'default' | 'enabled' | ReasoningEffort
 export interface ReasoningCapability {
@@ -28,12 +29,12 @@ function unavailable(reason: ReasoningCapability['reason'], omitTemperature = fa
 }
 
 function hostname(endpoint: string): string {
-  try { return new URL(endpoint).hostname.toLowerCase() } catch { return '' }
+  try { return new URL(endpoint.trim()).hostname.toLowerCase() } catch { return '' }
 }
 
 function modelId(id: string): string {
   // Known namespaces are unambiguous. Do not interpret arbitrary deployment/alias names.
-  return id.toLowerCase().replace(/^(?:openai|google|models)\//, '')
+  return id.trim().toLowerCase().replace(/^(?:openai|google|anthropic|models)\//, '')
 }
 
 // Exact families and dated snapshots only: future variants must declare their own capabilities.
@@ -69,34 +70,41 @@ function openAIProfile(id: string): ReasoningCapability | null {
   if (['o1', 'o3', 'o3-mini', 'o4-mini'].some(base => matches(id, base))) {
     return profile('openai', STANDARD, { omitTemperature: true })
   }
+  if (['gpt-oss-20b', 'gpt-oss-120b'].some(base => matches(id, base))) return profile('openai', STANDARD)
   return null
 }
 
 function declaredProfile(config: ModelReasoningConfig): ReasoningCapability | null {
-  if (!['openai', 'openrouter', 'deepseek', 'qwen', 'gemini', 'anthropic'].includes(config.protocol)) return null
+  if (!['openai', 'openrouter', 'deepseek', 'qwen', 'gemini', 'anthropic', 'ollama'].includes(config.protocol)) return null
   const efforts = EFFORTS.filter(effort => Array.isArray(config.supportedEfforts) && config.supportedEfforts.includes(effort) && !(config.mandatory && effort === 'none'))
-  if (efforts.length && config.supportsToggle && !config.mandatory && ['deepseek', 'openrouter'].includes(config.protocol) && !efforts.includes('none')) efforts.unshift('none')
+  if (efforts.length && config.supportsToggle && !config.mandatory && ['deepseek', 'openrouter', 'ollama'].includes(config.protocol) && !efforts.includes('none')) efforts.unshift('none')
   if (config.protocol === 'anthropic' && efforts.length) return profile('anthropic', efforts, { omitTemperature: true, thinkingMode: config.thinkingMode || 'adaptive', kind: config.thinkingMode === 'budget' ? 'budget' : 'effort' })
   if (config.protocol === 'qwen') {
     const budgets = STANDARD.filter(effort => efforts.includes(effort))
     if (budgets.length) return profile('qwen', [...(config.supportsToggle && !config.mandatory ? ['none' as const] : []), ...budgets], { kind: 'budget' })
     return config.supportsToggle ? profile('qwen', config.mandatory ? ['enabled'] : ['none', 'enabled'], { kind: 'toggle' }) : null
   }
-  if (efforts.length) return profile(config.protocol, efforts, { omitTemperature: config.protocol === 'openai' || config.protocol === 'deepseek' || config.protocol === 'gemini' })
-  if (config.supportsToggle && ['openrouter', 'deepseek'].includes(config.protocol)) return profile(config.protocol, config.mandatory ? ['enabled'] : ['none', 'enabled'], { kind: 'toggle', omitTemperature: config.protocol === 'deepseek' })
+  if (config.protocol === 'gemini') {
+    const supported = efforts.filter(effort => ['none', 'minimal', ...STANDARD].includes(effort))
+    return supported.length ? profile('gemini', supported, { omitTemperature: true }) : null
+  }
+  if (efforts.length) return profile(config.protocol, efforts, { omitTemperature: config.protocol === 'openai' || config.protocol === 'deepseek' })
+  if (config.supportsToggle && ['openrouter', 'deepseek', 'ollama'].includes(config.protocol)) return profile(config.protocol, config.mandatory ? ['enabled'] : ['none', 'enabled'], { kind: 'toggle', omitTemperature: config.protocol === 'deepseek' })
   return null
 }
 
-export function getReasoningCapability(provider: AIProvider | null, model: AIModel | null): ReasoningCapability {
+function inferReasoningCapability(provider: AIProvider | null, model: AIModel | null): ReasoningCapability {
   if (!provider || !model) return unavailable('unconfigured')
   const host = hostname(provider.endpoint)
+  const runtime = typeof provider.config?.runtimeProviderId === 'string' ? provider.config.runtimeProviderId : provider.id
   const id = modelId(model.id)
-  const isOpenRouter = provider.id === 'openrouter' || host === 'openrouter.ai'
+  const isOpenRouter = runtime === 'openrouter' || host === 'openrouter.ai'
   const knownOpenAI = openAIProfile(id)
-  const nativeClaude = provider.config?.runtimeProviderId === 'anthropic' || provider.id === 'anthropic' || host === 'api.anthropic.com'
-  if (model.reasoning === false) return { ...unavailable('unsupported', knownOpenAI?.omitTemperature), protocol: isOpenRouter ? 'chat-completions' : knownOpenAI?.protocol || 'chat-completions' }
-  if (model.reasoning) {
-    const declared = declaredProfile(model.reasoning)
+  const nativeClaude = runtime === 'anthropic' || host === 'api.anthropic.com'
+  const config = model.reasoningOverride ?? model.reasoning
+  if (config === false) return { ...unavailable('unsupported', knownOpenAI?.omitTemperature), protocol: isOpenRouter ? 'chat-completions' : knownOpenAI?.protocol || 'chat-completions' }
+  if (config) {
+    const declared = declaredProfile(config)
     if (declared) {
       if (declared.adapter === 'anthropic' && !nativeClaude && model.parameters?.apiStyle !== 'anthropic') return unavailable('interface', true)
       if (isOpenRouter) return { ...declared, adapter: 'openrouter', protocol: 'chat-completions' }
@@ -116,6 +124,8 @@ export function getReasoningCapability(provider: AIProvider | null, model: AIMod
     if (['claude-3-7-sonnet', 'claude-sonnet-4', 'claude-opus-4', 'claude-opus-4-1', 'claude-sonnet-4-5', 'claude-haiku-4-5'].some(base => matches(id, base))) return profile('anthropic', ['none', ...STANDARD], { omitTemperature: true, thinkingMode: 'budget', kind: 'budget' })
     return unavailable('unknown')
   }
+  // Native and compatibility Ollama requests share discovered controls, not a model-name guess.
+  if (runtime === 'ollama') return unavailable('unknown')
   const openai = knownOpenAI
   if (openai) return openai
 
@@ -127,12 +137,12 @@ export function getReasoningCapability(provider: AIProvider | null, model: AIMod
   if (['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview', 'gemini-3.1-flash-lite', 'gemini-3.5-flash-lite', 'gemini-3.6-flash'].some(base => matches(id, base))) return gemini(['minimal', ...STANDARD])
 
   // Provider-specific fields are enabled only for the corresponding service, never guessed for a gateway.
-  if (provider.id === 'deepseek' || host === 'api.deepseek.com') {
+  if (runtime === 'deepseek' || host === 'api.deepseek.com') {
     if (['deepseek-flash', 'deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'].some(base => matches(id, base))) {
       return profile('deepseek', ['none', 'low', 'high', 'max'], { omitTemperature: true })
     }
   }
-  if (provider.id === 'qwen' || /(?:^|\.)dashscope\.(?:aliyuncs\.com|intl\.aliyuncs\.com)$/.test(host)) {
+  if (runtime === 'qwen' || /(?:^|\.)dashscope\.(?:aliyuncs\.com|intl\.aliyuncs\.com)$/.test(host)) {
     const snapshotDate = id.match(/(\d{4})-?(\d{2})-?(\d{2})$/)?.slice(1).join('') || ''
     const plus = id === 'qwen-plus' || id === 'qwen-plus-latest' || (matches(id, 'qwen-plus') && snapshotDate >= '20250428')
     const flash = id === 'qwen-flash' || id === 'qwen-flash-latest' || (matches(id, 'qwen-flash') && snapshotDate >= '20250728')
@@ -142,6 +152,23 @@ export function getReasoningCapability(provider: AIProvider | null, model: AIMod
   }
   if (/^(?:gpt-4|gpt-3\.5|claude-3|gemini-1|qwen2)(?:[.-]|$)/.test(id)) return unavailable('unsupported')
   return unavailable('unknown')
+}
+
+export function getReasoningCapability(provider: AIProvider | null, model: AIModel | null): ReasoningCapability {
+  const capability = inferReasoningCapability(provider, model)
+  if (!provider || !model || !capability.adapter) return capability
+  const style = getDeclaredModelAPIStyle(provider, model)
+  const native = style === 'gemini' || style === 'ollama' || style === 'anthropic'
+  if ((native && capability.adapter !== style) ||
+    (style === 'chat-completions' && capability.adapter === 'anthropic') ||
+    (style === 'responses' && !['openai', 'openrouter'].includes(capability.adapter))) {
+    return { ...unavailable('interface', capability.omitTemperature), protocol: capability.protocol }
+  }
+  if (style === 'gemini' && capability.adapter === 'gemini' && !/^gemini-2\.5-/.test(modelId(model.id))) {
+    const options = capability.options.filter(option => option !== 'none')
+    return options.length > 1 ? { ...capability, options } : unavailable('interface', true)
+  }
+  return capability
 }
 
 export function normalizeReasoningSelection(capability: ReasoningCapability, value: unknown): ReasoningSelection {
@@ -167,6 +194,7 @@ export function buildReasoningRequest(provider: AIProvider, model: AIModel, sele
         break
       case 'openrouter': body.reasoning = valid === 'enabled' ? { enabled: true } : { effort: valid }; break
       case 'gemini': body.reasoning_effort = valid; break
+      case 'ollama': body.think = valid === 'none' ? false : valid === 'enabled' ? true : valid; break
       case 'deepseek':
         body.thinking = { type: valid === 'none' ? 'disabled' : 'enabled' }
         if (valid !== 'none' && valid !== 'enabled') body.reasoning_effort = valid
@@ -201,13 +229,26 @@ export function readReasoningPreferences(raw: string | null): Record<string, Rea
   } catch { return {} }
 }
 
-export function reasoningMetadataFromAPI(data: unknown, protocol: 'openrouter' | 'deepseek'): ModelReasoningConfig | false | undefined {
-  if (!data || typeof data !== 'object') return undefined
+export function reasoningMetadataFromAPI(data: unknown, protocol: 'openai' | 'openrouter' | 'deepseek' | 'ollama'): ModelReasoningConfig | false | undefined {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return undefined
   const value = data as Record<string, unknown>
-  const raw = protocol === 'openrouter' ? value.reasoning : value.effort
-  if (!raw || typeof raw !== 'object') return undefined
+  const raw = protocol === 'ollama' ? value.thinking : protocol === 'deepseek' ? value.effort : value.reasoning
+  if (raw === false) return false
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
   const metadata = raw as Record<string, unknown>
-  const supported = protocol === 'openrouter' ? metadata.supported_efforts : metadata.supported_levels
+  if (protocol === 'ollama') {
+    if (!Array.isArray(metadata.values)) return undefined
+    const values: unknown[] = metadata.values
+    const efforts = EFFORTS.filter(effort => effort !== 'none' && values.includes(effort))
+    const off = values.includes(false)
+    const on = values.includes(true)
+    if (efforts.length) return { protocol, supportedEfforts: efforts, supportsToggle: off, mandatory: !off }
+    if (on) return { protocol, supportsToggle: true, mandatory: !off }
+    return off || !values.length ? false : undefined
+  }
+  const supported = protocol === 'deepseek' ? metadata.supported_levels : metadata.supported_efforts
+  // A missing/partial metadata object is unknown, rather than an explicit rejection.
+  if (!Array.isArray(supported) && !(supported === null && protocol === 'openrouter')) return undefined
   const supportedEfforts = supported === null && protocol === 'openrouter' ? [...EFFORTS] : Array.isArray(supported) ? EFFORTS.filter(effort => (protocol !== 'deepseek' || effort !== 'none') && supported.includes(effort)) : []
   if (protocol === 'deepseek' && supportedEfforts.length) supportedEfforts.unshift('none')
   return supportedEfforts.length ? { protocol, supportedEfforts, mandatory: metadata.mandatory === true } : false

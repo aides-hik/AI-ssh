@@ -28,7 +28,7 @@
 
 ## 下载与安装
 
-当前版本为 **1.9.11**，从 [最新 Release](https://github.com/aides-hik/AI-ssh/releases/latest) 下载对应平台的安装包，版本说明见 [更新日志](./CHANGELOG.md) 和 [1.9.11 升级说明](docs/releases/1.9.11.md)。
+当前版本为 **1.9.12**，从 [最新 Release](https://github.com/aides-hik/AI-ssh/releases/latest) 下载对应平台的安装包，版本说明见 [更新日志](./CHANGELOG.md) 和 [1.9.12 升级说明](docs/releases/1.9.12.md)。
 
 | 平台 | 架构 | 安装文件 |
 | --- | --- | --- |
